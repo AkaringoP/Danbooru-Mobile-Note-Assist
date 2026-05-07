@@ -79,6 +79,11 @@ Record the rationale briefly when the choice is non-obvious. This keeps the pipe
   - **Direct-to-main path** (rare): allowed only when the fix touches very few files (e.g. a single-file change) AND **explicit user approval is obtained beforehand**. Without prior approval, hotfixes go to `develop`.
 - Branch naming: `feature/<short-description>` / `hotfix/<short-description>`
 
+### Remote push policy
+- **Only `develop` and `main` are pushed to `origin`.** `feature/*` and `hotfix/*` branches stay local — intermediate commits remain local-only, and changes reach `origin` only via merges into `develop` (or `main` for releases).
+- Do not push feature/hotfix branches "for backup" or "for multi-device sync". If multi-device continuity of in-progress feature work is genuinely required, surface the constraint and ask before deviating.
+- PR-based remote review is not part of this workflow — review happens at merge time on the local machine.
+
 ## Evaluator Rubric (use for self-evaluation before declaring done)
 
 > **Status: TBD — to be populated during the TypeScript migration.**
