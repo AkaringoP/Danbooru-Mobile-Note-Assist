@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/
+
+# Local working notes
+PLAN.md
+TASK.md
+
+# Logs
+*.log
+npm-debug.log*
+
+# Node / TypeScript build
+node_modules/
+build/
+dist/
+*.tsbuildinfo
