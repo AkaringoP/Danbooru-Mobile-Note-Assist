@@ -22,6 +22,13 @@ export default defineConfig(({mode}) => {
     plugins: [
       monkey({
         entry: 'src/main.ts',
+        build: {
+          // Legacy v3.1.1 install URL points at MobileNoteAssist.user.js
+          // (CamelCase). package.json `name` is npm-lowercase, so override
+          // the default `<name>.user.js` filename to keep the publish URL
+          // stable across the migration.
+          fileName: 'MobileNoteAssist.user.js',
+        },
         userscript: {
           name: scriptName,
           namespace: isDev
