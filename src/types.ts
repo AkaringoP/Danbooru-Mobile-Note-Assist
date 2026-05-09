@@ -145,3 +145,17 @@ export interface Rect {
   w: number;
   h: number;
 }
+
+/**
+ * Tag-popover delta (PLAN.md D9). Returned by `ui/tag-popover.
+ * showTagPopover` and consumed by `confirm/batch.sendBatch`. Lives
+ * in types.ts because both modules reference it; otherwise the
+ * ui→confirm same-layer import would couple unnecessarily.
+ *
+ * `null` (returned by showTagPopover, not modeled here) means the
+ * user canceled — caller aborts the entire Confirm flow.
+ */
+export interface TagDelta {
+  tagsToAdd: string[];
+  tagsToRemove: string[];
+}

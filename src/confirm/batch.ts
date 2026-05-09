@@ -23,7 +23,7 @@
  */
 
 import {SCRIPT_NAME} from '../config';
-import {NoteId, NoteState, Note} from '../types';
+import {NoteId, NoteState, Note, TagDelta} from '../types';
 import {
   notes,
   actionLog,
@@ -54,11 +54,12 @@ import {
 /** Toast severity. Wider than NotesStoreHooks' set — Confirm uses 'success'. */
 type ToastLevel = 'info' | 'success' | 'warning' | 'error';
 
-/** Tag-popover delta returned by `showTagPopover`. Null = user canceled. */
-export interface TagDelta {
-  tagsToAdd: string[];
-  tagsToRemove: string[];
-}
+// `TagDelta` was inline here in Task 1.7; moved to types.ts in
+// Task 1.12 so ui/tag-popover and confirm/batch share a single
+// definition without introducing a ui→confirm same-layer import.
+// Re-exported below for back-compat with anyone who imports it
+// from this module.
+export type {TagDelta};
 
 export type SuccessfulPost = PendingPost & {
   serverResponse: ServerNoteResponse | null;
