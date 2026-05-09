@@ -427,6 +427,43 @@ export function refreshActivePopover(): void {
 }
 
 /**
+ * Whether `el` is the popover's textarea. Used by
+ * `interactions/keyboard.ts` to gate the global Esc handler — text
+ * inputs elsewhere on the page should keep their native Esc, but
+ * the popover textarea routes Esc to dismiss-active-popover.
+ */
+export function isPopoverInput(el: Element | null): boolean {
+  return el !== null && el === popoverInputElement;
+}
+
+/**
+ * Toggles the popover's drag-in-progress dim. Called by
+ * `interactions/drag-resize` from onInteractionMove's first-movement
+ * branch (set to true) and from onInteractionEnd (set to false).
+ *
+ * Lives here, not interactions, so popoverElement stays
+ * module-private to ui/popover.
+ */
+export function setPopoverInteracting(interacting: boolean): void {
+  if (popoverElement) {
+    popoverElement.style.opacity = interacting ? '0.25' : '';
+  }
+}
+
+/**
+ * Focuses the popover textarea iff the active-note still matches the
+ * caller's expected id. Used by `interactions/image-pointer.
+ * spawnDefaultBoxAtClient` to autofocus right after spawn — the
+ * `expectedId` guard handles the unlikely case where the user
+ * dismissed the popover within the same frame.
+ */
+export function focusActiveNoteInput(expectedId: NoteId): void {
+  if (popoverInputElement && getActiveNoteId() === expectedId) {
+    popoverInputElement.focus();
+  }
+}
+
+/**
  * "Tap outside the popover" dismiss path. Routes to either a hard
  * delete (fresh-new note: cancel creation) or a state revert
  * (✔'d / server note: cancel uncommitted edits, like the ✖ button).
