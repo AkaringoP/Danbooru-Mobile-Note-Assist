@@ -26,7 +26,7 @@
  * gains `.dmna-hidden` so it doesn't cover the on-screen keyboard.
  */
 
-import {Mode} from '../types';
+import type {Mode} from '../types';
 import {
   BTN_SIZE,
   DEFAULT_BTN_MARGIN_X,
@@ -344,5 +344,7 @@ function setupButtonInteractions(btn: HTMLElement): void {
 
 // Re-export Mode for convenience — main.ts's onModeChanged subscriber
 // can `import {setFloatingButtonIconForMode} from './ui/floating-button'`
-// without also pulling Mode separately.
-export {Mode};
+// without also pulling Mode separately. `export type` (not `export`)
+// because Mode is a type alias with no runtime value — rollup needs
+// the type-only marker to elide the re-export at bundle time.
+export type {Mode};
