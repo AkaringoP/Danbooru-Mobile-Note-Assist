@@ -24,6 +24,7 @@
  */
 
 import {APP_VERSION} from './version';
+import {STYLES} from './styles';
 
 import {
   getMode,
@@ -175,29 +176,37 @@ function init(): void {
   }
   initialized = true;
 
-  // 1. Pre-build singleton DOM. Each `create*` is idempotent (checks
+  // 1. Inject the stylesheet. Must run before `create*` so the first
+  //    paint applies the rules (otherwise the button DOM appears
+  //    invisible — width:0/height:0/no positioning). v3.1.1 did this
+  //    inline at IIFE entry, before init().
+  const styleElement = document.createElement('style');
+  styleElement.textContent = STYLES;
+  document.head.appendChild(styleElement);
+
+  // 2. Pre-build singleton DOM. Each `create*` is idempotent (checks
   //    for an existing element first), so a stray re-call is safe.
   createFloatingButton();
   createArcMenu();
   createPopover();
 
-  // 2. Wire the three Hook bags. Must happen before any state mutation
+  // 3. Wire the three Hook bags. Must happen before any state mutation
   //    or send-flow trigger — the `hooks!` non-null asserts inside
   //    notes-store / confirm-batch / note-box rely on this ordering.
   initNotesStore(notesStoreHooks);
   initConfirmFlow(confirmFlowHooks);
   initNoteBox(noteBoxHooks);
 
-  // 3. Bind document-level interactions. `bindImageHandlers` self-
+  // 4. Bind document-level interactions. `bindImageHandlers` self-
   //    retries on a 1 s timer if the post image isn't in the DOM yet.
   bindImageHandlers();
   bindGlobalHotkeys();
 
-  // 4. Initial position pass — pins the floating button / menu to
+  // 5. Initial position pass — pins the floating button / menu to
   //    their persisted edges before the first frame paints.
   runViewportUpdate();
 
-  // 5. visualViewport pinch-zoom / scroll. RAF-batched so multiple
+  // 6. visualViewport pinch-zoom / scroll. RAF-batched so multiple
   //    events in one frame coalesce into one DOM-write pass.
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', scheduleViewportUpdate);
@@ -205,13 +214,13 @@ function init(): void {
     window.addEventListener('scroll', scheduleViewportUpdate);
   }
 
-  // 6. Re-project note boxes whenever document layout could shift (the
+  // 7. Re-project note boxes whenever document layout could shift (the
   //    rendered image's page-coord rect changes). Pinch-zoom is NOT in
   //    this pair — see `runViewportUpdate` doc.
   window.addEventListener('resize', updateAllNoteBoxPositions);
   window.addEventListener('orientationchange', updateAllNoteBoxPositions);
 
-  // 7. Reload / navigate-away guard. Surfaces the browser's generic
+  // 8. Reload / navigate-away guard. Surfaces the browser's generic
   //    "Leave site?" prompt when the user has pending Confirm-time
   //    changes in active mode. Browsers ignore custom messages here
   //    for security, so the empty-string assignment is the documented
