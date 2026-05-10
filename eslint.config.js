@@ -17,18 +17,12 @@ import gtsRules from 'gts/build/src/index.js';
 import gtsIgnores from 'gts/eslint.ignores.js';
 
 export default defineConfig([
-  // Ignore build output, ESLint's own config file (which gts's TS parser
-  // tries to parse as a script despite `type: "module"` in package.json),
-  // and the legacy single-file userscript that remains the source of truth
-  // until Phase 4 (PLAN Z2). The legacy file is plain JS with bespoke
-  // formatting and is not subject to gts review.
+  // Ignore build output and ESLint's own config file (which gts's TS
+  // parser tries to parse as a script despite `type: "module"` in
+  // package.json). All sources live under `src/` post-Phase-4 — there
+  // is no root userscript file to exclude.
   {
-    ignores: [
-      ...gtsIgnores,
-      'dist/',
-      'eslint.config.js',
-      'MobileNoteAssist.user.js',
-    ],
+    ignores: [...gtsIgnores, 'dist/', 'eslint.config.js'],
   },
   ...gtsRules,
   // Project-wide overrides applied after gts so they take precedence.

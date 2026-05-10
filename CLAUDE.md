@@ -1,8 +1,7 @@
 # MobileNoteAssist - Claude Instructions
 
 ## Overview
-A userscript that provides a mobile-friendly note creation tool for Danbooru.
-Single file (`MobileNoteAssist.user.js`). `@grant none`.
+A userscript that provides a mobile-friendly note creation tool for Danbooru. TypeScript source under `src/`, bundled to a single `MobileNoteAssist.user.js` via vite-plugin-monkey. `@grant none`.
 
 ## How It Works
 Adds a floating button to post pages. When enabled, users can tap/drag on the image to create note boxes, then submit notes via the Danbooru API. Includes translation tag management.
@@ -16,19 +15,58 @@ Adds a floating button to post pages. When enabled, users can tap/drag on the im
 - Long-press button to toggle debug zones
 - CSRF token handling for Danbooru API submissions
 
-## Key Constraints
-- All touch events use `{ passive: false }` to prevent default scrolling
-- Coordinates are converted from display to original image dimensions for API submission
-- The script handles both `#image` container and `visualViewport` for mobile zoom
-- All CSS in a single `STYLES` constant, injected via JS
+## Architecture (Layer Structure)
+
+Z5 layer rule — imports flow strictly downward and never sideways across layer-3 siblings:
+
+```
+main.ts                  Layer 5 — boot wire (init* calls)
+   ↓
+interactions/            Layer 4 — touch / pointer / keyboard handlers
+   ↓
+ui/    confirm/          Layer 3 — DOM modules / Confirm orchestration
+                         (siblings — must NOT import each other)
+   ↓
+state/    api/           Layer 2 — module-level state / Danbooru API
+   ↓
+utils/                   Layer 1 — pure helpers (coords, dom, visual-viewport)
+
+types.ts, config.ts, styles.ts, version.ts — Layer 0 (universal,
+                                              importable from anywhere)
+```
+
+The cross-layer wires that the legacy IIFE expressed via shared closure are now hook bags (`NotesStoreHooks`, `ConfirmFlowHooks`, `NoteBoxHooks`) injected by `main.ts` at boot. The `state/notes-store` calling into `confirm/classify` (`hasPendingChanges`) goes through `NotesStoreHooks` — preserves the `state ← confirm` direction.
+
+The architecture invariants are mechanically enforced by `test/architecture.test.ts` (Z5 layer direction, hook-bag completeness at boot, `STYLES` injection site, type-only re-export integrity).
+
+## Build & Dev
+
+```bash
+npm install                # gts, vite, vitest, vite-plugin-monkey, happy-dom
+npm run dev                # vite dev server (HMR userscript)
+npm run build              # vitest + tsc --noEmit + vite build → dist/MobileNoteAssist.user.js
+npm run test               # vitest run (unit + architecture fitness)
+npm run lint               # gts lint (eslint + prettier)
+npm run fix                # gts fix (auto-format)
+npx tsc --noEmit           # type-check only (no emit)
+```
+
+`dist/` is `.gitignore`d on `main`. Release artifacts live on the orphan-style `build` branch (the `@updateURL` / `@downloadURL` target).
+
+## Code Style
+
+- **GTS** (Google TypeScript Style) — single quotes, 2-space indent, trailing commas, arrow functions OK. `gts fix` auto-formats; `gts lint` is the enforcer.
+- **TypeScript strict** — `strict: true`, `noImplicitAny: true`, `noImplicitReturns: true`, `noUnusedLocals: true`, `noUnusedParameters: true`. No `any`. Use `unknown` + narrowing instead.
+- **Branded types** — `NoteId` is `ServerNoteId | TempNoteId` (phantom-typed); construct via `asServerNoteId` / `asTempNoteId` factories at trust boundaries (server response, `genNoteId`). Plain `string` will not satisfy a `NoteId` parameter.
+- **No comments unless the WHY is non-obvious** — well-named identifiers and types do the explaining. Reserve comments for invariants, hidden constraints, surprising behaviors, or workarounds for specific bugs.
 
 ## Working Principles
-- **Search before reading**: Use Grep/Glob to locate targets before opening files. Avoid reading the whole `MobileNoteAssist.user.js` (large single file) when a targeted search suffices.
+- **Search before reading**: Use Grep/Glob to locate targets before opening files. The codebase is partitioned across 20+ small modules under `src/` — targeted search beats reading the layer's entry file end-to-end.
 - **Report before changing behavior**: Always confirm before making changes that affect user-facing behavior (note-creation flow, button gestures, debug zones, API submission shape).
-- **Self-verify after editing**: After any non-trivial edit, manually exercise the affected path in Tampermonkey on a real Danbooru post page. Once mechanical gates exist (post TS migration), run them immediately, not only at task end.
-- **Trust the harness, not self-judgment**: Do not declare "looks good" without running the Evaluator Rubric below. Mechanical checks override intuition.
+- **Self-verify after editing**: After any non-trivial edit, run the Evaluator Rubric gates immediately, not only at task end. For UI / touch / coordinate work the mechanical gates are necessary but not sufficient — manual exercise in Tampermonkey on a real Danbooru post page is the floor.
+- **Trust the harness, not self-judgment**: Do not declare "looks good" without running the Evaluator Rubric. Mechanical checks override intuition.
 - **One task at a time**: Do not mix multiple tasks in a single session.
-- **Preserve UserScript headers**: Do not arbitrarily modify the `==UserScript==` metadata block (`@version`, `@match`, `@grant`, `@require`, etc.) at the top of `MobileNoteAssist.user.js`. Version bumps and metadata changes are deliberate, not incidental.
+- **Preserve UserScript headers**: The `==UserScript==` block is generated by vite-plugin-monkey from `vite.config.ts` (`build.userscript.{name,namespace,match,grant,version,…}`) and `src/version.ts`. Edit the config, not the generated dist. Version bumps and metadata changes are deliberate, not incidental.
 - **Report changed files after each task**: Clearly state which files were changed and how.
 
 ## Multi-Model Workflow
@@ -41,15 +79,15 @@ Rationale: this is a Claude Code subscription environment, not metered API. Opus
 - Architecture, gesture/event design, and API-shape decisions
 - Debugging (hypothesis → verify → revise loop), especially touch-event and coordinate-mapping bugs
 - Code review after any change
-- Edits affecting fewer than ~5 logical sections of the userscript or requiring ongoing judgment
+- Edits affecting fewer than ~5 logical modules or requiring ongoing judgment
 - Anything that must stay visible in main context for follow-up
 - Discussions, planning, and updates to meta-docs (`CLAUDE.md`, `TASK.md`, `PLAN.md`)
 
 ### When to delegate to a Sonnet subagent
 Delegate only if **all** of the following hold — otherwise just do it in Opus:
-- The task is **mechanical** (bulk find/replace, applying a known pattern across many sections, dead-code removal, scaffolding from a clear spec — e.g. extracting a section into a TS module during migration)
+- The task is **mechanical** (bulk find/replace, applying a known pattern across many modules, dead-code removal, scaffolding from a clear spec — e.g. authoring a unit-test file with a fixed shape)
 - The specification is **unambiguous** enough that no further judgment from the main session is needed mid-task
-- The work spans **≥5 files** (post-TS-migration) OR would dump **>100 lines of noisy output** into main context
+- The work spans **≥5 files** OR would dump **>100 lines of noisy output** into main context
 - The result is a **diff or summary** that Opus can review in one pass
 
 When delegating, write a **self-contained prompt**: the subagent does not see this conversation. Include the decision/spec, target files or patterns, constraints, and what to report back.
@@ -71,32 +109,40 @@ Whenever `TASK.md`, `PLAN.md`, or any task-list document is authored or updated,
 Record the rationale briefly when the choice is non-obvious. This keeps the pipeline reproducible across sessions.
 
 ## Git Branching Strategy
-- `main` — Release branch. Always deployable. Direct commits not allowed.
+- `main` — Release branch. Source-only (no `dist/`). Always deployable. Direct commits not allowed.
 - `develop` — Integration branch for ongoing development. Default merge target.
 - `feature/*` — New features or improvements. Branch off from `develop`, merge back to `develop`. **Do not merge directly to `main`.** Multiple feature branches may be merged into `develop` together.
 - `hotfix/*` — Urgent bug fixes.
   - **Default**: branch off from `develop`, merge back to `develop`.
   - **Direct-to-main path** (rare): allowed only when the fix touches very few files (e.g. a single-file change) AND **explicit user approval is obtained beforehand**. Without prior approval, hotfixes go to `develop`.
+- `build` — Orphan-style branch carrying just the bundled `MobileNoteAssist.user.js`. Re-published from `dist/` at every release. The `@updateURL` / `@downloadURL` target.
 - Branch naming: `feature/<short-description>` / `hotfix/<short-description>`
 
 ### Remote push policy
-- **Only `develop` and `main` are pushed to `origin`.** `feature/*` and `hotfix/*` branches stay local — intermediate commits remain local-only, and changes reach `origin` only via merges into `develop` (or `main` for releases).
+- **Only `develop`, `main`, and `build` are pushed to `origin`.** `feature/*` and `hotfix/*` branches stay local — intermediate commits remain local-only, and changes reach `origin` only via merges into `develop` (or `main` for releases) and the corresponding `build` re-publish.
 - Do not push feature/hotfix branches "for backup" or "for multi-device sync". If multi-device continuity of in-progress feature work is genuinely required, surface the constraint and ask before deviating.
 - PR-based remote review is not part of this workflow — review happens at merge time on the local machine.
 
 ## Evaluator Rubric (use for self-evaluation before declaring done)
 
-> **Status: TBD — to be populated during the TypeScript migration.**
-> The project is currently a single `.user.js` with no build/lint/test infrastructure, so no mechanical gates exist yet. Once TS tooling lands (tsc, ESLint, Vitest, build), this section will be filled in with the same shape used in Danbooru-Insights:
->
-> | # | Gate | Command | Enforced by |
-> |---|---|---|---|
-> | 1 | Type safety | `tsc --noEmit` (or `npm run build`) | TypeScript strict mode |
-> | 2 | Lint/style | `npm run lint` | (TBD: GTS or project-specific) |
-> | 3 | Tests pass | `npx vitest run` | Vitest |
-> | 4 | Architecture invariants | (TBD if/when layered) | architecture test |
-> | 5 | Build succeeds | `npm run build` | Pre-commit hook |
->
-> When a gate fails, fix the root cause — do not whitelist, suppress, or work around. The whole point of mechanical gates is that LLM judgment cannot be trusted for these checks ("Never send an LLM to do a linter's job").
+| # | Gate | Command | Enforced by |
+|---|---|---|---|
+| 1 | Type safety | `npx tsc --noEmit` | TypeScript strict mode (`tsconfig.json`) |
+| 2 | Lint/style | `npm run lint` | GTS (eslint + prettier) |
+| 3 | Tests pass | `npm run test` | Vitest |
+| 4 | Architecture invariants | (covered by #3 — `test/architecture.test.ts`) | Z5 layer direction, hook bag completeness, boot sequence, type-only re-export |
+| 5 | Build succeeds | `npm run build` | vitest + tsc + vite build chain |
 
-**Until then**, the only gate is **manual verification in Tampermonkey on a real Danbooru post page** — exercise the changed code path on mobile or with mobile-emulation devtools, including pinch-zoom and the long-press debug-zone toggle when relevant.
+When a gate fails, fix the root cause — do not whitelist, suppress, or work around. The whole point of mechanical gates is that LLM judgment cannot be trusted for these checks ("Never send an LLM to do a linter's job").
+
+**Mechanical gates are necessary but not sufficient for UI / touch / coordinate work.** Manual verification in Tampermonkey on a real Danbooru post page — exercising the changed code path on mobile or with mobile-emulation devtools, including pinch-zoom and the long-press debug-zone toggle when relevant — is still the floor for those areas.
+
+## Critical Rules
+
+- **`@grant none`**: do not introduce GM_* APIs. Anything stored across reloads goes through plain `localStorage` scoped to `danbooru.donmai.us`.
+- **UserScript header is generated, not authored**: the `==UserScript==` block at the top of `dist/MobileNoteAssist.user.js` comes from `vite.config.ts`'s `vite-plugin-monkey` config + `src/version.ts`. Editing the dist directly is wasted work — vite regenerates the header on every build. To change `@version`, `@match`, `@grant`, `@require`, etc., change the config.
+- **`@updateURL` / `@downloadURL` target the `build` branch**, not `main`. The current install URL is `https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/raw/refs/heads/build/MobileNoteAssist.user.js`. `main` carries source only — no root userscript file lives here. v3.1.1 installs that pointed at the legacy `main/MobileNoteAssist.user.js` URL are **not auto-migrated**; users need to reinstall once from the build-branch URL above (Q6 = (d), Phase 4).
+- **All CSS lives in `src/styles.ts`** as a single `STYLES` template string injected at boot from `main.ts`. CSS files (`.css`) are not loaded by the userscript runtime; do not introduce them.
+- **Touch events use `{passive: false}`** — the userscript intentionally cancels default scrolling/pinch in specific paths (image-pointer create/drag, drag-resize). Preserve this when modifying any touch handler.
+- **Coordinate space**: `NoteState` (`x/y/w/h`) is **always** in original-image pixel space. Display-space numbers go through `imageToScreenRect` / `screenToImageRect` (`utils/coords.ts`). Do not store display-space values in `Note.current` / `initialState` / `confirmedState`.
+- **Branded `NoteId`**: never cast a plain `string` to `NoteId`. Use `asTempNoteId` / `asServerNoteId` at the trust boundary, then forward the typed value.

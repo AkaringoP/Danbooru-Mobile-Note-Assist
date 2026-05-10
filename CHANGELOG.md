@@ -5,6 +5,22 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-05-11
+
+**TypeScript migration release.** No user-facing functional change relative to v3.1.1; the entire codebase was re-authored from a single ~3,700-line `MobileNoteAssist.user.js` IIFE into a typed, layered `src/` tree, then bundled to the same single `.user.js` artifact via `vite-plugin-monkey`. The `MAJOR` bump follows DI v6.5.2 → v7.0.0 convention — internal restructuring at this scale (source layout, debug surface paths, build/install URL) is treated as breaking even when behavior is preserved.
+
+### Changed (minor UX deviations from v3.1.1)
+- **Floating-button long-press shortened** from 1500ms to 1000ms (config constant `LONG_PRESS_DURATION`). User feedback during V1-7 manual verification: 1.5s felt unresponsive on mobile. The 1.0s value still clears the click vs. long-press boundary used elsewhere on the page (Tampermonkey's own context-menu trigger ≥ 500ms).
+- **Tag-fetch failure now aborts the Confirm flow.** v3.1.1's `showTagPopover` opened with all four toggles OFF and a toast on `fetchPostTagString` rejection — misleading because the toggles didn't reflect the post's actual tag state and any downstream PATCH would also fail (the PATCH re-fetches tags before sending). v4.0 resolves the popover to `null` instead, which `runConfirmFlow` already treats as cancel, leaving the user in active mode with state intact.
+
+### Infrastructure
+- **Source layout**: 20+ modules under `src/` partitioned into 5 layers (`utils`, `state`/`api`, `confirm`/`ui`, `interactions`, `main`). Cross-layer dependencies inverted via hook bags injected at boot (`NotesStoreHooks`, `ConfirmFlowHooks`, `NoteBoxHooks`).
+- **Branded `NoteId`**: `ServerNoteId | TempNoteId` phantom types with `asServerNoteId` / `asTempNoteId` factories at trust boundaries. Plain `string` no longer satisfies a `NoteId` parameter at compile time.
+- **Build pipeline**: vite + vite-plugin-monkey for the userscript bundle, `vitest` + `happy-dom` for tests, `gts` for lint/format, TypeScript strict mode (`strict`, `noUnusedLocals`, `noUnusedParameters`). `npm run build` chains test + tsc + vite build.
+- **Test coverage**: 213 vitest cases across 8 files — unit tests for `coords`, `classify`, `csrf`, `tag-popover`, `notes-store`, `note-box`, `confirm/batch`, plus an architecture-fitness suite that mechanically verifies the layer rule, hook-bag completeness at boot, the STYLES injection site, and type-only re-export integrity.
+- **Install URL changed** from `JavaScripts/raw/main/MobileNoteAssist/MobileNoteAssist.user.js` (legacy mono-repo) to `Danbooru-Mobile-Note-Assist/raw/refs/heads/build/MobileNoteAssist.user.js` (the new orphan-style `build` branch carrying just the bundled artifact). v3.1.1 installs that pointed at the legacy URL are **not auto-migrated** — users need to reinstall once from the new URL.
+- **`main` branch is source-only.** No root userscript file lives on `main`; the bundled artifact lives on `build`, and `dist/` is `.gitignore`d.
+
 ## [3.1.1] - 2026-05-07
 
 ### Changed
@@ -131,6 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[4.0.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
+[3.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [3.1.0]: https://github.com/AkaringoP/JavaScripts/commits/main/MobileNoteAssist
 [3.0.1]: https://github.com/AkaringoP/JavaScripts/commits/main/MobileNoteAssist
 [3.0.0]: https://github.com/AkaringoP/JavaScripts/commits/main/MobileNoteAssist
