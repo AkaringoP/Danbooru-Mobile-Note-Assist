@@ -12,6 +12,10 @@
 // @grant        none
 // ==/UserScript==
 
+// FROZEN at v3.1.1 (2026-05-10) — active development moved to src/ (TypeScript).
+// Install the built dist/MobileNoteAssist.user.js (`npm run build`); disposition
+// of this root file at v4.0.0 release is decided in TASK.md Task 4.0.
+
 (function() {
   'use strict';
 
