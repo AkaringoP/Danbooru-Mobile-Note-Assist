@@ -65,17 +65,21 @@ let pendingTagPopoverResolver: ((result: TagDelta | null) => void) | null =
  * for the user. Resolves with the add/remove delta on Submit or
  * `null` on Cancel.
  *
- * Tag-string fetch failures are non-fatal — the popover opens with
- * all toggles OFF after a toast. `tagsToRemove` will be empty in
- * that case (initialTags is empty), so submit can't accidentally
- * strip tags we couldn't see.
+ * Tag-string fetch failure → resolves to `null` after a toast.
+ * `runConfirmFlow` treats `null` as user-cancel and aborts the entire
+ * send, which is the correct UX when the network's down: opening the
+ * popover with all toggles OFF (v3.1.1's behavior) was misleading
+ * because the user couldn't see their existing tag state, and any
+ * downstream PATCH would also fail. Abort + toast + stay in active
+ * mode is cleaner.
  */
 export async function showTagPopover(): Promise<TagDelta | null> {
-  let tagString = '';
+  let tagString: string;
   try {
     tagString = await fetchPostTagString();
   } catch (err) {
     showToast('⚠️ Failed to load post tags', 'error', err);
+    return null;
   }
   const initialTags = new Set(
     tagString.split(/\s+/).filter(t => TAG_OPTIONS.includes(t)),
