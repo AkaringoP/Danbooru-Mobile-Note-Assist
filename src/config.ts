@@ -19,8 +19,8 @@ export const POS_X_KEY = 'dmna_btn_margin_x';
 /** Legacy v2.x localStorage key, removed once on upgrade. */
 export const LEGACY_STATE_KEY = 'dmna_enabled';
 
-/** Duration in ms to trigger long-press actions. */
-export const LONG_PRESS_DURATION = 1500;
+/** Duration in ms to trigger long-press actions. (v3.1.1 was 1500ms.) */
+export const LONG_PRESS_DURATION = 1000;
 
 /** Max gap between two taps to be treated as a double-tap. */
 export const DOUBLE_TAP_THRESHOLD_MS = 300;
