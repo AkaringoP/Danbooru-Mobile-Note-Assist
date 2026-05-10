@@ -155,8 +155,10 @@ export function updateTagPopoverPosition(): void {
 /**
  * Applies the four constraint rules when a single toggle changes.
  * Pure: returns a new state object, doesn't mutate the input.
+ *
+ * Exported for unit tests; module-internal otherwise.
  */
-function applyTagConstraints(
+export function applyTagConstraints(
   state: Record<string, boolean>,
   changedTag: string,
   newValue: boolean,
@@ -201,8 +203,10 @@ function applyTagConstraints(
  * Whether a toggle should be `disabled` (visually + non-interactive).
  * Currently only `translation_request` locks (rule 3); the other
  * three are always toggleable.
+ *
+ * Exported for unit tests; module-internal otherwise.
  */
-function isTagToggleDisabled(
+export function isTagToggleDisabled(
   state: Record<string, boolean>,
   tag: string,
 ): boolean {
