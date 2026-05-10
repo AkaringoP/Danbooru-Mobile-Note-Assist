@@ -11,7 +11,7 @@ A user manual for **Mobile Note Assist** — a UserScript that adds a touch-frie
 1. Install a UserScript manager:
    - **[Tampermonkey](https://www.tampermonkey.net/)** — recommended. Works on Chrome, Edge, Firefox, and Safari (including iOS Safari).
    - **[Violentmonkey](https://violentmonkey.github.io/)** — also supported.
-2. **[Click here to install the script](https://github.com/AkaringoP/JavaScripts/raw/refs/heads/main/MobileNoteAssist/MobileNoteAssist.user.js)**.
+2. **[Click here to install the script](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/raw/refs/heads/build/MobileNoteAssist.user.js)**.
 3. Confirm the installation in your manager when prompted.
 4. Open any post page (`https://danbooru.donmai.us/posts/{id}`). You should see a 📝 floating button in the bottom-right corner.
 
@@ -45,7 +45,7 @@ The 📝 button in the bottom-right is the script's only entry point. It respond
 |---|---|
 | **Single tap** | Opens the **arc menu** (see below). |
 | **Double-tap** (within ~300ms) | Toggles Edit mode on/off. Icon flips between 📝 (idle) and ✏️ (active). If the arc menu was already opening from the first tap, it closes automatically. |
-| **Long-press (~1.5s hold)** | Enters drag-to-reposition mode. The button turns orange; drag to move it, release to save its new position. (See [Customization](#customization).) |
+| **Long-press (~1.0s hold)** | Enters drag-to-reposition mode. The button turns orange; drag to move it, release to save its new position. (See [Customization](#customization).) |
 | **Auto-hide** | While a per-note popover is open, the button is hidden so it doesn't sit on top of the popover's ✔ / ✖ / 🗑 buttons (which fall in the same screen region on mobile). |
 
 The single-tap-opens-menu / double-tap-toggles design means the menu shows up instantly on every tap (no waiting for a long-press) but is canceled if your second tap arrives quickly enough — so you can use a fast double-tap as a quick toggle when you don't need the menu.
@@ -188,7 +188,7 @@ A drag is registered when the pointer moves more than 5px during the press; belo
 
 The 📝 button defaults to the bottom-right corner. To reposition it:
 
-1. Press and hold the button for ~1.5 seconds. A short vibration (if your device supports it) and an `✥ Drag to reposition` toast confirm you're in drag mode. The button turns orange and scales up.
+1. Press and hold the button for ~1.0 seconds. A short vibration (if your device supports it) and an `✥ Drag to reposition` toast confirm you're in drag mode. The button turns orange and scales up.
 2. Drag in any direction. Both axes are free; the button stays clamped inside the screen with margin.
 3. Release. The new position is saved to your browser and persists across pages and reloads.
 
@@ -244,8 +244,61 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v3.0.1** (2026-05-05). v3.0 introduced the multi-note batched workflow that this manual describes; v3.0.1 was a same-day hotfix for the floating button hiding behind open popovers.
+The current release is **v4.0.0** (2026-05-11). v4.0 is a TypeScript migration — same user-facing behavior as v3.1.1, with two minor UX deviations (long-press shortened from 1.5s to 1.0s; tag-fetch failure now aborts Confirm instead of opening with all tags off). The script now ships from the `build` branch as a single bundled UserScript; `main` carries source only.
+
+---
+
+## Development
+
+The script is authored in TypeScript across `src/` and bundled to a single `.user.js` via vite-plugin-monkey. The repository layout:
+
+```
+src/
+├── main.ts                  Boot wire — calls init* on every layer at module-load.
+├── types.ts                 Domain types (NoteState, Note, NoteId, ActionLogEntry, BoxState, …).
+├── config.ts                Constants (BTN_SIZE, LONG_PRESS_DURATION, TAG_OPTIONS, …).
+├── styles.ts                The single STYLES string injected into <head> at boot.
+├── version.ts               Auto-injected `__VERSION__` build constant.
+├── utils/                   Layer 1 — pure helpers (coords, dom, visual-viewport).
+├── api/                     Layer 2 — Danbooru API surface (csrf, posts, notes).
+├── state/                   Layer 2 — module-level state (image-state, notes-store).
+├── confirm/                 Layer 3 — Confirm-time orchestration (classify, batch).
+├── ui/                      Layer 3 — DOM modules (note-box, popover, tag-popover,
+│                            floating-button, arc-menu, toast).
+└── interactions/            Layer 4 — touch / pointer handlers (image-pointer,
+                             drag-resize, keyboard).
+```
+
+Z5 layer rule: imports flow `utils ← state/api ← confirm/ui ← interactions ← main` only. Cross-imports between same-layer siblings (`confirm/ ↔ ui/`, `ui/ ↔ interactions/`) are forbidden — the layer graph is enforced by `test/architecture.test.ts`.
+
+### Local commands
+
+```bash
+npm install         # install gts, vite, vitest, vite-plugin-monkey, happy-dom
+npm run dev         # vite dev server (HMR-served userscript at vite-plugin-monkey's local URL)
+npm run build       # full pipeline: vitest + tsc --noEmit + vite build → dist/MobileNoteAssist.user.js
+npm run test        # vitest run (unit + architecture fitness)
+npm run lint        # gts lint (eslint + prettier)
+npm run fix         # gts fix (auto-format)
+```
+
+The `dist/` directory is `.gitignore`d on `main`; release artifacts live on the `build` branch.
+
+### Branching strategy
+
+- `main` — source only (this branch). Direct commits not allowed; merges from `develop` only at release time.
+- `develop` — integration. Default merge target for feature work.
+- `feature/*`, `hotfix/*` — local-only working branches.
+- `build` — orphan-style branch carrying just the bundled `MobileNoteAssist.user.js` (the `@updateURL` / `@downloadURL` target).
+
+### Testing
+
+213 vitest cases across 8 files (7 unit + 1 architecture fitness). Architecture tests verify Z5 layer direction, hook-bag completeness at boot, and that type-only re-exports stay type-only. Unit tests cover coords, classify, csrf, tag-popover, notes-store, note-box, and confirm/batch.
+
+For UI regressions that depend on real layout (pinch-zoom, viewport positioning, real `<img>` `getBoundingClientRect` values), manual verification on a Danbooru post page in Tampermonkey is the floor.
+
+---
 
 ## License
 
-MIT. See the repository [LICENSE](https://github.com/AkaringoP/JavaScripts/blob/main/LICENSE) for details.
+MIT. See the repository [LICENSE](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/blob/main/LICENSE) for details.

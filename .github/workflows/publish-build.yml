@@ -1,0 +1,73 @@
+# Builds the userscript bundle and force-pushes the single artifact
+# to a publish branch. Runs on every main / develop push and is the
+# sole writer for the `build` and `testbuild` branches.
+#
+#   main    → build      (production-mode artifact, the @updateURL target)
+#   develop → testbuild  (development-mode artifact, scriptName "(dev)")
+#
+# Force-push is intentional: each publish branch is a single-file
+# orphan-style branch carrying just the latest bundled artifact, with
+# no source history. Past artifacts are recoverable from `main`/`develop`
+# at the corresponding source SHA (the commit message records it).
+name: Publish build branch
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine publish target
+        id: target
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+            echo "branch=testbuild" >> "$GITHUB_OUTPUT"
+            echo "mode=development" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=build" >> "$GITHUB_OUTPUT"
+            echo "mode=production" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build (test + tsc + vite)
+        run: npm run build -- --mode ${{ steps.target.outputs.mode }}
+
+      - name: Push artifact to ${{ steps.target.outputs.branch }} branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISH_BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          set -e
+          cd dist
+          git init -q -b "$PUBLISH_BRANCH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add MobileNoteAssist.user.js
+          git commit -q -m "Publish ${GITHUB_SHA::7} from ${GITHUB_REF#refs/heads/}"
+          git push -f \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$PUBLISH_BRANCH"
