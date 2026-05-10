@@ -13,13 +13,13 @@
     ],
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "strict": false,
-    "noImplicitAny": false,
-    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "types": [
       "vite/client",
       "node",
-      "vite-plugin-monkey/client"
+      "vite-plugin-monkey/client",
+      "vitest/globals"
     ]
   },
   "include": [

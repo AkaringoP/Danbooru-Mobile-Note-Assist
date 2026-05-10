@@ -16,12 +16,17 @@
  * Cross-module reads from `confirm/classify` (`hasPendingChanges`)
  * also come via the hooks bag — preserves the Z5 layer rule
  * (state ← confirm, never state → confirm).
- *
- * Phase 1 (loose). Phase 2 will tighten — candidates: brand `NoteId`,
- * narrow `pushAction` via overloads to drop the cast in its body.
  */
 
-import {ActionLogEntry, Mode, Note, NoteId, NoteState} from '../types';
+import {
+  ActionLogEntry,
+  asServerNoteId,
+  asTempNoteId,
+  Mode,
+  Note,
+  NoteId,
+  NoteState,
+} from '../types';
 import {fetchPostMeta} from '../api/posts';
 import {fetchServerNotes, ServerNoteDescriptor} from '../api/notes';
 
@@ -159,10 +164,10 @@ export function genNoteId(): NoteId {
     typeof crypto !== 'undefined' &&
     typeof crypto.randomUUID === 'function'
   ) {
-    return 'temp-' + crypto.randomUUID();
+    return asTempNoteId('temp-' + crypto.randomUUID());
   }
-  return (
-    'temp-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+  return asTempNoteId(
+    'temp-' + Math.random().toString(36).slice(2) + Date.now().toString(36),
   );
 }
 
@@ -568,7 +573,7 @@ export function hardDeleteNote(id: NoteId): void {
  * `fetchServerNotes` resolves.
  */
 export function addServerNote(sn: ServerNoteDescriptor): void {
-  const id = String(sn.id);
+  const id = asServerNoteId(sn.id);
   if (notes.has(id)) {
     return;
   }

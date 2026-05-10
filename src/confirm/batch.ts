@@ -23,7 +23,7 @@
  */
 
 import {SCRIPT_NAME} from '../config';
-import {NoteId, NoteState, Note, TagDelta} from '../types';
+import {asServerNoteId, Note, NoteId, NoteState, TagDelta} from '../types';
 import {
   notes,
   actionLog,
@@ -309,8 +309,10 @@ export async function sendBatch(
  * actionLog. Failed items are left untouched (their actionLog entries
  * are preserved so per-note ↶ keeps working until the user gives up
  * via Cancel).
+ *
+ * Exported for unit tests; module-internal otherwise.
  */
-function applyServerStateToLocal(result: SendBatchResult): void {
+export function applyServerStateToLocal(result: SendBatchResult): void {
   // POST: temp note becomes a server note. Replace in-place rather
   // than mutate the existing entry, because the noteId itself is
   // changing (temp- → server numeric id) and the closures inside
@@ -318,10 +320,10 @@ function applyServerStateToLocal(result: SendBatchResult): void {
   // Cheaper to re-render than to surgery the closures.
   for (const item of result.successful.posts) {
     const sr = item.serverResponse;
-    const serverId = sr && typeof sr.id === 'number' ? String(sr.id) : '';
-    if (!serverId) {
+    if (!sr || typeof sr.id !== 'number') {
       continue;
     }
+    const serverId = asServerNoteId(sr.id);
     // Use the server's normalized values (post-clamp / post-round)
     // as the new local baseline rather than the locally-rounded copy
     // we sent. Otherwise a Retry path that follows a sibling failure
@@ -376,8 +378,10 @@ function applyServerStateToLocal(result: SendBatchResult): void {
  * Builds the human-readable failure list for the error modal.
  * Each line: `<METHOD> <id-or-target>: <error>`. Ordered to match
  * sendBatch's send order (deletes → puts → posts → tagPatch).
+ *
+ * Exported for unit tests; module-internal otherwise.
  */
-function buildFailureLines(result: SendBatchResult): string[] {
+export function buildFailureLines(result: SendBatchResult): string[] {
   const lines: string[] = [];
   for (const f of result.failed.deletes) {
     lines.push(`DELETE note ${f.serverId}: ${f.error}`);
@@ -397,8 +401,10 @@ function buildFailureLines(result: SendBatchResult): string[] {
 /**
  * Counts successes + failures across all groups for the modal's
  * summary line.
+ *
+ * Exported for unit tests; module-internal otherwise.
  */
-function countSendResult(result: SendBatchResult): {
+export function countSendResult(result: SendBatchResult): {
   successCount: number;
   failureCount: number;
 } {
@@ -425,7 +431,10 @@ function countSendResult(result: SendBatchResult): {
  * wasn't needed), we skip it on retry rather than re-PATCHing a
  * no-op delta.
  */
-async function handleSendResult(
+/**
+ * Exported for unit tests; module-internal otherwise.
+ */
+export async function handleSendResult(
   result: SendBatchResult,
   tagDelta: TagDelta | null,
 ): Promise<void> {
