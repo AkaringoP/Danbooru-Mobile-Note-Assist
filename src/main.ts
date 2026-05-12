@@ -26,14 +26,21 @@
 import {APP_VERSION} from './version';
 import {STYLES} from './styles';
 
+import {clearDraft, saveDraft} from './state/draft';
 import {
   getMode,
+  hasContentToSave,
   initNotesStore,
+  serializeForDraft,
   type NotesStoreHooks,
 } from './state/notes-store';
 
 import {hasPendingChanges} from './confirm/classify';
-import {initConfirmFlow, type ConfirmFlowHooks} from './confirm/batch';
+import {
+  getIsSending,
+  initConfirmFlow,
+  type ConfirmFlowHooks,
+} from './confirm/batch';
 
 import {
   closeMenu,
@@ -102,7 +109,16 @@ const notesStoreHooks: NotesStoreHooks = {
   },
   onNoteVisualsChanged: id => updateNoteVisuals(id),
   onNoteRemoved: id => removeNoteBoxDOM(id),
-  onModeChanged: () => setFloatingButtonIconForMode(),
+  onModeChanged: mode => {
+    setFloatingButtonIconForMode();
+    // Entering idle is the user's explicit "I'm done with this
+    // session" signal — discard the persisted draft so a future
+    // page entry doesn't surface a misleading restore prompt
+    // (PLAN D4, v4.1).
+    if (mode === 'idle') {
+      clearDraft();
+    }
+  },
   onToast: (msg, level, err) => showToast(msg, level, err),
   onReopenMenuRequested: () => openMenu(),
   hasPendingChanges: () => hasPendingChanges(),
@@ -165,6 +181,36 @@ function scheduleViewportUpdate(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Lifecycle save (Phase 2, v4.1 force-quit guard)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persists the current collection as a draft if there's something
+ * worth saving and a send isn't in flight. The `isSending` gate is
+ * critical: during runConfirmFlow's PUT/POST/DELETE sequence, a
+ * partial-server-commit snapshot would mix local and server truth
+ * in confusing ways. The Confirm flow itself clears the draft on
+ * entry and on success (confirm/batch.ts), so a force-quit mid-send
+ * falls back to fetchServerNotes on next page entry rather than to
+ * the draft (PLAN D6).
+ *
+ * Called from three lifecycle handlers — beforeunload (PC),
+ * pagehide (mobile-friendly), and visibilitychange→hidden (most
+ * reliable on iOS/Android background-into). Idempotent under
+ * double-fire: the same snapshot is just re-written under the same
+ * key.
+ */
+function saveDraftIfNeeded(): void {
+  if (getIsSending()) {
+    return;
+  }
+  if (!hasContentToSave()) {
+    return;
+  }
+  saveDraft(serializeForDraft());
+}
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
@@ -220,17 +266,36 @@ function init(): void {
   window.addEventListener('resize', updateAllNoteBoxPositions);
   window.addEventListener('orientationchange', updateAllNoteBoxPositions);
 
-  // 8. Reload / navigate-away guard. Surfaces the browser's generic
-  //    "Leave site?" prompt when the user has pending Confirm-time
-  //    changes in active mode. Browsers ignore custom messages here
-  //    for security, so the empty-string assignment is the documented
-  //    way to trigger the prompt. `tryDeactivate`'s `window.confirm`
-  //    covers in-script off-paths (Z11); this handler covers the
-  //    out-of-band ones (refresh button, tab close, Cmd+R, etc).
+  // 8. Reload / navigate-away guard + draft persist. Three handlers
+  //    cover the union of "page is going away":
+  //      - beforeunload: PC refresh / tab close. Also triggers the
+  //        browser's generic "Leave site?" prompt when there are
+  //        pending changes (browsers ignore custom messages, so
+  //        empty-string assignment is the documented opt-in).
+  //        `tryDeactivate`'s `window.confirm` covers in-script
+  //        off-paths (Z11); this handler covers the out-of-band
+  //        ones (refresh button, tab close, Cmd+R, etc).
+  //      - pagehide: mobile-friendly counterpart. iOS Safari is
+  //        unreliable about firing beforeunload before kill — pagehide
+  //        is the documented mobile equivalent.
+  //      - visibilitychange → hidden: most reliable mobile signal
+  //        that the OS is about to suspend or kill us (Android home
+  //        button, iOS app switcher, tab backgrounding).
+  //    All three call saveDraftIfNeeded; only beforeunload gets the
+  //    extra prompt branch (the prompt itself doesn't work on mobile).
   window.addEventListener('beforeunload', e => {
+    saveDraftIfNeeded();
     if (getMode() === 'active' && hasPendingChanges()) {
       e.preventDefault();
       e.returnValue = '';
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    saveDraftIfNeeded();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      saveDraftIfNeeded();
     }
   });
 }
