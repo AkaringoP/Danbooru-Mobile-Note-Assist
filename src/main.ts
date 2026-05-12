@@ -26,8 +26,9 @@
 import {APP_VERSION} from './version';
 import {STYLES} from './styles';
 
-import {clearDraft, saveDraft} from './state/draft';
+import {clearDraft, loadDraft, saveDraft} from './state/draft';
 import {
+  applyDraftSnapshot,
   getMode,
   hasContentToSave,
   initNotesStore,
@@ -71,7 +72,7 @@ import {
   updatePopoverPosition,
 } from './ui/popover';
 import {showTagPopover, updateTagPopoverPosition} from './ui/tag-popover';
-import {showToast, updateToastPosition} from './ui/toast';
+import {showToast, showToastWithActions, updateToastPosition} from './ui/toast';
 
 import {
   attachBodyDragListener,
@@ -210,6 +211,48 @@ function saveDraftIfNeeded(): void {
   saveDraft(serializeForDraft());
 }
 
+/**
+ * Boot-time check for a persisted draft (Phase 3, v4.1). When a
+ * valid draft exists for the current post, surfaces a two-button
+ * toast: Restore (primary) applies the snapshot via
+ * applyDraftSnapshot — which enters active mode, populates notes /
+ * actionLog from the draft, and lets the resulting setMode-driven
+ * enterActiveMode fetch supplement with any newly server-side
+ * notes (the `addServerNote` `notes.has` guard makes draft win for
+ * shared ids; PLAN D6 deferred to that natural ordering).
+ *
+ * Discard removes the key. The draft is otherwise left in place
+ * after Restore (Q2 = A, 2026-05-12) — the lifecycle handlers will
+ * overwrite it the next time the user pauses, and an explicit
+ * idle-toggle clears it via onModeChanged.
+ *
+ * Defensive `mode === 'active'` guard mirrors hasContentToSave's
+ * save-side filter — idle drafts shouldn't exist in normal flow,
+ * but if one does it has no useful restore semantics.
+ */
+function checkAndPromptRestore(): void {
+  const draft = loadDraft();
+  if (!draft) {
+    return;
+  }
+  if (draft.mode !== 'active' || draft.notes.length === 0) {
+    return;
+  }
+  const n = draft.notes.length;
+  const message = `Saved draft found (${n} note${n === 1 ? '' : 's'}).\nRestore your work?`;
+  showToastWithActions(message, [
+    {
+      label: 'Restore',
+      primary: true,
+      onClick: () => applyDraftSnapshot(draft),
+    },
+    {
+      label: 'Discard',
+      onClick: () => clearDraft(),
+    },
+  ]);
+}
+
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
@@ -298,6 +341,12 @@ function init(): void {
       saveDraftIfNeeded();
     }
   });
+
+  // 9. Force-quit recovery prompt. Surfaces the restore toast when
+  //    a valid draft is found for the current post (Phase 3 entry
+  //    point). Runs last in init so any earlier failure short-
+  //    circuits before the user sees a misleading prompt.
+  checkAndPromptRestore();
 }
 
 console.log(`[MobileNoteAssist v${APP_VERSION}] loaded`);
