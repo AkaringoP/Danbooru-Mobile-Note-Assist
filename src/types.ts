@@ -192,6 +192,14 @@ export interface Rect {
 }
 
 /**
+ * Toast severity level — drives the accent CSS class (`.dmna-toast-{level}`)
+ * and the auto-dismiss duration preset in `ui/toast.TOAST_PRESETS`.
+ * Single source of truth: `ui/toast`, `state/notes-store`, and
+ * `confirm/batch` all reference this alias.
+ */
+export type ToastLevel = 'info' | 'success' | 'warning' | 'error';
+
+/**
  * Tag-popover delta (PLAN.md D9). Returned by `ui/tag-popover.
  * showTagPopover` and consumed by `confirm/batch.sendBatch`. Lives
  * in types.ts because both modules reference it; otherwise the

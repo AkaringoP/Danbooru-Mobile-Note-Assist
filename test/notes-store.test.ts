@@ -479,7 +479,10 @@ describe('popoverConfirm', () => {
         .prevState,
     ).toEqual(initial);
     expect(hooks.onActiveChanged).toHaveBeenCalledWith(id, null);
-    expect(hooks.onNoteVisualsChanged).toHaveBeenCalledWith(id);
+    // B4 (v4.1 Phase 4): visuals refresh is handled via the
+    // onActiveChanged path; popoverConfirm / popoverDelete no longer
+    // fire the redundant onNoteVisualsChanged they used to in v3.1.1.
+    expect(hooks.onNoteVisualsChanged).not.toHaveBeenCalled();
   });
 
   it('is a no-op when the noteId is missing from the Map', () => {
@@ -600,7 +603,10 @@ describe('popoverDelete', () => {
         .prevState.text,
     ).toBe('committed');
     expect(hooks.onActiveChanged).toHaveBeenCalledWith(id, null);
-    expect(hooks.onNoteVisualsChanged).toHaveBeenCalledWith(id);
+    // B4 (v4.1 Phase 4): visuals refresh is handled via the
+    // onActiveChanged path; popoverConfirm / popoverDelete no longer
+    // fire the redundant onNoteVisualsChanged they used to in v3.1.1.
+    expect(hooks.onNoteVisualsChanged).not.toHaveBeenCalled();
   });
 
   it('soft-deletes a server note (always confirmed-equivalent)', () => {

@@ -23,7 +23,14 @@
  */
 
 import {SCRIPT_NAME} from '../config';
-import {asServerNoteId, Note, NoteId, NoteState, TagDelta} from '../types';
+import {
+  asServerNoteId,
+  Note,
+  NoteId,
+  NoteState,
+  TagDelta,
+  ToastLevel,
+} from '../types';
 import {clearDraft} from '../state/draft';
 import {
   notes,
@@ -51,9 +58,6 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/** Toast severity. Wider than NotesStoreHooks' set — Confirm uses 'success'. */
-type ToastLevel = 'info' | 'success' | 'warning' | 'error';
 
 // `TagDelta` was inline here in Task 1.7; moved to types.ts in
 // Task 1.12 so ui/tag-popover and confirm/batch share a single

@@ -9,7 +9,7 @@
  * Shapes consumed by `confirm/batch.sendBatch` and the debug surface.
  */
 
-import {NoteId, NoteState} from '../types';
+import {NoteId, NoteState, ServerNoteId} from '../types';
 import {notes} from '../state/notes-store';
 
 /** A new temp note that will be POSTed. */
@@ -26,7 +26,7 @@ export interface PendingPost {
  */
 export interface PendingPut {
   noteId: NoteId;
-  serverId: string;
+  serverId: ServerNoteId;
   state: NoteState;
   /**
    * Whether this PUT carries a text edit (vs. geometry-only).
@@ -38,7 +38,7 @@ export interface PendingPut {
 /** A soft-deleted server note that will be DELETEd. */
 export interface PendingDelete {
   noteId: NoteId;
-  serverId: string;
+  serverId: ServerNoteId;
 }
 
 /**
@@ -140,7 +140,7 @@ export function classifyChanges(): ClassifiedChanges {
   for (const [noteId, note] of notes.entries()) {
     if (note.isServerNote) {
       if (note.isDeleted) {
-        deletes.push({noteId, serverId: noteId});
+        deletes.push({noteId, serverId: noteId as ServerNoteId});
         continue;
       }
       const a = note.current;
@@ -151,7 +151,7 @@ export function classifyChanges(): ClassifiedChanges {
       if (geomChanged || textChanged) {
         puts.push({
           noteId,
-          serverId: noteId,
+          serverId: noteId as ServerNoteId,
           state: {...a},
           textChanged,
         });

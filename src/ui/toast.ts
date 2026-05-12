@@ -22,12 +22,9 @@
  */
 
 import {SCRIPT_NAME, TOAST_MARGIN_BOTTOM} from '../config';
+import {ToastLevel} from '../types';
 
-/**
- * Severity for the toast — drives both the accent color (CSS
- * `.dmna-toast-{type}` class) and the auto-dismiss duration.
- */
-export type ToastType = 'info' | 'success' | 'warning' | 'error';
+export type {ToastLevel};
 
 /**
  * One button in a `showToastWithActions` prompt. `primary` adds the
@@ -49,7 +46,7 @@ export interface ToastAction {
  * their action succeeded — the toast just confirms). `info` stays at
  * the v2.6 baseline for consistency.
  */
-const TOAST_PRESETS: Record<ToastType, {className: string; duration: number}> =
+const TOAST_PRESETS: Record<ToastLevel, {className: string; duration: number}> =
   {
     info: {className: '', duration: 2500},
     success: {className: 'dmna-toast-success', duration: 1800},
@@ -95,7 +92,7 @@ function ensureToastDOM(): void {
  */
 export function showToast(
   msg: string,
-  type: ToastType = 'info',
+  type: ToastLevel = 'info',
   err?: unknown,
 ): void {
   const preset = TOAST_PRESETS[type] || TOAST_PRESETS.info;

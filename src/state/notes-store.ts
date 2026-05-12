@@ -26,6 +26,7 @@ import {
   Note,
   NoteId,
   NoteState,
+  ToastLevel,
 } from '../types';
 import {fetchPostMeta} from '../api/posts';
 import {fetchServerNotes, ServerNoteDescriptor} from '../api/notes';
@@ -88,11 +89,7 @@ export interface NotesStoreHooks {
   onModeChanged: (mode: Mode) => void;
 
   /** Status notification. Subscribers: ui/toast.showToast. */
-  onToast: (
-    message: string,
-    level: 'info' | 'warning' | 'error',
-    err?: unknown,
-  ) => void;
+  onToast: (message: string, level: ToastLevel, err?: unknown) => void;
 
   /**
    * Discard-confirm declined → reopen the arc menu so the user can
@@ -485,8 +482,12 @@ export function popoverConfirm(noteId: NoteId): void {
   pushAction(noteId, 'edit', {...note.confirmedState});
   note.confirmedState = {...note.current};
   note.everConfirmed = true;
+  // setActiveNote(null) fires onActiveChanged(prev=noteId, null),
+  // whose main.ts subscriber refreshes the prev box's visuals.
+  // v3.1.1 had a redundant `onNoteVisualsChanged(noteId)` here too —
+  // collapsed in v4.1 Phase 4 (B4) since the visual transition is
+  // fully handled by the active-change path.
   setActiveNote(null);
-  hooks!.onNoteVisualsChanged(noteId);
 }
 
 /**
@@ -537,8 +538,11 @@ export function popoverDelete(noteId: NoteId): void {
   } else {
     pushAction(noteId, 'delete', {...note.current});
     note.isDeleted = true;
+    // Same B4 collapse as popoverConfirm — setActiveNote(null) fires
+    // onActiveChanged(prev=noteId, null) whose subscriber refreshes
+    // the prev box's visuals (now showing the red-dashed soft-delete
+    // styling). No redundant onNoteVisualsChanged call.
     setActiveNote(null);
-    hooks!.onNoteVisualsChanged(noteId);
   }
 }
 

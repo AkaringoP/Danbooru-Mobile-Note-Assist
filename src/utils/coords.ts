@@ -62,16 +62,18 @@ export function getImageDisplayRect(img: HTMLImageElement): DisplayRect | null {
 
 /**
  * Projects an image-space `NoteState` to a display-space rect.
- * Returns null if the rendered image rect is unavailable.
+ *
+ * Never returns null — when `originalWidth` is 0 (metadata not yet
+ * fetched) the projection falls back to scale 1, which is wrong for
+ * real notes but keeps the debug surface usable when poking values
+ * via `__dmna3.addNote` before any active-mode entry (same fallback
+ * as v3.1.1). Intentional asymmetry with `screenToImageRect`, which
+ * returns null in the `originalWidth=0` case because "do not create
+ * a note" is the right response there.
  *
  * **Closure-capture removed:** legacy code read `postOriginalWidth`
  * from the IIFE closure; here it's an explicit parameter so coords
  * stays in layer 1.
- *
- * If `originalWidth` is 0 (metadata not yet fetched), the projection
- * falls back to scale 1, which is wrong for real notes but keeps the
- * debug surface usable when poking values via `__dmna3.addNote`
- * before any active-mode entry — same fallback as v3.1.1.
  *
  * `displayRect` must be pre-resolved by the caller (e.g., a per-frame
  * snapshot in `updateAllNoteBoxPositions`) so a batch render of N
@@ -82,7 +84,7 @@ export function imageToScreenRect(
   state: NoteState,
   displayRect: DisplayRect,
   originalWidth: number,
-): DisplayRect | null {
+): DisplayRect {
   const scale = originalWidth ? displayRect.width / originalWidth : 1;
   return {
     left: displayRect.left + state.x * scale,
