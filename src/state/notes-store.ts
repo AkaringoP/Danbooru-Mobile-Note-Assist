@@ -29,6 +29,7 @@ import {
 } from '../types';
 import {fetchPostMeta} from '../api/posts';
 import {fetchServerNotes, ServerNoteDescriptor} from '../api/notes';
+import {DraftSnapshot, SerializedNote} from './draft';
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -617,4 +618,155 @@ export function createTempNote(state: NoteState): NoteId {
   pushAction(id, 'create', null);
   hooks!.onNoteRenderRequested(id);
   return id;
+}
+
+// ---------------------------------------------------------------------------
+// Draft serialization (v4.1 — force-quit / OS-kill recovery)
+//
+// `state/draft.ts` owns localStorage I/O + schema; this module owns the
+// snapshot ↔ live-collection conversion. Split is per PLAN D7 (Z5 layer
+// preserved — draft.ts has no notes-store dependency, only types).
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the current state is worth persisting as a draft. PLAN D4
+ * gate: active mode with at least one note. An empty active mode
+ * round-trips to the same state on next entry via setMode('active')
+ * alone, so lifecycle handlers skip those.
+ *
+ * Server-only notes (no edits, no temps) also pass this gate — they
+ * cost ~200 bytes per note to persist and the next `addServerNote`
+ * during enterActiveMode would no-op duplicates anyway. Erring on
+ * the side of "save more" trades a tiny localStorage footprint for
+ * a cleaner mental model ("if I was editing, my draft will be there").
+ */
+export function hasContentToSave(): boolean {
+  return mode === 'active' && notes.size > 0;
+}
+
+/**
+ * Produces a JSON-serializable snapshot of the live collection +
+ * mode + active selection. Spreads each top-level value so the
+ * snapshot is decoupled from subsequent live mutations — caller
+ * (typically a lifecycle handler in main.ts) doesn't have to worry
+ * about saveDraft running concurrently with state writes.
+ *
+ * `Note.domElement` is stripped — DOM refs can't be JSON-serialized
+ * meaningfully and the first post-restore render produces fresh
+ * boxes anyway. Branded NoteIds appear as plain strings post-
+ * serialize; `applyDraftSnapshot` re-brands at the load boundary.
+ */
+export function serializeForDraft(): DraftSnapshot {
+  const serializedNotes: Array<[string, SerializedNote]> = [];
+  for (const [id, note] of notes.entries()) {
+    serializedNotes.push([
+      id,
+      {
+        current: {...note.current},
+        initialState: {...note.initialState},
+        confirmedState: {...note.confirmedState},
+        isDeleted: note.isDeleted,
+        isServerNote: note.isServerNote,
+        everConfirmed: note.everConfirmed,
+      },
+    ]);
+  }
+  const serializedActionLog: Array<[string, ActionLogEntry[]]> = [];
+  for (const [id, stack] of actionLog.entries()) {
+    serializedActionLog.push([id, stack.map(e => ({...e}))]);
+  }
+  return {
+    mode,
+    activeNoteId,
+    notes: serializedNotes,
+    actionLog: serializedActionLog,
+  };
+}
+
+/**
+ * Restores a draft snapshot into the live collection. The trust
+ * boundary for rebranding JSON-stripped NoteIds — every `string` id
+ * coming out of the snapshot is routed through `rebrandNoteId`
+ * before it touches the typed Map keys.
+ *
+ * Caller (main.ts boot path, Task 3.2) decides when this is safe.
+ * Typical flow: idle mode at boot → user taps "Restore" on the
+ * prompt → applyDraftSnapshot. Less-typical (mode already active):
+ * tear-down still runs cleanly, setMode is a no-op, populate +
+ * render proceed.
+ *
+ * Order:
+ *   1. Tear down current state (clear Map / log / active). Fires
+ *      `onNoteRemoved` per existing box for DOM cleanup, then a
+ *      single `onActiveChanged(prev, null)` if needed.
+ *   2. Populate Map + actionLog from snapshot.
+ *   3. setMode(snapshot.mode). For 'active' from 'idle' (the
+ *      restore-at-boot case), this fires enterActiveMode's async
+ *      fetch — fetchServerNotes → addServerNote, which no-ops for
+ *      ids already in the Map. Net effect: draft wins for shared
+ *      ids, server-side additions since the save get picked up.
+ *   4. Render every restored box, then re-establish active
+ *      selection if the snapshot had one (and the note survived).
+ */
+export function applyDraftSnapshot(snapshot: DraftSnapshot): void {
+  // 1. Tear down
+  for (const id of [...notes.keys()]) {
+    hooks!.onNoteRemoved(id);
+  }
+  notes.clear();
+  actionLog.clear();
+  if (activeNoteId !== null) {
+    const prev = activeNoteId;
+    activeNoteId = null;
+    hooks!.onActiveChanged(prev, null);
+  }
+
+  // 2. Populate. Re-brand at the load boundary.
+  for (const [rawId, snote] of snapshot.notes) {
+    const noteId = rebrandNoteId(rawId);
+    const note: Note = {
+      current: {...snote.current},
+      initialState: {...snote.initialState},
+      confirmedState: {...snote.confirmedState},
+      isDeleted: snote.isDeleted,
+      isServerNote: snote.isServerNote,
+      everConfirmed: snote.everConfirmed,
+      domElement: null,
+    };
+    notes.set(noteId, note);
+  }
+  for (const [rawId, entries] of snapshot.actionLog) {
+    const noteId = rebrandNoteId(rawId);
+    // Each entry carries its own noteId field too — rebrand both
+    // the Map key and the inner reference for consistency.
+    const rebranded = entries.map(e => ({...e, noteId}) as ActionLogEntry);
+    actionLog.set(noteId, rebranded);
+  }
+
+  // 3. Mode transition. setMode handles body class / activeModeGen /
+  //    onModeChanged hook itself.
+  setMode(snapshot.mode);
+
+  // 4. Render restored boxes + re-establish active selection.
+  for (const id of notes.keys()) {
+    hooks!.onNoteRenderRequested(id);
+  }
+  if (snapshot.activeNoteId !== null) {
+    const activeId = rebrandNoteId(snapshot.activeNoteId);
+    if (notes.has(activeId)) {
+      setActiveNote(activeId);
+    }
+  }
+}
+
+/**
+ * Rebrands a stringified NoteId at the draft-load boundary. The
+ * `temp-` prefix is the runtime tell — `genNoteId` is the sole
+ * producer of temp ids, and server ids are numeric (never start
+ * with `temp-`). Plain `string` → branded `NoteId`.
+ */
+function rebrandNoteId(rawId: string): NoteId {
+  return rawId.startsWith('temp-')
+    ? asTempNoteId(rawId)
+    : asServerNoteId(rawId);
 }
