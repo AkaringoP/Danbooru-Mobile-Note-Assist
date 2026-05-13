@@ -54,6 +54,7 @@ import {
   updateActiveHandleScales,
   updateNoteVisuals,
 } from './note-box';
+import {hideStylePopover, toggleStylePopover} from './style-popover';
 import {showToast} from './toast';
 
 // ---------------------------------------------------------------------------
@@ -127,7 +128,10 @@ export function createPopover(): void {
 
   const input = document.createElement('textarea');
   input.id = 'dmna-popover-input';
-  input.rows = 3;
+  // 4 rows matches the side-stack's 3-button layout (eye / undo /
+  // style) — keeping textarea ≥ side-stack lets grid `align-items:
+  // stretch` resolve cleanly (Phase 4 v4.2, D10).
+  input.rows = 4;
   input.placeholder = 'Note...';
   input.autocomplete = 'off';
   input.spellcheck = false;
@@ -227,6 +231,22 @@ export function createPopover(): void {
   });
   sideStack.appendChild(undoBtn);
 
+  // Aa style-popover toggle (Phase 4, v4.2). Opens / closes the
+  // sibling sub-popover next to the note popover; the sub-popover
+  // hosts the markup buttons. Re-tapping this button toggles it.
+  const styleBtn = document.createElement('button');
+  styleBtn.type = 'button';
+  styleBtn.id = 'dmna-popover-style-toggle';
+  styleBtn.className = 'dmna-popover-side-btn';
+  styleBtn.textContent = 'Aa';
+  styleBtn.setAttribute('aria-label', 'Toggle style markup popover');
+  styleBtn.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleStylePopover();
+  });
+  sideStack.appendChild(styleBtn);
+
   inputRow.appendChild(sideStack);
   root.appendChild(inputRow);
 
@@ -297,6 +317,9 @@ export function showPopover(noteId: NoteId): void {
     // Note swap (or first show) drops any leftover Preview mode from
     // the previous note. v4.2 Phase 3.
     resetPreviewMode();
+    // Same swap also closes the style sub-popover (v4.2 Phase 4
+    // D9) — its position math is keyed to the previous active note.
+    hideStylePopover();
   }
   updatePopoverForActiveNote();
   // Pre-position BEFORE reveal. If we add `.show` first the popover
@@ -326,6 +349,9 @@ export function hidePopover(): void {
   // Preview mode is per-session-of-this-popover; close drops it so a
   // future open starts in Edit mode (v4.2 Phase 3).
   resetPreviewMode();
+  // Style sub-popover follows the note popover's lifecycle — it has
+  // no meaning without a note popover to attach to (v4.2 Phase 4 D9).
+  hideStylePopover();
 }
 
 /**

@@ -78,6 +78,10 @@ import {
   showPopover,
   updatePopoverPosition,
 } from './ui/popover';
+import {
+  createStylePopover,
+  updateStylePopoverPosition,
+} from './ui/style-popover';
 import {showTagPopover, updateTagPopoverPosition} from './ui/tag-popover';
 import {showToast, showToastWithActions, updateToastPosition} from './ui/toast';
 
@@ -181,6 +185,7 @@ function runViewportUpdate(): void {
   updateArcMenuPosition();
   updateToastPosition();
   updatePopoverPosition();
+  updateStylePopoverPosition();
   updateActiveHandleScales();
   updateTagPopoverPosition();
 }
@@ -299,6 +304,7 @@ function init(): void {
   createFloatingButton();
   createArcMenu();
   createPopover();
+  createStylePopover();
 
   // 3. Wire the three Hook bags. Must happen before any state mutation
   //    or send-flow trigger — the `hooks!` non-null asserts inside

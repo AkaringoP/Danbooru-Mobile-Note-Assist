@@ -822,4 +822,62 @@ export const STYLES = `
     .dmna-toast-btn.is-primary:hover, .dmna-toast-btn.is-primary:focus {
       background: rgba(46, 204, 113, 0.75);
     }
+
+    /* Style popover (Phase 4, v4.2) — sibling of the note popover,
+       attached to its right (or left when overflowing). Same dark
+       chrome / shadow / scale-from-origin as the note popover so the
+       two look like one widget. Width is hard-coded in the TS module
+       (STYLE_POPOVER_WIDTH = 224) to match the 7-column grid;
+       changing one without the other will skew the right-overflow
+       flip math. */
+    #dmna-style-popover {
+      position: absolute;
+      left: 0; top: 0;
+      width: 224px;
+      background: rgba(30, 30, 30, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 10px;
+      padding: 8px;
+      z-index: 10996;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      display: none;
+      transform-origin: 0 0;
+      will-change: transform, opacity;
+      box-sizing: border-box;
+    }
+    #dmna-style-popover.show { display: block; }
+    #dmna-style-popover-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .dmna-style-btn {
+      padding: 6px 0;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .dmna-style-btn:hover { background: rgba(255, 255, 255, 0.16); }
+    .dmna-style-btn:active { background: rgba(255, 255, 255, 0.24); }
+    /* Per-tag preview rendering — each button shows its own effect
+       on its glyph so the user can tell what the tag will look like
+       before tapping. */
+    .dmna-style-btn-bold { font-weight: 700; font-size: 15px; }
+    .dmna-style-btn-italic { font-style: italic; font-size: 15px; }
+    .dmna-style-btn-underline { text-decoration: underline; font-size: 15px; }
+    .dmna-style-btn-strike { text-decoration: line-through; font-size: 15px; }
+    .dmna-style-btn-big { font-size: 16px; font-weight: 600; }
+    .dmna-style-btn-small { font-size: 10px; }
+    .dmna-style-btn-tn {
+      font-size: 11px;
+      color: rgba(150, 200, 255, 0.95);
+      letter-spacing: 0.5px;
+    }
   `;
