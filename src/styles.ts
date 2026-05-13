@@ -735,4 +735,37 @@ export const STYLES = `
       border-left-color: rgba(220, 70, 70, 0.95);
       background-color: rgba(60, 28, 28, 0.96);
     }
+    /* Two-button variant (v4.1, restore-draft prompt). The has-actions
+       modifier reshapes the alarm-pill into a left-aligned card so the
+       button row reads naturally beneath the message, and re-enables
+       pointer events so the buttons are tappable. */
+    .dmna-toast-actions { display: none; }
+    #dmna-toast.has-actions {
+      border-radius: 12px; text-align: left; padding: 14px 16px;
+      pointer-events: auto; min-width: 220px; max-width: 340px;
+    }
+    #dmna-toast.has-actions .dmna-toast-msg {
+      margin-bottom: 12px; text-align: left;
+      white-space: pre-line;
+    }
+    #dmna-toast.has-actions .dmna-toast-actions {
+      display: flex; gap: 8px; justify-content: flex-end;
+    }
+    .dmna-toast-btn {
+      background: rgba(255, 255, 255, 0.12); color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 6px 14px; border-radius: 6px;
+      font-size: 13px; font-family: inherit;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .dmna-toast-btn:hover, .dmna-toast-btn:focus {
+      background: rgba(255, 255, 255, 0.2); outline: none;
+    }
+    .dmna-toast-btn.is-primary {
+      background: rgba(46, 204, 113, 0.55);
+      border-color: rgba(46, 204, 113, 0.7);
+    }
+    .dmna-toast-btn.is-primary:hover, .dmna-toast-btn.is-primary:focus {
+      background: rgba(46, 204, 113, 0.75);
+    }
   `;

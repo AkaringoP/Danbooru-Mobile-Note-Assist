@@ -179,6 +179,7 @@ A drag is registered when the pointer moves more than 5px during the press; belo
 - **Pinch-zoom freely.** The popover, arc menu, floating button, and toasts all counter-scale, so they stay the same physical size on screen no matter how far you zoom in. Position your zoom on the bubble before tapping, and the box will land precisely.
 - **Hold 👁 when aiming on a small box.** The corner touch zones extend ~30px past the visible box edge, which is invisible by default. Holding 👁 shows you exactly where they are.
 - **Tap any box to switch focus.** No need to ✔ before moving on — tapping a different box will close the current popover. If the current note has a useful checkpoint (text was changed), it stays as `dirty` (green) and waits for ✓ Confirm.
+- **Force-quit safe (v4.1+).** If the OS kills your tab while you have unsaved edits — phone went to sleep, you switched apps for too long, the browser crashed — your work is snapshotted on background-into and offered back as a Restore prompt the next time you open the same post. Drafts age out after 24 hours and are cleared automatically when you press ✓ Confirm or explicitly leave Edit mode.
 
 ---
 
@@ -221,12 +222,13 @@ If the popover is still open, tap **↶**. If you've already closed it, tap the 
 
 ## Storage & Privacy
 
-The script writes two `localStorage` keys, scoped to `danbooru.donmai.us`:
+The script writes three `localStorage` keys, scoped to `danbooru.donmai.us`:
 
 | Key | Value | Purpose |
 |---|---|---|
 | `dmna_btn_margin_x` | integer (px) | Saved horizontal position of the floating button |
 | `dmna_btn_margin_y` | integer (px) | Saved vertical position of the floating button |
+| `dmna_draft_{postId}` | JSON | In-progress note draft for force-quit / OS-kill recovery (per post, 24h TTL, cleared on Confirm success or explicit idle-toggle) |
 
 Nothing else is persisted. The script makes no remote calls beyond Danbooru's own API, sends no analytics, and does not require any GM_* APIs (`@grant none`).
 
@@ -244,7 +246,9 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v4.0.0** (2026-05-11). v4.0 is a TypeScript migration — same user-facing behavior as v3.1.1, with two minor UX deviations (long-press shortened from 1.5s to 1.0s; tag-fetch failure now aborts Confirm instead of opening with all tags off). The script now ships from the `build` branch as a single bundled UserScript; `main` carries source only.
+The current release is **v4.1.0** (2026-05-13). v4.1 adds force-quit / OS-kill recovery — your in-progress note edits are snapshotted to `localStorage` on lifecycle events (tab close, app background, OS kill), and the next time you open the same post you get a Restore / Discard prompt. Bundled with internal type / structure cleanups deferred from v4.0; see [CHANGELOG.md](./CHANGELOG.md) for the full list.
+
+v4.0 was the TypeScript migration — same user-facing behavior as v3.1.1, with two minor UX deviations (long-press shortened from 1.5s to 1.0s; tag-fetch failure now aborts Confirm instead of opening with all tags off). The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 
 ---
 

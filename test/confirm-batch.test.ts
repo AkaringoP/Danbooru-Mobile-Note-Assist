@@ -171,7 +171,10 @@ describe('getIsSending', () => {
     const classified: ClassifiedChanges = {
       ...makeEmptyClassified(),
       deletes: [
-        {noteId: asServerNoteId('1'), serverId: '1'} satisfies PendingDelete,
+        {
+          noteId: asServerNoteId('1'),
+          serverId: asServerNoteId('1'),
+        } satisfies PendingDelete,
       ],
       hasChanges: true,
     };

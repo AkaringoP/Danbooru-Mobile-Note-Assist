@@ -36,7 +36,7 @@ import {
   SCRIPT_NAME,
   SCRIPT_VERSION,
 } from '../config';
-import {imageToScreenRect} from '../utils/coords';
+import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {getOriginalWidth} from '../state/image-state';
 import {
   getActiveNoteId,
@@ -341,24 +341,15 @@ export function updatePopoverPosition(): void {
   if (!img) {
     return;
   }
-  const imgRect = img.getBoundingClientRect();
-  if (imgRect.width === 0 || imgRect.height === 0) {
+  const displayRect = getImageDisplayRect(img);
+  if (!displayRect) {
     return;
   }
-  const displayRect = {
-    left: imgRect.left + window.pageXOffset,
-    top: imgRect.top + window.pageYOffset,
-    width: imgRect.width,
-    height: imgRect.height,
-  };
   const boxRectPage = imageToScreenRect(
     note.current,
     displayRect,
     getOriginalWidth(),
   );
-  if (!boxRectPage) {
-    return;
-  }
 
   const vv = window.visualViewport;
   const scale = vv ? vv.scale : 1;

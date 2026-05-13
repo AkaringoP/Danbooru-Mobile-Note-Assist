@@ -23,7 +23,15 @@
  */
 
 import {SCRIPT_NAME} from '../config';
-import {asServerNoteId, Note, NoteId, NoteState, TagDelta} from '../types';
+import {
+  asServerNoteId,
+  Note,
+  NoteId,
+  NoteState,
+  TagDelta,
+  ToastLevel,
+} from '../types';
+import {clearDraft} from '../state/draft';
 import {
   notes,
   actionLog,
@@ -50,9 +58,6 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/** Toast severity. Wider than NotesStoreHooks' set — Confirm uses 'success'. */
-type ToastLevel = 'info' | 'success' | 'warning' | 'error';
 
 // `TagDelta` was inline here in Task 1.7; moved to types.ts in
 // Task 1.12 so ui/tag-popover and confirm/batch share a single
@@ -452,6 +457,13 @@ export async function handleSendResult(
     // theoretically still leave entries. Clear the rest — the
     // session is done.
     actionLog.clear();
+    // Defensive draft clear — runConfirmFlow already cleared on
+    // entry, but the success path is the natural "all done" gate
+    // before the reload. The 1-second reload sleep below leaves a
+    // tiny window where a lifecycle handler could otherwise save a
+    // stale draft from the now-committed state; clearing here keeps
+    // a redundant restore prompt from popping on the next entry.
+    clearDraft();
     hooks!.onToast('✓ Saved', 'success');
     // Brief pause so the user sees the success toast before the
     // page swaps. setMode('idle') is overkill (reload nukes
@@ -645,6 +657,12 @@ export async function runConfirmFlow(): Promise<void> {
   if (isSending) {
     return;
   }
+  // Clear any stale draft — entering the send pipeline transfers
+  // authority to the server. A force-quit mid-send shouldn't
+  // surface a "Restore?" prompt with mixed local/server state on
+  // next page entry; fetchServerNotes is the canonical recovery
+  // path in that case (PLAN D4 + D6, v4.1).
+  clearDraft();
   // Close any open popover before showing modals or starting sends —
   // the popover is positioned above boxes but below modals; leaving
   // it open would visually layer awkwardly behind a tag modal, and

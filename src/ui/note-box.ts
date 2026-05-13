@@ -133,27 +133,23 @@ export function renderNoteBox(
 
   if (rect) {
     const screen = imageToScreenRect(note.current, rect, getOriginalWidth());
-    if (screen) {
-      el.style.display = '';
-      el.style.left = `${screen.left}px`;
-      el.style.top = `${screen.top}px`;
-      el.style.width = `${screen.width}px`;
-      el.style.height = `${screen.height}px`;
-      // SE corner triangle (::after) tracks 1/6 of the box's smaller
-      // display dimension, capped at 8 CSS px (matches v3.0 / v3.1.1
-      // baseline). Pinch zoom is intentionally NOT in this expression
-      // — the triangle scales with the box's CSS-px size, and the
-      // visual viewport magnifies both the box and triangle by the
-      // same factor, so the on-screen ratio is constant across zoom
-      // levels. The cap kicks in at box ≥ 48 CSS px (=
-      // MIN_BOX_SIZE_DISPLAY at vv=1); below that the proportional
-      // shrink applies for sub-MIN states that can occur transiently
-      // at high pinch zoom.
-      const triSize = Math.min(Math.min(screen.width, screen.height) / 6, 8);
-      el.style.setProperty('--dmna-triangle-size', `${triSize}px`);
-    } else {
-      el.style.display = 'none';
-    }
+    el.style.display = '';
+    el.style.left = `${screen.left}px`;
+    el.style.top = `${screen.top}px`;
+    el.style.width = `${screen.width}px`;
+    el.style.height = `${screen.height}px`;
+    // SE corner triangle (::after) tracks 1/6 of the box's smaller
+    // display dimension, capped at 8 CSS px (matches v3.0 / v3.1.1
+    // baseline). Pinch zoom is intentionally NOT in this expression
+    // — the triangle scales with the box's CSS-px size, and the
+    // visual viewport magnifies both the box and triangle by the
+    // same factor, so the on-screen ratio is constant across zoom
+    // levels. The cap kicks in at box ≥ 48 CSS px (=
+    // MIN_BOX_SIZE_DISPLAY at vv=1); below that the proportional
+    // shrink applies for sub-MIN states that can occur transiently
+    // at high pinch zoom.
+    const triSize = Math.min(Math.min(screen.width, screen.height) / 6, 8);
+    el.style.setProperty('--dmna-triangle-size', `${triSize}px`);
   } else {
     // Image rect not yet known — hide until the next re-render
     // (window resize, image load, or explicit

@@ -5,6 +5,32 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-05-13
+
+**Force-quit / OS-kill recovery + structural cleanup.** Adds a `localStorage`-backed draft for in-progress note edits so mobile force-quits and OS background-kills no longer silently lose work. Bundled with mechanical type / structure cleanups (B3/B4/B6/B7/F2/F5) deferred from v4.0.
+
+### Added
+- **Draft persistence + restore prompt.** Three lifecycle handlers (`beforeunload`, `pagehide`, `visibilitychange→hidden`) snapshot the current notes Map + actionLog + mode + activeNoteId into `localStorage` under a per-post key (`dmna_draft_{postId}`, 24h TTL, `schemaVersion=1`). Boot path detects the draft and surfaces a two-button toast: **Restore** applies the snapshot via `applyDraftSnapshot`, **Discard** drops the key. The follow-up server fetch supplements with any newly added server-side notes; for shared ids, the `notes.has` guard means the draft's local edits win.
+- **`safeSetItem` / `safeGetItem` helpers.** Shared `localStorage` wrapper with QuotaExceededError / SecurityError (private-mode) guard. `ui/floating-button` position saves now route through these so the floating-button persistence and the draft persistence share a single private-mode-safe code path.
+- **`showToastWithActions(msg, actions[])`.** Two-button toast variant with auto-dismiss disabled, used by the restore prompt. The same `#dmna-toast` element reshapes from alarm-pill to left-aligned card via a `.has-actions` modifier; primary action gets a green accent.
+
+### Changed
+- **Single-source `ToastLevel`** (`B3`). `src/types.ts` now exports the canonical 4-variant union (`info | success | warning | error`); `ui/toast` re-exports it, `state/notes-store` and `confirm/batch` import directly. `NotesStoreHooks.onToast` widens from 3-variant to 4-variant (gains `success`).
+- **`popoverConfirm` / `popoverDelete` collapse** (`B4`). The redundant `onNoteVisualsChanged(noteId)` call after `setActiveNote(null)` is removed — the `onActiveChanged(prev=noteId, null)` path already refreshes the prev box's visuals via main.ts's hook wiring. v3.1.1's double-firing was preserved through v4.0 for behavior parity; v4.1 collapses to a single hook.
+- **`updatePopoverPosition` DRY** (`F2`). `ui/popover` now calls `utils/coords.getImageDisplayRect(img)` instead of inlining the equivalent `getBoundingClientRect + pageXOffset/Y + 0×0-guard` block.
+
+### Internal
+- **`imageToScreenRect` return type narrowed to `DisplayRect`** (`B6`). The `null` branch was unreachable — `originalWidth=0` always falls back to `scale=1` and returns an object. Callers in `ui/note-box` and `ui/popover` drop their defensive null guards. The JSDoc documents the intentional asymmetry with `screenToImageRect` (which does return `null` in that case as a "do not create a note" signal).
+- **`PendingPut.serverId` / `PendingDelete.serverId` branded as `ServerNoteId`** (`B7`). Consistent with the same interfaces' branded `noteId` field. `classifyChanges` uses a compile-time `as ServerNoteId` cast inside the `isServerNote` branch (the value is already a branded string at runtime, so no factory call needed).
+- **Test coverage**: +43 cases (213 → 256). New `test/draft.test.ts` (28) covers save/load round-trip, TTL expiry, schema mismatch, structural validation, `QuotaExceededError` catch, per-post key isolation, and the `safe{Get,Set}Item` helpers. `test/notes-store.test.ts` gains 15 cases for `hasContentToSave`, `serializeForDraft`, and `applyDraftSnapshot` (including the rebrand-at-load-boundary invariant).
+- **F1 retracted.** Initial backlog flagged `getActiveModeGen` as a dead export; re-examination found 4 test callers verifying the `setMode → activeModeGen` bump invariant (which underwrites the async `enterActiveMode` stale-token bail-out). Export retained.
+- **Build**: `dist/MobileNoteAssist.user.js` 103.99 kB → 111.73 kB across the cycle (+7.74 kB raw / ~+1.2 kB gzip), reflecting the new draft module and the toast/popover wiring.
+
+### Notes
+- `@grant none` preserved. No GM_* API introduced.
+- `@updateURL` / `@downloadURL` target the `build` branch unchanged; v4.0 installs auto-update.
+- The draft persistence and floating-button position are the only data the script writes to `localStorage`. Both are scoped to `danbooru.donmai.us` and never leave the browser.
+
 ## [4.0.0] - 2026-05-11
 
 **TypeScript migration release.** No user-facing functional change relative to v3.1.1; the entire codebase was re-authored from a single ~3,700-line `MobileNoteAssist.user.js` IIFE into a typed, layered `src/` tree, then bundled to the same single `.user.js` artifact via `vite-plugin-monkey`. The `MAJOR` bump follows DI v6.5.2 → v7.0.0 convention — internal restructuring at this scale (source layout, debug surface paths, build/install URL) is treated as breaking even when behavior is preserved.
@@ -147,6 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[4.1.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [4.0.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [3.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [3.1.0]: https://github.com/AkaringoP/JavaScripts/commits/main/MobileNoteAssist
