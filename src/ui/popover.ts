@@ -29,7 +29,7 @@
  *     here too via interactions/keyboard)
  */
 
-import {NoteId} from '../types';
+import {NoteId, isServerNoteId} from '../types';
 import {
   POPOVER_OFFSET,
   POPOVER_WIDTH,
@@ -196,13 +196,14 @@ export function createPopover(): void {
   // as a system emoji — its CSS color is a visual hint that may be
   // ignored.
   const actions: Array<{
-    action: 'confirm' | 'cancel' | 'delete';
+    action: 'confirm' | 'cancel' | 'delete' | 'history';
     icon: string;
     label: string;
   }> = [
     {action: 'confirm', icon: '✔︎', label: 'Confirm'},
     {action: 'cancel', icon: '✖︎', label: 'Cancel'},
     {action: 'delete', icon: '🗑', label: 'Delete'},
+    {action: 'history', icon: '📜', label: 'History'},
   ];
   actions.forEach(({action, icon, label}) => {
     const b = document.createElement('button');
@@ -278,12 +279,16 @@ export function hidePopover(): void {
 }
 
 /**
- * Reflects the active note's `isDeleted` state onto the popover's
- * controls. When the note is soft-deleted the popover enters a
- * "view + undo only" mode: textarea + ✔ / ✖ / 🗑 / 👁 are all
- * disabled and ↶ is highlighted as the only live action. Re-enabled
- * when popoverUndo restores the note (`isDeleted` flips back to
- * false).
+ * Reflects the active note's `isDeleted` and `isServerNote` state
+ * onto the popover's controls.
+ *
+ * - Soft-deleted note: textarea + ✔ / ✖ / 🗑 / 👁 disabled. ↶ is
+ *   highlighted as the only live action. Re-enabled when popoverUndo
+ *   restores the note (`isDeleted` flips back to false).
+ * - History 📜 (Phase 2, v4.2): disable mirrors `!isServerNote`, not
+ *   `isDeleted` — viewing the version history of a server note still
+ *   makes sense after deletion (Q to user 2026-05-13), and a temp
+ *   note has no server-side history to point at.
  */
 export function updatePopoverForActiveNote(): void {
   if (!popoverElement || !popoverInputElement) {
@@ -300,7 +305,9 @@ export function updatePopoverForActiveNote(): void {
   const isDeleted = !!note.isDeleted;
   popoverInputElement.disabled = isDeleted;
   popoverElement.querySelectorAll('.dmna-popover-btn').forEach(b => {
-    (b as HTMLButtonElement).disabled = isDeleted;
+    const btn = b as HTMLButtonElement;
+    btn.disabled =
+      btn.dataset.action === 'history' ? !note.isServerNote : isDeleted;
   });
   const eyeBtn = popoverElement.querySelector('#dmna-popover-eye');
   if (eyeBtn instanceof HTMLButtonElement) {
@@ -502,7 +509,9 @@ export function dismissActivePopover(): void {
  * Ctrl/Cmd+Enter shortcut) to their handlers. Internal — only the
  * createPopover wiring invokes it.
  */
-function handlePopoverAction(action: 'confirm' | 'cancel' | 'delete'): void {
+function handlePopoverAction(
+  action: 'confirm' | 'cancel' | 'delete' | 'history',
+): void {
   const activeId = getActiveNoteId();
   if (!activeId) {
     return;
@@ -513,5 +522,16 @@ function handlePopoverAction(action: 'confirm' | 'cancel' | 'delete'): void {
     popoverCancel(activeId);
   } else if (action === 'delete') {
     popoverDelete(activeId);
+  } else if (action === 'history') {
+    // The button is disabled for temp notes (see
+    // `updatePopoverForActiveNote`); the guard here is defensive in
+    // case the click somehow lands. ServerNoteId is the same string
+    // as the numeric note id Danbooru's URL expects.
+    if (isServerNoteId(activeId)) {
+      window.open(
+        `https://danbooru.donmai.us/note_versions?search[note_id]=${activeId}`,
+        '_blank',
+      );
+    }
   }
 }

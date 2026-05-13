@@ -388,7 +388,7 @@ export const STYLES = `
     }
     #dmna-popover-buttons {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
       gap: 8px;
       margin-top: 10px;
     }
