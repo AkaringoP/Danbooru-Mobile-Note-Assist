@@ -26,26 +26,30 @@ import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 
-// Hard-coded for now — Phase 4 visual check resolves Q3 (1-row vs
-// 2-row layout) and may move these into config.ts if a wider/narrower
-// choice ships.
-const STYLE_POPOVER_WIDTH = 224;
+// Style popover shares the note popover's width so the attach math
+// reads symmetrically (left/right flip is a simple width subtraction).
+// Imported from config to keep the contract one-sourced.
+const STYLE_POPOVER_WIDTH = POPOVER_WIDTH;
 const STYLE_POPOVER_GAP = 8;
 
-interface StyleButton {
+interface StyleTagButton {
   tag: string;
   label: string;
   className: string;
 }
 
-const STYLE_BUTTONS: StyleButton[] = [
+// Row 1: B / I / U
+const ROW_1_BUTTONS: StyleTagButton[] = [
   {tag: 'b', label: 'B', className: 'dmna-style-btn-bold'},
   {tag: 'i', label: 'I', className: 'dmna-style-btn-italic'},
   {tag: 'u', label: 'U', className: 'dmna-style-btn-underline'},
+];
+
+// Row 2: S / tn / a
+const ROW_2_BUTTONS: StyleTagButton[] = [
   {tag: 's', label: 'S', className: 'dmna-style-btn-strike'},
-  {tag: 'big', label: 'big', className: 'dmna-style-btn-big'},
-  {tag: 'small', label: 'small', className: 'dmna-style-btn-small'},
   {tag: 'tn', label: 'tn', className: 'dmna-style-btn-tn'},
+  {tag: 'a', label: 'a', className: 'dmna-style-btn-link'},
 ];
 
 let stylePopoverElement: HTMLElement | null = null;
@@ -55,17 +59,15 @@ let isShown = false;
  * Builds the DOM (idempotent). Caller is `main.ts#init` for boot-
  * time front-loading, or `showStylePopover` on lazy first toggle.
  */
-export function createStylePopover(): void {
-  if (stylePopoverElement) {
-    return;
-  }
-  const root = document.createElement('div');
-  root.id = 'dmna-style-popover';
-
-  const grid = document.createElement('div');
-  grid.id = 'dmna-style-popover-grid';
-
-  for (const btn of STYLE_BUTTONS) {
+/**
+ * Builds a row container with N tag-buttons. Caller fills the array
+ * and gets back the wrapper div. Click handlers stub-log only — the
+ * actual textarea wrap logic ships in a follow-up cycle.
+ */
+function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
+  const row = document.createElement('div');
+  row.className = `dmna-style-row dmna-style-row-${buttons.length}`;
+  for (const btn of buttons) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = `dmna-style-btn ${btn.className}`;
@@ -75,13 +77,98 @@ export function createStylePopover(): void {
     b.addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
-      // v4.2 placeholder — wrap logic ships in v4.3+ (PLAN backlog).
-      console.log(`[MobileNoteAssist] style button placeholder: ${btn.tag}`);
+      console.log(`[MobileNoteAssist] style tag placeholder: ${btn.tag}`);
     });
-    grid.appendChild(b);
+    row.appendChild(b);
   }
+  return row;
+}
 
-  root.appendChild(grid);
+function buildColorRow(): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'dmna-style-row dmna-style-row-2';
+
+  const text = document.createElement('button');
+  text.type = 'button';
+  text.className = 'dmna-style-btn dmna-style-color-text';
+  text.dataset.control = 'color-text';
+  text.setAttribute('aria-label', 'Pick text color');
+  const textLabel = document.createElement('span');
+  textLabel.className = 'dmna-style-color-label';
+  textLabel.textContent = '글자';
+  const textSwatch = document.createElement('span');
+  textSwatch.className = 'dmna-style-color-swatch';
+  textSwatch.style.background = '#000';
+  text.appendChild(textLabel);
+  text.appendChild(textSwatch);
+  text.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[MobileNoteAssist] color-text placeholder');
+  });
+
+  const bg = document.createElement('button');
+  bg.type = 'button';
+  bg.className = 'dmna-style-btn dmna-style-color-bg';
+  bg.dataset.control = 'color-bg';
+  bg.setAttribute('aria-label', 'Pick background color');
+  const bgLabel = document.createElement('span');
+  bgLabel.className = 'dmna-style-color-label';
+  bgLabel.textContent = '배경';
+  const bgSwatch = document.createElement('span');
+  bgSwatch.className = 'dmna-style-color-swatch dmna-style-color-transparent';
+  bg.appendChild(bgLabel);
+  bg.appendChild(bgSwatch);
+  bg.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[MobileNoteAssist] color-bg placeholder');
+  });
+
+  row.appendChild(text);
+  row.appendChild(bg);
+  return row;
+}
+
+function buildSelectRow(control: string, placeholder: string): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'dmna-style-row dmna-style-row-1';
+  const select = document.createElement('select');
+  select.className = 'dmna-style-select';
+  select.dataset.control = control;
+  const placeholderOpt = document.createElement('option');
+  placeholderOpt.textContent = placeholder;
+  placeholderOpt.value = '';
+  select.appendChild(placeholderOpt);
+  select.addEventListener('change', () => {
+    console.log(
+      `[MobileNoteAssist] style ${control} placeholder: ${select.value}`,
+    );
+  });
+  row.appendChild(select);
+  return row;
+}
+
+export function createStylePopover(): void {
+  if (stylePopoverElement) {
+    return;
+  }
+  const root = document.createElement('div');
+  root.id = 'dmna-style-popover';
+
+  // Inner wrapper hosts the slide-in transform — keeping it separate
+  // from the outer's translate+scale (set by updateStylePopoverPosition)
+  // lets the two animations compose without fighting.
+  const inner = document.createElement('div');
+  inner.id = 'dmna-style-popover-inner';
+
+  inner.appendChild(buildTagRow(ROW_1_BUTTONS));
+  inner.appendChild(buildTagRow(ROW_2_BUTTONS));
+  inner.appendChild(buildColorRow());
+  inner.appendChild(buildSelectRow('size', '글자 크기'));
+  inner.appendChild(buildSelectRow('font', '폰트'));
+
+  root.appendChild(inner);
   document.body.appendChild(root);
   stylePopoverElement = root;
 }
@@ -95,11 +182,16 @@ export function showStylePopover(): void {
   if (!stylePopoverElement) {
     return;
   }
-  // Pre-position BEFORE the show class flips display (mirrors the
-  // note popover's anti-flicker pattern in showPopover).
+  // Flip the shown flag BEFORE calling updateStylePopoverPosition —
+  // that function's own guard short-circuits on !isShown to save a
+  // layout pass per viewport tick while the popover is closed, so
+  // calling it pre-flip would no-op and the element would render
+  // with no transform (sitting at 0,0). Position first via the flag-
+  // then-call ordering, THEN add `.show` to flip display — same
+  // anti-flicker pattern as showPopover.
+  isShown = true;
   updateStylePopoverPosition();
   stylePopoverElement.classList.add('show');
-  isShown = true;
 }
 
 export function hideStylePopover(): void {

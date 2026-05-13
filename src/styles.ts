@@ -318,25 +318,29 @@ export const STYLES = `
       align-items: center;
       margin-bottom: 8px;
     }
+    /* Mode toggle styled as an inline link rather than a chip — mirrors
+       Danbooru's own Edit Comment header where "Preview" is a textual
+       affordance with an icon, not a button. (v4.2 Phase 4 visual.) */
     .dmna-popover-mode-toggle {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      color: white;
-      font-size: 12px;
+      background: transparent;
+      border: none;
+      color: #4a9eff;
+      font-size: 13px;
       font-family: inherit;
-      padding: 3px 10px;
-      border-radius: 4px;
+      padding: 2px 0;
       cursor: pointer;
       user-select: none;
       touch-action: manipulation;
-      min-width: 60px;
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
     .dmna-popover-mode-toggle:hover {
-      background: rgba(255, 255, 255, 0.14);
+      color: #6bb6ff;
     }
     .dmna-popover-mode-toggle:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+      text-decoration: none;
     }
     #dmna-popover-input-row {
       display: grid;
@@ -356,7 +360,12 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      font-size: 14px;
+      /* Matches Danbooru's note-edit-dialog inner font scale
+         (notes.scss: div.note-edit-dialog { font-size: 0.8em }).
+         13px ≈ 0.8 × 16px body default, putting our textarea in the
+         same visual range as the native dialog's textarea so users
+         coming from the native flow don't perceive a size jump. */
+      font-size: 13px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;
@@ -375,7 +384,10 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      font-size: 14px;
+      /* Matches #dmna-popover-input — the preview is a same-cell
+         sibling of the textarea, so a font-size mismatch would feel
+         like a layout shift on every toggle. */
+      font-size: 13px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;
@@ -403,7 +415,13 @@ export const STYLES = `
       align-items: center;
       justify-content: center;
       padding: 0;
-      min-height: 0;
+      /* min-height anchors each side-stack button to its 2-button-era
+         size so adding the 3rd button (Aa, v4.2 Phase 4) grows the
+         input row vertically instead of shrinking the existing
+         buttons. The textarea sits in the same grid row with
+         align-items: stretch, so it follows the side stack's height
+         and the user gets a taller writing area for free. */
+      min-height: 36px;
     }
     /* Eye uses pointer events for press-and-hold, so it overrides
        touch-action to disable scroll/zoom while held. */
@@ -830,33 +848,67 @@ export const STYLES = `
        (STYLE_POPOVER_WIDTH = 224) to match the 7-column grid;
        changing one without the other will skew the right-overflow
        flip math. */
+    /* Style popover (v4.2 Phase 4). Outer is always laid out so the
+       attach math (transform: translate(x,y) scale(invScale)) can run
+       even while the popover is invisible — we fade via opacity, not
+       display. The inner wrapper handles the slide motion separately
+       so it composes cleanly with the outer's pinch-zoom counter-
+       scale (transforms don't fight).
+       Width matches POPOVER_WIDTH in config (260) so flip-left math
+       is a clean width subtraction; STYLE_POPOVER_WIDTH in
+       style-popover.ts imports POPOVER_WIDTH for the same reason. */
     #dmna-style-popover {
       position: absolute;
       left: 0; top: 0;
-      width: 224px;
+      width: 260px;
       background: rgba(30, 30, 30, 0.96);
       border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 10px;
-      padding: 8px;
+      padding: 10px;
       z-index: 10996;
       box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-      display: none;
       transform-origin: 0 0;
       will-change: transform, opacity;
       box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
     }
-    #dmna-style-popover.show { display: block; }
-    #dmna-style-popover-grid {
+    #dmna-style-popover.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    /* Inner wrapper carries the slide motion. translateX in the
+       closed state nudges it toward the note popover's right edge
+       (the default attach side); the .show flip releases it to its
+       computed position. */
+    #dmna-style-popover-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transform: translateX(-12px);
+      transition: transform 0.18s ease;
+    }
+    #dmna-style-popover.show #dmna-style-popover-inner {
+      transform: translateX(0);
+    }
+    .dmna-style-row {
       display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 4px;
+      gap: 8px;
     }
+    .dmna-style-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .dmna-style-row-2 { grid-template-columns: 1fr 1fr; }
+    .dmna-style-row-1 { grid-template-columns: 1fr; }
+    /* Buttons share the action-button dimensions (padding/font/border/
+       radius) from .dmna-popover-btn so the visual weight matches
+       what's already on the note popover's bottom row. */
     .dmna-style-btn {
-      padding: 6px 0;
-      border-radius: 5px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: rgba(255, 255, 255, 0.08);
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
       color: white;
+      font-size: 20px;
       font-family: inherit;
       cursor: pointer;
       user-select: none;
@@ -864,20 +916,84 @@ export const STYLES = `
       min-width: 0;
       box-sizing: border-box;
     }
-    .dmna-style-btn:hover { background: rgba(255, 255, 255, 0.16); }
-    .dmna-style-btn:active { background: rgba(255, 255, 255, 0.24); }
-    /* Per-tag preview rendering — each button shows its own effect
-       on its glyph so the user can tell what the tag will look like
-       before tapping. */
-    .dmna-style-btn-bold { font-weight: 700; font-size: 15px; }
-    .dmna-style-btn-italic { font-style: italic; font-size: 15px; }
-    .dmna-style-btn-underline { text-decoration: underline; font-size: 15px; }
-    .dmna-style-btn-strike { text-decoration: line-through; font-size: 15px; }
-    .dmna-style-btn-big { font-size: 16px; font-weight: 600; }
-    .dmna-style-btn-small { font-size: 10px; }
+    .dmna-style-btn:hover { background: rgba(255, 255, 255, 0.20); }
+    .dmna-style-btn:active { background: rgba(255, 255, 255, 0.28); }
+    /* Per-tag preview rendering — each button styles its glyph the
+       way the tag would render so the user knows the effect before
+       tapping. */
+    .dmna-style-btn-bold { font-weight: 700; }
+    .dmna-style-btn-italic { font-style: italic; }
+    .dmna-style-btn-underline { text-decoration: underline; }
+    .dmna-style-btn-strike { text-decoration: line-through; }
     .dmna-style-btn-tn {
-      font-size: 11px;
+      font-size: 15px;
       color: rgba(150, 200, 255, 0.95);
       letter-spacing: 0.5px;
     }
+    .dmna-style-btn-link {
+      color: #4a9eff;
+      text-decoration: underline;
+    }
+    /* Color row: button is a label + swatch pair in inline-flex.
+       Padding tightens vertically vs tag buttons since two pieces of
+       content share the same row. */
+    .dmna-style-color-text,
+    .dmna-style-color-bg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      font-size: 13px;
+      gap: 8px;
+    }
+    .dmna-style-color-label {
+      font-weight: 500;
+    }
+    .dmna-style-color-swatch {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      box-sizing: border-box;
+    }
+    /* Transparent swatch = the page's background showing through, with
+       a diagonal slash so the user can tell at a glance it's not just
+       black. */
+    .dmna-style-color-transparent {
+      background:
+        linear-gradient(
+          to top right,
+          transparent 47%,
+          rgba(255, 80, 80, 0.85) 47%,
+          rgba(255, 80, 80, 0.85) 53%,
+          transparent 53%
+        );
+    }
+    /* Native select kept simple — Phase 4 ships dropdown shells with
+       placeholder option only; option list lands in follow-up cycle
+       per user. */
+    .dmna-style-select {
+      width: 100%;
+      padding: 10px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: white;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      box-sizing: border-box;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.7) 50%),
+        linear-gradient(135deg, rgba(255,255,255,0.7) 50%, transparent 50%);
+      background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 10px) 50%;
+      background-size: 6px 6px;
+      background-repeat: no-repeat;
+    }
+    .dmna-style-select:hover { background-color: rgba(255, 255, 255, 0.20); }
   `;
