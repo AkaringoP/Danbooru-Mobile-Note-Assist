@@ -38,6 +38,7 @@ import {
   POS_X_KEY,
 } from '../config';
 import {isTextInputElement} from '../utils/dom';
+import {safeGetItem, safeSetItem} from '../state/draft';
 import {getMode, toggleEditMode} from '../state/notes-store';
 import {closeMenu, toggleMenu} from './arc-menu';
 import {showToast} from './toast';
@@ -57,11 +58,13 @@ let floatBtnElement: HTMLElement | null = null;
 
 // Position margins from the right/bottom screen edges. Persisted
 // across reloads via localStorage; reseeded from defaults on first run.
-const initialStoredX = parseInt(localStorage.getItem(POS_X_KEY) ?? '', 10);
+// safeGetItem returns null on private-mode SecurityError as well as
+// on absent keys — both collapse to the default via the NaN/Finite check.
+const initialStoredX = parseInt(safeGetItem(POS_X_KEY) ?? '', 10);
 let userBtnMarginX = Number.isFinite(initialStoredX)
   ? initialStoredX
   : DEFAULT_BTN_MARGIN_X;
-const initialStoredY = parseInt(localStorage.getItem(POS_KEY) ?? '', 10);
+const initialStoredY = parseInt(safeGetItem(POS_KEY) ?? '', 10);
 let userBtnMarginY = Number.isFinite(initialStoredY)
   ? initialStoredY
   : DEFAULT_BTN_MARGIN_Y;
@@ -296,8 +299,8 @@ function setupButtonInteractions(btn: HTMLElement): void {
     if (isDraggingBtn) {
       isDraggingBtn = false;
       btn.classList.remove('dragging');
-      localStorage.setItem(POS_X_KEY, String(userBtnMarginX));
-      localStorage.setItem(POS_KEY, String(userBtnMarginY));
+      safeSetItem(POS_X_KEY, String(userBtnMarginX));
+      safeSetItem(POS_KEY, String(userBtnMarginY));
     } else {
       const isTouch = e.type.startsWith('touch');
       const endX = isTouch

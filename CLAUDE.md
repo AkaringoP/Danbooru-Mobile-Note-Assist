@@ -14,6 +14,7 @@ Adds a floating button to post pages. When enabled, users can tap/drag on the im
 - Visual Viewport API support for pinch-zoom scenarios
 - Long-press button to toggle debug zones
 - CSRF token handling for Danbooru API submissions
+- **Force-quit / OS-kill recovery (v4.1+)** — in-progress notes snapshotted to `localStorage` on lifecycle events (`beforeunload` / `pagehide` / `visibilitychange→hidden`) and restored via two-button toast prompt on next entry to the same post. 24h TTL, per-post key, cleared on Confirm success or explicit idle-toggle
 
 ## Architecture (Layer Structure)
 

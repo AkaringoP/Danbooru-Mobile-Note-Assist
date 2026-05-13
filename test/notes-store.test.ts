@@ -14,6 +14,7 @@ import {
   NotesStoreHooks,
   actionLog,
   addServerNote,
+  applyDraftSnapshot,
   createTempNote,
   discardAll,
   genNoteId,
@@ -21,6 +22,7 @@ import {
   getActiveNoteId,
   getMode,
   hardDeleteNote,
+  hasContentToSave,
   initNotesStore,
   isDirty,
   notes,
@@ -29,9 +31,12 @@ import {
   popoverDelete,
   popoverUndo,
   pushAction,
+  serializeForDraft,
   setActiveNote,
   setMode,
 } from '../src/state/notes-store';
+import {isTempNoteId, isServerNoteId} from '../src/types';
+import type {DraftSnapshot} from '../src/state/draft';
 
 // ---------------------------------------------------------------------------
 // Mocks for the api/* deps that enterActiveMode awaits
@@ -474,7 +479,10 @@ describe('popoverConfirm', () => {
         .prevState,
     ).toEqual(initial);
     expect(hooks.onActiveChanged).toHaveBeenCalledWith(id, null);
-    expect(hooks.onNoteVisualsChanged).toHaveBeenCalledWith(id);
+    // B4 (v4.1 Phase 4): visuals refresh is handled via the
+    // onActiveChanged path; popoverConfirm / popoverDelete no longer
+    // fire the redundant onNoteVisualsChanged they used to in v3.1.1.
+    expect(hooks.onNoteVisualsChanged).not.toHaveBeenCalled();
   });
 
   it('is a no-op when the noteId is missing from the Map', () => {
@@ -595,7 +603,10 @@ describe('popoverDelete', () => {
         .prevState.text,
     ).toBe('committed');
     expect(hooks.onActiveChanged).toHaveBeenCalledWith(id, null);
-    expect(hooks.onNoteVisualsChanged).toHaveBeenCalledWith(id);
+    // B4 (v4.1 Phase 4): visuals refresh is handled via the
+    // onActiveChanged path; popoverConfirm / popoverDelete no longer
+    // fire the redundant onNoteVisualsChanged they used to in v3.1.1.
+    expect(hooks.onNoteVisualsChanged).not.toHaveBeenCalled();
   });
 
   it('soft-deletes a server note (always confirmed-equivalent)', () => {
@@ -901,5 +912,356 @@ describe('enterActiveMode — gen-counter cancellation', () => {
       err,
     );
     expect(notes.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Draft serialization helpers (v4.1)
+// ---------------------------------------------------------------------------
+
+describe('hasContentToSave', () => {
+  it('returns false in idle mode', () => {
+    // Module starts idle after beforeEach
+    expect(getMode()).toBe('idle');
+    expect(hasContentToSave()).toBe(false);
+  });
+
+  it('returns false in active mode with empty notes Map', async () => {
+    setMode('active');
+    // Drain async tail — notes Map stays empty (fetchServerNotes returns [])
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(notes.size).toBe(0);
+    expect(hasContentToSave()).toBe(false);
+  });
+
+  it('returns true in active mode with at least one note', async () => {
+    setMode('active');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const id = asTempNoteId('temp-hcts-1');
+    notes.set(id, {
+      current: {x: 0, y: 0, w: 10, h: 10, text: ''},
+      initialState: {x: 0, y: 0, w: 10, h: 10, text: ''},
+      confirmedState: {x: 0, y: 0, w: 10, h: 10, text: ''},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+
+    expect(hasContentToSave()).toBe(true);
+  });
+});
+
+describe('serializeForDraft', () => {
+  const BASE_STATE = {x: 1, y: 2, w: 3, h: 4, text: 'hello'};
+
+  it('produces a snapshot containing each note in serialized form', () => {
+    const id = asTempNoteId('temp-ser-1');
+    notes.set(id, {
+      current: {...BASE_STATE},
+      initialState: {...BASE_STATE},
+      confirmedState: {...BASE_STATE},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+
+    const snap = serializeForDraft();
+
+    expect(snap.notes).toHaveLength(1);
+    expect(snap.notes[0][0]).toBe(id);
+    expect(snap.notes[0][1].current).toEqual(BASE_STATE);
+  });
+
+  it('strips Note.domElement from each serialized entry', () => {
+    const id = asTempNoteId('temp-ser-dom');
+    const el = document.createElement('div');
+    notes.set(id, {
+      current: {...BASE_STATE},
+      initialState: {...BASE_STATE},
+      confirmedState: {...BASE_STATE},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: el,
+    });
+
+    const snap = serializeForDraft();
+    const serializedNote = snap.notes[0][1];
+
+    expect('domElement' in serializedNote).toBe(false);
+  });
+
+  it('deep-clones NoteState — mutating note.current.x after serialize does not affect snapshot', () => {
+    const id = asTempNoteId('temp-ser-clone');
+    const note = {
+      current: {x: 10, y: 0, w: 5, h: 5, text: ''},
+      initialState: {x: 10, y: 0, w: 5, h: 5, text: ''},
+      confirmedState: {x: 10, y: 0, w: 5, h: 5, text: ''},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    };
+    notes.set(id, note);
+
+    const snap = serializeForDraft();
+    note.current.x = 999;
+
+    expect(snap.notes[0][1].current.x).toBe(10);
+  });
+
+  it('carries actionLog entries with cloned objects — mutating an entry post-serialize does not affect snapshot', () => {
+    const id = asTempNoteId('temp-ser-log');
+    notes.set(id, {
+      current: {...BASE_STATE},
+      initialState: {...BASE_STATE},
+      confirmedState: {...BASE_STATE},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+    pushAction(id, 'edit', {...BASE_STATE, x: 5});
+    const originalStack = actionLog.get(id)!;
+
+    const snap = serializeForDraft();
+    // Mutate the original entry after serialize
+    (originalStack[0] as {type: string}).type = 'transform';
+
+    expect(snap.actionLog[0][1][0].type).toBe('edit');
+  });
+
+  it('carries mode and activeNoteId from current state', () => {
+    const id = asTempNoteId('temp-ser-active');
+    notes.set(id, {
+      current: {...BASE_STATE},
+      initialState: {...BASE_STATE},
+      confirmedState: {...BASE_STATE},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+    setActiveNote(id);
+
+    const snap = serializeForDraft();
+
+    expect(snap.activeNoteId).toBe(id);
+  });
+});
+
+describe('applyDraftSnapshot', () => {
+  it('clears existing state before populating — onNoteRemoved fires for each prior note', () => {
+    const prior = asTempNoteId('temp-prior');
+    notes.set(prior, {
+      current: {x: 0, y: 0, w: 1, h: 1, text: ''},
+      initialState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+      confirmedState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+    vi.mocked(hooks.onNoteRemoved).mockClear();
+
+    const snap: DraftSnapshot = {
+      mode: 'idle',
+      activeNoteId: null,
+      notes: [],
+      actionLog: [],
+    };
+    applyDraftSnapshot(snap);
+
+    expect(hooks.onNoteRemoved).toHaveBeenCalledWith(prior);
+    expect(notes.has(prior)).toBe(false);
+  });
+
+  it('rebrands temp- prefix ids as TempNoteId', () => {
+    const snap: DraftSnapshot = {
+      mode: 'idle',
+      activeNoteId: null,
+      notes: [
+        [
+          'temp-rebrand-1',
+          {
+            current: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            initialState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            confirmedState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            isDeleted: false,
+            isServerNote: false,
+            everConfirmed: false,
+          },
+        ],
+      ],
+      actionLog: [],
+    };
+    applyDraftSnapshot(snap);
+
+    const key = [...notes.keys()][0];
+    expect(isTempNoteId(key)).toBe(true);
+  });
+
+  it('rebrands numeric ids as ServerNoteId', () => {
+    const snap: DraftSnapshot = {
+      mode: 'idle',
+      activeNoteId: null,
+      notes: [
+        [
+          '9999',
+          {
+            current: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            initialState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            confirmedState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            isDeleted: false,
+            isServerNote: true,
+            everConfirmed: false,
+          },
+        ],
+      ],
+      actionLog: [],
+    };
+    applyDraftSnapshot(snap);
+
+    const key = [...notes.keys()][0];
+    expect(isServerNoteId(key)).toBe(true);
+    expect(key).toBe('9999');
+  });
+
+  it('triggers onNoteRenderRequested for each restored note', () => {
+    vi.mocked(hooks.onNoteRenderRequested).mockClear();
+    const snap: DraftSnapshot = {
+      mode: 'idle',
+      activeNoteId: null,
+      notes: [
+        [
+          'temp-render-a',
+          {
+            current: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            initialState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            confirmedState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            isDeleted: false,
+            isServerNote: false,
+            everConfirmed: false,
+          },
+        ],
+        [
+          'temp-render-b',
+          {
+            current: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            initialState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            confirmedState: {x: 0, y: 0, w: 1, h: 1, text: ''},
+            isDeleted: false,
+            isServerNote: false,
+            everConfirmed: false,
+          },
+        ],
+      ],
+      actionLog: [],
+    };
+    applyDraftSnapshot(snap);
+
+    expect(hooks.onNoteRenderRequested).toHaveBeenCalledTimes(2);
+  });
+
+  it('calls setMode with snapshot.mode — verified via onModeChanged hook', () => {
+    // Start in idle, snapshot is also idle — setMode is a no-op for same mode.
+    // Use a snapshot with 'active' to force the transition and observe the hook.
+    vi.mocked(hooks.onModeChanged).mockClear();
+    const snap: DraftSnapshot = {
+      mode: 'active',
+      activeNoteId: null,
+      notes: [],
+      actionLog: [],
+    };
+    applyDraftSnapshot(snap);
+
+    expect(hooks.onModeChanged).toHaveBeenCalledWith('active');
+  });
+
+  it('does not call setActiveNote when snapshot.activeNoteId is not in restored Map', async () => {
+    // Drain any previous active mode
+    if (getMode() === 'active') {
+      setMode('idle');
+    }
+    vi.mocked(hooks.onActiveChanged).mockClear();
+
+    const snap: DraftSnapshot = {
+      mode: 'idle',
+      // Points to a note that is not in snapshot.notes
+      activeNoteId: 'temp-missing-from-notes',
+      notes: [],
+      actionLog: [],
+    };
+    applyDraftSnapshot(snap);
+
+    // setActiveNote(id) would have fired onActiveChanged(null, id);
+    // since the id is not in the restored Map, it should not be called.
+    const activeCalls = vi
+      .mocked(hooks.onActiveChanged)
+      .mock.calls.filter(([, next]) => next !== null);
+    expect(activeCalls).toHaveLength(0);
+  });
+
+  it('round-trip: seed → serializeForDraft → discardAll → applyDraftSnapshot → state matches', async () => {
+    // Seed state
+    const id1 = asTempNoteId('temp-rt-1');
+    const id2 = asServerNoteId('8888');
+    const state1 = {x: 5, y: 6, w: 7, h: 8, text: 'one'};
+    const state2 = {x: 9, y: 10, w: 11, h: 12, text: 'two'};
+
+    notes.set(id1, {
+      current: {...state1},
+      initialState: {...state1},
+      confirmedState: {...state1},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+    notes.set(id2, {
+      current: {...state2},
+      initialState: {...state2},
+      confirmedState: {...state2},
+      isDeleted: false,
+      isServerNote: true,
+      everConfirmed: false,
+      domElement: null,
+    });
+    pushAction(id1, 'create', null);
+    setActiveNote(id1);
+
+    // We need to set mode to active for serializeForDraft to include it,
+    // but to avoid async fetch side effects we set mode field manually
+    // via the snapshot rather than calling setMode('active') here.
+    const snap = serializeForDraft();
+    // Override mode to idle so applyDraftSnapshot doesn't trigger active fetch
+    snap.mode = 'idle';
+    snap.activeNoteId = null;
+
+    discardAll();
+    expect(notes.size).toBe(0);
+
+    applyDraftSnapshot(snap);
+
+    // Notes should be restored with matching keys
+    expect(notes.has(id1)).toBe(true);
+    expect(notes.has(id2)).toBe(true);
+    expect(notes.get(id1)!.current).toEqual(state1);
+    expect(notes.get(id2)!.current).toEqual(state2);
+    // actionLog restored
+    expect(actionLog.has(id1)).toBe(true);
+    expect(actionLog.get(id1)![0].type).toBe('create');
+    // mode
+    expect(getMode()).toBe('idle');
   });
 });
