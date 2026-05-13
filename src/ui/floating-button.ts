@@ -22,8 +22,12 @@
  * the Task 1.4 split-out of v3.1.1's monolithic
  * `updateVisualViewportPositions`).
  *
- * Auto-hide: while any text input on the page is focused, the button
- * gains `.dmna-hidden` so it doesn't cover the on-screen keyboard.
+ * Auto-hide: the button gains `.dmna-hidden` when either signal is
+ * active — a focused text input (so we don't cover the on-screen
+ * keyboard) OR Danbooru's native translation mode / edit dialog
+ * (Phase 1, v4.2). The two signals OR-combine through
+ * `updateHiddenState`; native flag flips via `setNativeActiveHide`
+ * from main.ts's native-conflict subscription.
  */
 
 import type {Mode} from '../types';
@@ -73,6 +77,12 @@ let userBtnMarginY = Number.isFinite(initialStoredY)
 // enabled state; mode is per-session and lives only in the menu state
 // machine.
 localStorage.removeItem(LEGACY_STATE_KEY);
+
+// Auto-hide signal: `true` while Danbooru's native translation mode
+// or edit dialog is active. Flipped via `setNativeActiveHide` from
+// main.ts's native-conflict subscription (Phase 1, v4.2). OR-combined
+// with focused-text-input check in `updateHiddenState`.
+let nativeActiveHide = false;
 
 // Gesture state machine (long-press / drag / double-tap).
 let isDraggingBtn = false;
@@ -136,29 +146,52 @@ export function createFloatingButton(): void {
   document.body.appendChild(btn);
   floatBtnElement = btn;
 
-  // Auto-hide the floating button when focus enters a text-input
-  // element anywhere in the document, so it doesn't cover the
-  // on-screen keyboard.
-  document.addEventListener(
-    'focus',
-    e => {
-      if (isTextInputElement(e.target as Element)) {
-        btn.classList.add('dmna-hidden');
-      }
-    },
-    true,
-  );
+  // Auto-hide listeners — focus/blur each route through
+  // `updateHiddenState`, which OR-combines the focused-text-input
+  // check with `nativeActiveHide`. blur waits 100 ms because
+  // document.activeElement is transiently `body` between blur and
+  // the next focus, and we want to read the stable post-transition
+  // value.
+  document.addEventListener('focus', () => updateHiddenState(), true);
   document.addEventListener(
     'blur',
     () => {
-      setTimeout(() => {
-        if (!isTextInputElement(document.activeElement)) {
-          btn.classList.remove('dmna-hidden');
-        }
-      }, 100);
+      setTimeout(updateHiddenState, 100);
     },
     true,
   );
+}
+
+/**
+ * Applies the OR'd hidden state to the button. Called by:
+ *   - focus/blur listeners (text-input auto-hide)
+ *   - `setNativeActiveHide` (Danbooru native conflict subscription)
+ *
+ * Safe to call before `createFloatingButton` — guards on
+ * `floatBtnElement`. The classList check is intentionally absent;
+ * `add`/`remove` are idempotent so a redundant call is cheap.
+ */
+function updateHiddenState(): void {
+  if (!floatBtnElement) {
+    return;
+  }
+  const hide = isTextInputElement(document.activeElement) || nativeActiveHide;
+  if (hide) {
+    floatBtnElement.classList.add('dmna-hidden');
+  } else {
+    floatBtnElement.classList.remove('dmna-hidden');
+  }
+}
+
+/**
+ * Flips the native-active auto-hide flag and refreshes the button's
+ * visibility. Called by main.ts's `onNativeStateChanged` subscriber
+ * (Phase 1, v4.2). Idempotent under same-state calls — the OR with
+ * the focused-text-input branch is recomputed every time.
+ */
+export function setNativeActiveHide(active: boolean): void {
+  nativeActiveHide = active;
+  updateHiddenState();
 }
 
 /**

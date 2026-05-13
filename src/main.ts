@@ -36,6 +36,12 @@ import {
   type NotesStoreHooks,
 } from './state/notes-store';
 
+import {
+  getIsNativeActive,
+  initNativeConflictWatch,
+  onNativeStateChanged,
+} from './state/native-conflict';
+
 import {hasPendingChanges} from './confirm/classify';
 import {
   getIsSending,
@@ -53,6 +59,7 @@ import {
   createFloatingButton,
   setFloatingButtonIcon,
   setFloatingButtonIconForMode,
+  setNativeActiveHide,
   updateFloatingButtonPosition,
 } from './ui/floating-button';
 import {
@@ -81,6 +88,7 @@ import {
 } from './interactions/drag-resize';
 import {bindImageHandlers} from './interactions/image-pointer';
 import {bindGlobalHotkeys} from './interactions/keyboard';
+import {bindNativeBlockers} from './interactions/native-block';
 
 import {scheduleVisualViewportUpdate} from './utils/visual-viewport';
 
@@ -288,14 +296,27 @@ function init(): void {
 
   // 4. Bind document-level interactions. `bindImageHandlers` self-
   //    retries on a 1 s timer if the post image isn't in the DOM yet.
+  //    `bindNativeBlockers` installs capture-phase blockers for the
+  //    `#translate` link + bare-N keydown so they can't fire while
+  //    our active mode is on.
   bindImageHandlers();
   bindGlobalHotkeys();
+  bindNativeBlockers();
 
-  // 5. Initial position pass — pins the floating button / menu to
+  // 5. Danbooru native conflict watch (Phase 1, v4.2). Subscribes the
+  //    floating-button auto-hide branch to body.mode-translation and
+  //    .ui-dialog.note-edit-dialog signals; the MutationObserver only
+  //    fires on edge changes, so a final manual fanout propagates the
+  //    initial state captured inside `initNativeConflictWatch`.
+  initNativeConflictWatch();
+  onNativeStateChanged(setNativeActiveHide);
+  setNativeActiveHide(getIsNativeActive());
+
+  // 6. Initial position pass — pins the floating button / menu to
   //    their persisted edges before the first frame paints.
   runViewportUpdate();
 
-  // 6. visualViewport pinch-zoom / scroll. RAF-batched so multiple
+  // 7. visualViewport pinch-zoom / scroll. RAF-batched so multiple
   //    events in one frame coalesce into one DOM-write pass.
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', scheduleViewportUpdate);
@@ -303,13 +324,13 @@ function init(): void {
     window.addEventListener('scroll', scheduleViewportUpdate);
   }
 
-  // 7. Re-project note boxes whenever document layout could shift (the
+  // 8. Re-project note boxes whenever document layout could shift (the
   //    rendered image's page-coord rect changes). Pinch-zoom is NOT in
   //    this pair — see `runViewportUpdate` doc.
   window.addEventListener('resize', updateAllNoteBoxPositions);
   window.addEventListener('orientationchange', updateAllNoteBoxPositions);
 
-  // 8. Reload / navigate-away guard + draft persist. Three handlers
+  // 9. Reload / navigate-away guard + draft persist. Three handlers
   //    cover the union of "page is going away":
   //      - beforeunload: PC refresh / tab close. Also triggers the
   //        browser's generic "Leave site?" prompt when there are
@@ -342,7 +363,7 @@ function init(): void {
     }
   });
 
-  // 9. Force-quit recovery prompt. Surfaces the restore toast when
+  // 10. Force-quit recovery prompt. Surfaces the restore toast when
   //    a valid draft is found for the current post (Phase 3 entry
   //    point). Runs last in init so any earlier failure short-
   //    circuits before the user sees a misleading prompt.

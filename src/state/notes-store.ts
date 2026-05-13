@@ -31,6 +31,7 @@ import {
 import {fetchPostMeta} from '../api/posts';
 import {fetchServerNotes, ServerNoteDescriptor} from '../api/notes';
 import {DraftSnapshot, SerializedNote} from './draft';
+import {getIsNativeActive} from './native-conflict';
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -242,6 +243,13 @@ export function discardAll(): void {
 /**
  * Switches the high-level mode. Idempotent on same-mode input.
  *
+ * Native conflict gate (Phase 1, v4.2): an 'active' entry is dropped
+ * when Danbooru's own translation mode or edit dialog is open — see
+ * `state/native-conflict`. A toast tells the user to close native
+ * first. Idle entries (deactivation) are never gated. The check sits
+ * here, not in `toggleEditMode`, so all three Edit-toggle paths plus
+ * `applyDraftSnapshot`'s restore-time setMode are gated by one rule.
+ *
  * Side effects:
  *   - 'active': fires `onModeChanged` (the floating-button hook
  *     swaps the icon to ✏️), toggles the `dmna-mode-active` body
@@ -255,6 +263,13 @@ export function discardAll(): void {
  */
 export function setMode(newMode: Mode): void {
   if (mode === newMode) {
+    return;
+  }
+  if (newMode === 'active' && getIsNativeActive()) {
+    hooks!.onToast(
+      "Danbooru's native note UI is active — close it first",
+      'info',
+    );
     return;
   }
   mode = newMode;
@@ -342,7 +357,9 @@ export function toggleEditMode(): void {
     }
   } else {
     setMode('active');
-    hooks!.onToast('Edit mode on', 'info');
+    if (getMode() === 'active') {
+      hooks!.onToast('Edit mode on', 'info');
+    }
   }
 }
 

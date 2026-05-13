@@ -32,12 +32,23 @@
  * Modal ownership: when the tag popover (D9) or error modal (D12) is
  * open, those modals' own capture-phase handlers fire first. This
  * handler stays out by checking the body classes those modals set.
+ *
+ * Native conflict (Phase 1, v4.2, D2): when Danbooru's native
+ * translation mode or edit dialog is active, the Shift+N branch
+ * preventDefaults the key but routes to a toast instead of
+ * `toggleEditMode` — silent suppression would look like a broken
+ * hotkey to a user who can't see the (hidden) floating button. The
+ * complementary direction (native trigger fired while we're already
+ * active) lives in `interactions/native-block`, which swallows both
+ * the bare-N keydown and the `#translate` click.
  */
 
 import {isTextInputElement} from '../utils/dom';
 import {getIsSending, runConfirmFlow} from '../confirm/batch';
+import {getIsNativeActive} from '../state/native-conflict';
 import {getActiveNoteId, getMode, toggleEditMode} from '../state/notes-store';
 import {dismissActivePopover, isPopoverInput} from '../ui/popover';
+import {showToast} from '../ui/toast';
 
 let hotkeysBound = false;
 
@@ -87,7 +98,14 @@ function handleGlobalHotkeys(e: KeyboardEvent): void {
     !isTextInputElement(document.activeElement)
   ) {
     e.preventDefault();
-    toggleEditMode();
+    if (getIsNativeActive()) {
+      // Silent suppression would look like a broken hotkey — surface
+      // the same reason `setMode` would have given (the floating
+      // button is hidden, so the user can't see the icon swap either).
+      showToast("Danbooru's native note UI is active — close it first", 'info');
+    } else {
+      toggleEditMode();
+    }
     return;
   }
   if (
