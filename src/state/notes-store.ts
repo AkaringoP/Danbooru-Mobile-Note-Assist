@@ -650,19 +650,38 @@ export function createTempNote(state: NoteState): NoteId {
 // ---------------------------------------------------------------------------
 
 /**
- * Whether the current state is worth persisting as a draft. PLAN D4
- * gate: active mode with at least one note. An empty active mode
- * round-trips to the same state on next entry via setMode('active')
- * alone, so lifecycle handlers skip those.
+ * Whether the current state is worth persisting as a draft.
  *
- * Server-only notes (no edits, no temps) also pass this gate — they
- * cost ~200 bytes per note to persist and the next `addServerNote`
- * during enterActiveMode would no-op duplicates anyway. Erring on
- * the side of "save more" trades a tiny localStorage footprint for
- * a cleaner mental model ("if I was editing, my draft will be there").
+ * v4.1.0 used `mode === 'active' && notes.size > 0`, which surfaced
+ * a misleading Restore prompt for two no-work cases:
+ *   - all boxes are server-side with no local edits (round-trips via
+ *     `fetchServerNotes` on the next entry anyway)
+ *   - the user opened a fresh-new temp box but never typed into it
+ *     (just exercising the popover) — saving it would restore an
+ *     empty rectangle nobody asked for
+ *
+ * v4.1.1 tightens the gate: save iff there's actually user work to
+ * preserve. "User work" = anything `hasPendingChanges` covers (the
+ * Confirm-flush-bound bucket: dirty server edits, soft-deletes,
+ * committed temps), plus a fresh-new temp with non-empty text (typed
+ * input that hasn't been ✔'d yet — Confirm would silently drop it
+ * but losing the user's typing to a force-quit is the wrong default).
  */
 export function hasContentToSave(): boolean {
-  return mode === 'active' && notes.size > 0;
+  if (mode !== 'active') return false;
+  if (notes.size === 0) return false;
+  if (hooks!.hasPendingChanges()) return true;
+  for (const note of notes.values()) {
+    if (
+      !note.isServerNote &&
+      !note.everConfirmed &&
+      !note.isDeleted &&
+      note.current.text.trim()
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -717,19 +736,25 @@ export function serializeForDraft(): DraftSnapshot {
  * render proceed.
  *
  * Order:
- *   1. Tear down current state (clear Map / log / active). Fires
- *      `onNoteRemoved` per existing box for DOM cleanup, then a
- *      single `onActiveChanged(prev, null)` if needed.
+ *   1. Tear down current state.
  *   2. Populate Map + actionLog from snapshot.
- *   3. setMode(snapshot.mode). For 'active' from 'idle' (the
- *      restore-at-boot case), this fires enterActiveMode's async
- *      fetch — fetchServerNotes → addServerNote, which no-ops for
- *      ids already in the Map. Net effect: draft wins for shared
- *      ids, server-side additions since the save get picked up.
- *   4. Render every restored box, then re-establish active
- *      selection if the snapshot had one (and the note survived).
+ *   3. Await `fetchPostMeta` before rendering. v4.1.1 fix: at first
+ *      page entry `originalWidth` is 0 until `enterActiveMode`'s
+ *      async meta fetch lands, but v4.1.0 rendered immediately after
+ *      setMode — so boxes plotted with a zero denominator in the
+ *      coord transform, producing wildly off geometry and overlap
+ *      that looked like some boxes had been dropped. Pre-fetching
+ *      here guarantees a valid denominator at render time.
+ *   4. setMode(snapshot.mode). enterActiveMode dedupes the in-flight
+ *      meta fetch via `getPostMetaPromise`, then fetches server
+ *      notes — `addServerNote` no-ops for ids already in the Map,
+ *      so draft wins for shared ids and server-side additions since
+ *      the save get picked up.
+ *   5. Render every restored box, then re-establish active selection.
  */
-export function applyDraftSnapshot(snapshot: DraftSnapshot): void {
+export async function applyDraftSnapshot(
+  snapshot: DraftSnapshot,
+): Promise<void> {
   // 1. Tear down
   for (const id of [...notes.keys()]) {
     hooks!.onNoteRemoved(id);
@@ -764,11 +789,22 @@ export function applyDraftSnapshot(snapshot: DraftSnapshot): void {
     actionLog.set(noteId, rebranded);
   }
 
-  // 3. Mode transition. setMode handles body class / activeModeGen /
+  // 3. Pre-fetch post meta when restoring into active mode, so the
+  //    image-space → display-space transform has a non-zero
+  //    denominator at render time (v4.1.1).
+  if (snapshot.mode === 'active') {
+    try {
+      await fetchPostMeta();
+    } catch (err) {
+      hooks!.onToast('⚠️ Failed to load image info', 'error', err);
+    }
+  }
+
+  // 4. Mode transition. setMode handles body class / activeModeGen /
   //    onModeChanged hook itself.
   setMode(snapshot.mode);
 
-  // 4. Render restored boxes + re-establish active selection.
+  // 5. Render restored boxes + re-establish active selection.
   for (const id of notes.keys()) {
     hooks!.onNoteRenderRequested(id);
   }

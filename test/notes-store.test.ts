@@ -938,16 +938,19 @@ describe('hasContentToSave', () => {
     expect(hasContentToSave()).toBe(false);
   });
 
-  it('returns true in active mode with at least one note', async () => {
+  it('returns true in active mode when a fresh-new temp has text typed', async () => {
     setMode('active');
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
+    // v4.1.1: a fresh-new temp without text is a no-op trial state
+    // (saving would surface a misleading Restore prompt). With text
+    // it counts as user work even before Confirm.
     const id = asTempNoteId('temp-hcts-1');
     notes.set(id, {
-      current: {x: 0, y: 0, w: 10, h: 10, text: ''},
+      current: {x: 0, y: 0, w: 10, h: 10, text: 'typed input'},
       initialState: {x: 0, y: 0, w: 10, h: 10, text: ''},
       confirmedState: {x: 0, y: 0, w: 10, h: 10, text: ''},
       isDeleted: false,
@@ -1061,7 +1064,7 @@ describe('serializeForDraft', () => {
 });
 
 describe('applyDraftSnapshot', () => {
-  it('clears existing state before populating — onNoteRemoved fires for each prior note', () => {
+  it('clears existing state before populating — onNoteRemoved fires for each prior note', async () => {
     const prior = asTempNoteId('temp-prior');
     notes.set(prior, {
       current: {x: 0, y: 0, w: 1, h: 1, text: ''},
@@ -1080,13 +1083,13 @@ describe('applyDraftSnapshot', () => {
       notes: [],
       actionLog: [],
     };
-    applyDraftSnapshot(snap);
+    await applyDraftSnapshot(snap);
 
     expect(hooks.onNoteRemoved).toHaveBeenCalledWith(prior);
     expect(notes.has(prior)).toBe(false);
   });
 
-  it('rebrands temp- prefix ids as TempNoteId', () => {
+  it('rebrands temp- prefix ids as TempNoteId', async () => {
     const snap: DraftSnapshot = {
       mode: 'idle',
       activeNoteId: null,
@@ -1105,13 +1108,13 @@ describe('applyDraftSnapshot', () => {
       ],
       actionLog: [],
     };
-    applyDraftSnapshot(snap);
+    await applyDraftSnapshot(snap);
 
     const key = [...notes.keys()][0];
     expect(isTempNoteId(key)).toBe(true);
   });
 
-  it('rebrands numeric ids as ServerNoteId', () => {
+  it('rebrands numeric ids as ServerNoteId', async () => {
     const snap: DraftSnapshot = {
       mode: 'idle',
       activeNoteId: null,
@@ -1130,14 +1133,14 @@ describe('applyDraftSnapshot', () => {
       ],
       actionLog: [],
     };
-    applyDraftSnapshot(snap);
+    await applyDraftSnapshot(snap);
 
     const key = [...notes.keys()][0];
     expect(isServerNoteId(key)).toBe(true);
     expect(key).toBe('9999');
   });
 
-  it('triggers onNoteRenderRequested for each restored note', () => {
+  it('triggers onNoteRenderRequested for each restored note', async () => {
     vi.mocked(hooks.onNoteRenderRequested).mockClear();
     const snap: DraftSnapshot = {
       mode: 'idle',
@@ -1168,12 +1171,12 @@ describe('applyDraftSnapshot', () => {
       ],
       actionLog: [],
     };
-    applyDraftSnapshot(snap);
+    await applyDraftSnapshot(snap);
 
     expect(hooks.onNoteRenderRequested).toHaveBeenCalledTimes(2);
   });
 
-  it('calls setMode with snapshot.mode — verified via onModeChanged hook', () => {
+  it('calls setMode with snapshot.mode — verified via onModeChanged hook', async () => {
     // Start in idle, snapshot is also idle — setMode is a no-op for same mode.
     // Use a snapshot with 'active' to force the transition and observe the hook.
     vi.mocked(hooks.onModeChanged).mockClear();
@@ -1183,7 +1186,7 @@ describe('applyDraftSnapshot', () => {
       notes: [],
       actionLog: [],
     };
-    applyDraftSnapshot(snap);
+    await applyDraftSnapshot(snap);
 
     expect(hooks.onModeChanged).toHaveBeenCalledWith('active');
   });
@@ -1202,7 +1205,7 @@ describe('applyDraftSnapshot', () => {
       notes: [],
       actionLog: [],
     };
-    applyDraftSnapshot(snap);
+    await applyDraftSnapshot(snap);
 
     // setActiveNote(id) would have fired onActiveChanged(null, id);
     // since the id is not in the restored Map, it should not be called.
@@ -1251,7 +1254,7 @@ describe('applyDraftSnapshot', () => {
     discardAll();
     expect(notes.size).toBe(0);
 
-    applyDraftSnapshot(snap);
+    await applyDraftSnapshot(snap);
 
     // Notes should be restored with matching keys
     expect(notes.has(id1)).toBe(true);
