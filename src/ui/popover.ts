@@ -37,6 +37,7 @@ import {
   SCRIPT_VERSION,
 } from '../config';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {apiPreviewNote} from '../api/notes';
 import {getOriginalWidth} from '../state/image-state';
 import {
   getActiveNoteId,
@@ -53,6 +54,7 @@ import {
   updateActiveHandleScales,
   updateNoteVisuals,
 } from './note-box';
+import {showToast} from './toast';
 
 // ---------------------------------------------------------------------------
 // Module-private state
@@ -65,6 +67,17 @@ let popoverInputElement: HTMLTextAreaElement | null = null;
 // (in or out of this module) reads it after — the static CSS-center
 // arrow doesn't need a per-call slide. Phase 1 fidelity loss is
 // nominal; Phase 2 won't miss it.
+
+// Preview-mode state (Phase 3, v4.2). `previewElement` is the read-only
+// div that shows the server-sanitized HTML when isPreviewMode is true;
+// it shares the input row's first grid cell with the textarea, only
+// one of the two is visible at a time. `previewRequestId` invalidates
+// in-flight `apiPreviewNote` calls when the user resets / swaps note
+// before the response lands.
+let popoverPreviewElement: HTMLElement | null = null;
+let popoverModeToggleElement: HTMLButtonElement | null = null;
+let isPreviewMode = false;
+let previewRequestId = 0;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -87,6 +100,27 @@ export function createPopover(): void {
   const arrow = document.createElement('div');
   arrow.id = 'dmna-popover-arrow';
   root.appendChild(arrow);
+
+  // Header row (Phase 3, v4.2) — currently hosts the Preview/Edit
+  // mode toggle. Click routes through `handleModeToggle`, which
+  // synchronously enters Edit mode or awaits an `apiPreviewNote`
+  // before swapping into Preview mode.
+  const header = document.createElement('div');
+  header.id = 'dmna-popover-header';
+  const modeToggle = document.createElement('button');
+  modeToggle.type = 'button';
+  modeToggle.id = 'dmna-popover-mode-toggle';
+  modeToggle.className = 'dmna-popover-mode-toggle';
+  modeToggle.textContent = 'Preview';
+  modeToggle.setAttribute('aria-label', 'Toggle Preview / Edit');
+  modeToggle.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    void handleModeToggle();
+  });
+  header.appendChild(modeToggle);
+  root.appendChild(header);
+  popoverModeToggleElement = modeToggle;
 
   const inputRow = document.createElement('div');
   inputRow.id = 'dmna-popover-input-row';
@@ -119,6 +153,16 @@ export function createPopover(): void {
     }
   });
   inputRow.appendChild(input);
+
+  // Preview-mode read-only sibling of the textarea (Phase 3, v4.2).
+  // Lives in the same grid cell — only one of the two is `display`d
+  // at a time. `innerHTML` is set from Danbooru's `sanitized_body`,
+  // so XSS is the server's responsibility (D5).
+  const preview = document.createElement('div');
+  preview.id = 'dmna-popover-preview';
+  preview.style.display = 'none';
+  inputRow.appendChild(preview);
+  popoverPreviewElement = preview;
 
   // Right-side button stack: 👁 (top, hold-to-show debug zones) +
   // ↶ (bottom, per-note undo). Two narrow stacked buttons share the
@@ -250,6 +294,9 @@ export function showPopover(noteId: NoteId): void {
   if (popoverInputElement.dataset.boundNoteId !== noteId) {
     popoverInputElement.value = note.current.text || '';
     popoverInputElement.dataset.boundNoteId = noteId;
+    // Note swap (or first show) drops any leftover Preview mode from
+    // the previous note. v4.2 Phase 3.
+    resetPreviewMode();
   }
   updatePopoverForActiveNote();
   // Pre-position BEFORE reveal. If we add `.show` first the popover
@@ -276,6 +323,9 @@ export function hidePopover(): void {
     delete popoverInputElement.dataset.boundNoteId;
   }
   document.body.classList.remove('dmna-note-popover-open');
+  // Preview mode is per-session-of-this-popover; close drops it so a
+  // future open starts in Edit mode (v4.2 Phase 3).
+  resetPreviewMode();
 }
 
 /**
@@ -509,6 +559,81 @@ export function dismissActivePopover(): void {
  * Ctrl/Cmd+Enter shortcut) to their handlers. Internal — only the
  * createPopover wiring invokes it.
  */
+/**
+ * Toggles the popover between Edit (textarea) and Preview (sanitized
+ * HTML) modes. Edit → Preview is async — awaits `apiPreviewNote` and
+ * shows a brief "…" loading affordance on the toggle button; failure
+ * surfaces a toast and leaves the popover in Edit mode untouched.
+ * Preview → Edit is synchronous (no server round-trip needed).
+ *
+ * `previewRequestId` is the cancel token: a `resetPreviewMode` call
+ * (note swap, popover close) bumps it so a late-arriving response
+ * doesn't slam stale HTML into a now-Edit-mode preview slot.
+ */
+async function handleModeToggle(): Promise<void> {
+  if (
+    !popoverPreviewElement ||
+    !popoverInputElement ||
+    !popoverModeToggleElement
+  ) {
+    return;
+  }
+  if (isPreviewMode) {
+    enterEditMode();
+    return;
+  }
+  const myReq = ++previewRequestId;
+  popoverModeToggleElement.disabled = true;
+  popoverModeToggleElement.textContent = '…';
+  try {
+    const res = await apiPreviewNote(popoverInputElement.value);
+    if (myReq !== previewRequestId) {
+      return;
+    }
+    popoverPreviewElement.innerHTML = res.sanitized_body;
+    popoverInputElement.style.display = 'none';
+    popoverPreviewElement.style.display = 'block';
+    isPreviewMode = true;
+    popoverModeToggleElement.textContent = 'Edit';
+  } catch (err) {
+    if (myReq === previewRequestId) {
+      showToast('⚠️ Preview failed', 'error', err);
+      popoverModeToggleElement.textContent = 'Preview';
+    }
+  } finally {
+    if (myReq === previewRequestId) {
+      popoverModeToggleElement.disabled = false;
+    }
+  }
+}
+
+function enterEditMode(): void {
+  if (
+    !popoverPreviewElement ||
+    !popoverInputElement ||
+    !popoverModeToggleElement
+  ) {
+    return;
+  }
+  popoverPreviewElement.style.display = 'none';
+  popoverInputElement.style.display = '';
+  popoverPreviewElement.innerHTML = '';
+  popoverModeToggleElement.textContent = 'Preview';
+  popoverModeToggleElement.disabled = false;
+  isPreviewMode = false;
+}
+
+/**
+ * Resets the popover to Edit mode and invalidates any in-flight
+ * `apiPreviewNote` call. Used by `hidePopover` and by `showPopover`
+ * on note swap so a fresh popover entry never inherits the previous
+ * note's preview state.
+ */
+function resetPreviewMode(): void {
+  previewRequestId++;
+  enterEditMode();
+}
+
 function handlePopoverAction(
   action: 'confirm' | 'cancel' | 'delete' | 'history',
 ): void {

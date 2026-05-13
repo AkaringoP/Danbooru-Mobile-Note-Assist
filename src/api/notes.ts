@@ -112,3 +112,37 @@ export async function apiPutNote(
 export async function apiDeleteNote(serverId: string): Promise<unknown> {
   return apiCall('DELETE', `/notes/${serverId}.json`, null);
 }
+
+/**
+ * Server response shape for POST `/notes/preview.json`. Rails returns
+ * the full Note JSON plus the rendered `sanitized_body` HTML; we only
+ * consume the rendered field, the rest is intentionally untyped.
+ */
+export interface PreviewNoteResponse {
+  sanitized_body: string;
+}
+
+/**
+ * POST `/notes/preview.json` — sanitizes a note body into the HTML
+ * Danbooru would render, without persisting anything. Used by the
+ * popover's Preview mode (Phase 3, v4.2) so the user can see how
+ * `<b>` / `<tn>` / wiki markup will look before Confirm flushes it.
+ *
+ * Throws on an empty response so the caller doesn't have to handle a
+ * `null` that should never happen in practice — `apiCall` only returns
+ * `null` for 204/empty bodies, and a 2xx from `preview` always carries
+ * the sanitized body.
+ */
+export async function apiPreviewNote(
+  body: string,
+): Promise<PreviewNoteResponse> {
+  const res = await apiCall<PreviewNoteResponse>(
+    'POST',
+    '/notes/preview.json',
+    {body},
+  );
+  if (res === null) {
+    throw new Error('Empty preview response');
+  }
+  return res;
+}

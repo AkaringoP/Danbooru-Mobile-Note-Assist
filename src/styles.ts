@@ -309,11 +309,45 @@ export const STYLES = `
        The calc((100% - 16px) / 6) width matches half a bottom-row
        button: bottom is 3 buttons + 2*8px gap = 100%, so each
        button is (100% - 16px) / 3, and half is (100% - 16px) / 6. */
+    /* Header row (Phase 3, v4.2): hosts the Preview/Edit mode toggle
+       on the left. justify-content keeps room for a future close /
+       help affordance on the right. */
+    #dmna-popover-header {
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .dmna-popover-mode-toggle {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: white;
+      font-size: 12px;
+      font-family: inherit;
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-width: 60px;
+    }
+    .dmna-popover-mode-toggle:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .dmna-popover-mode-toggle:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     #dmna-popover-input-row {
       display: grid;
       grid-template-columns: 1fr calc((100% - 16px) / 6);
       gap: 8px;
       align-items: stretch;
+    }
+    #dmna-popover-input,
+    #dmna-popover-preview {
+      grid-column: 1;
+      grid-row: 1;
     }
     #dmna-popover-input {
       min-width: 0;
@@ -328,6 +362,26 @@ export const STYLES = `
       box-sizing: border-box;
       outline: none;
       resize: none;
+    }
+    /* Preview-mode read-only sibling of the textarea (Phase 3, v4.2).
+       Matches the textarea's padding/border/font so the swap looks
+       like a mode change rather than a layout shift. overflow-wrap
+       guards against unbroken markup pushing the popover wider. */
+    #dmna-popover-preview {
+      min-width: 0;
+      min-height: calc(1.4em * 3 + 18px);
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.4;
+      box-sizing: border-box;
+      overflow-wrap: anywhere;
+      overflow-y: auto;
+      max-height: 240px;
     }
     #dmna-popover-input:focus { border-color: #0073ff; }
     #dmna-popover-side-stack {
