@@ -84,7 +84,7 @@ Once Edit mode is on:
 | **Click and drag on the image** (PC mouse only) | Draws a custom-size rectangle from your drag start point. A dashed yellow ghost rectangle previews the size as you drag. Release to spawn. |
 | **Tap an existing box** | Opens that note's popover so you can edit it. |
 
-The default box size is 10% of the image's shorter dimension, clamped to 30–150px. The smallest box you can draw is 24px on each side — small enough to mark single eyes or glyphs.
+The default box size is 10% of the image's shorter dimension, clamped to 30–150 CSS px. To mark a small feature like a single eye or glyph, pinch-zoom in over it first — the resize floor is measured in on-screen device pixels (constant under pinch), so a zoomed-in view lets the box shrink to a much smaller image-space rect than the default minimum.
 
 ### The per-note popover
 
@@ -183,11 +183,12 @@ When you're done editing all the boxes, tap the floating button to open the arc 
 
 | Shortcut | Context | Action |
 |---|---|---|
-| `Ctrl/Cmd + Enter` | Cursor in the popover textarea | ✔ Confirm box (same as clicking ✔) |
+| `Ctrl/Cmd + Enter` | Cursor in the popover textarea | ✔ Commit box (same as clicking ✔). The tag popover and error modal also accept `Ctrl/Cmd + Enter` for their primary action (Submit / Retry). |
 | `Esc` | Popover open | Dismiss the popover. Behaves like ✖: hard-deletes brand-new boxes, reverts ✔'d ones. |
 | `Shift + N` | No popover open, no input focused | Toggle Edit mode on/off. A toast confirms the new state. |
+| `Shift + Enter` | Edit mode on, no popover open, no input focused | Run ✓ Confirm — same as opening the arc menu and tapping ✓ Confirm. Skips the menu so you can flush a batch without lifting your hand from the keyboard. |
 
-`Shift + N` is intentionally disabled while the tag popover or error modal is open, so you don't accidentally lose your in-progress submission.
+`Shift + N` and `Shift + Enter` are intentionally disabled while the tag popover or error modal is open, so you don't accidentally lose your in-progress submission. Inside the textarea, bare `Enter` and `Shift + Enter` insert newlines as usual — only `Ctrl/Cmd + Enter` is consumed as the commit shortcut.
 
 ### Drag-to-create
 
@@ -205,6 +206,8 @@ A drag is registered when the pointer moves more than 5px during the press; belo
 - **Force-quit safe (v4.1+).** If the OS kills your tab while you have unsaved edits — phone went to sleep, you switched apps for too long, the browser crashed — your work is snapshotted on background-into and offered back as a Restore prompt the next time you open the same post. Drafts age out after 24 hours and are cleared automatically when you press ✓ Confirm or explicitly leave Edit mode.
 - **Plays nice with Danbooru's native note tool (v5.0+).** If you tap Danbooru's own `Translate` button or open a note's edit dialog, the floating button hides itself so the two UIs don't fight. `Shift+N` is gated symmetrically. Close the native tool and the button reappears.
 - **Preview before submit (v5.0+).** The header **👁 Preview** toggle round-trips the body through Danbooru's own renderer, so you can confirm `<b>` / `<tn>` / wiki markup looks right before ✓ Confirm flushes it. No commit until you tap ✔.
+- **Aa stacks below on narrow screens (v5.0.1+).** On wider screens the **Aa** style popover docks to the right of the note popover (or flips to the left when there's no room). When the screen is below ~600 px wide it slides up from beneath the note popover instead, so both panes stay on-screen together and the bottom-of-viewport region (where the soft keyboard lives) is exactly where you'd want a style picker.
+- **Scroll-friendly sub-pickers (v5.0.1+).** The color / stroke / link / ruby modals used to close on the first pointerdown of any swipe, so a scroll to reach a far-away swatch dismissed the picker mid-flick. Now only a deliberate tap (no scroll movement) closes them; you can freely scroll the page while a picker is open.
 
 ---
 
@@ -271,7 +274,7 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v5.0.0** (2026-05-15). v5 turns the popover into a markup-aware editor — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons, color / stroke / background pickers, Size / Font dropdowns, plus a Preview mode that renders through Danbooru's own sanitizer and a History button that opens the server-side version log. Bundles a native-conflict guard (auto-hide while Danbooru's translation mode or edit dialog is up), per-style undo via the popover ↶, and a v4.1 force-quit-recovery polish round. No backwards-incompatible changes — every prior keyboard shortcut, gesture, and API contract works as before. See [CHANGELOG.md](./CHANGELOG.md) for the full list.
+The current release is **v5.0.1** (2026-05-15). v5 turns the popover into a markup-aware editor — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons, color / stroke / background pickers, Size / Font dropdowns, plus a Preview mode that renders through Danbooru's own sanitizer and a History button that opens the server-side version log. Bundles a native-conflict guard (auto-hide while Danbooru's translation mode or edit dialog is up), per-style undo via the popover ↶, and a v4.1 force-quit-recovery polish round. v5.0.1 patches two mobile-only regressions surfaced post-release: the style popover is now reachable on narrow viewports (stacks under the note popover when the screen is below ~600 px) and the color / stroke / link / ruby sub-pickers no longer dismiss on scroll. No backwards-incompatible changes — every prior keyboard shortcut, gesture, and API contract works as before. See [CHANGELOG.md](./CHANGELOG.md) for the full list.
 
 v4.1 added force-quit / OS-kill recovery: in-progress edits are snapshotted to `localStorage` on lifecycle events (tab close, app background, OS kill), and the next time you open the same post you get a Restore / Discard prompt. v4.0 was the TypeScript migration. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 
