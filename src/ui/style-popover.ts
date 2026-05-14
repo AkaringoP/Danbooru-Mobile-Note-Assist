@@ -68,6 +68,14 @@ import {
 const STYLE_POPOVER_WIDTH = 260;
 const STYLE_POPOVER_GAP = 8;
 
+// On narrow viewports the desktop right-of/left-of placement can't fit
+// (note popover 343 + gap 8 + style popover 260 ≈ 611 px just for the
+// pair, before any margin), so the popover is moved underneath the note
+// popover with a slide-up animation. window.innerWidth (layout viewport)
+// is the trigger so pinch-zoom doesn't flip the layout mode mid-gesture.
+const STYLE_POPOVER_MOBILE_BREAKPOINT = 600;
+const STYLE_POPOVER_MOBILE_VMARGIN = 12;
+
 interface StyleTagButton {
   tag: string;
   label: string;
@@ -1129,6 +1137,13 @@ export function toggleStylePopover(): void {
  * gap. Right-side default; flips left when right placement would
  * overflow the viewport.
  *
+ * Narrow-viewport branch (window.innerWidth < BREAKPOINT) drops the
+ * right/left placement entirely — neither side fits once the 343 px
+ * note popover claims the center column — and stacks the style
+ * popover under the note popover instead, with a slide-up animation
+ * driven by the `is-mobile` class on the root. Inner content scrolls
+ * when the stack would overflow the visible viewport bottom.
+ *
  * No-op when `isShown` is false — saves a layout/getBoundingClientRect
  * pass on every viewport tick when the user has the sub-popover
  * closed (the common case).
@@ -1165,6 +1180,7 @@ export function updateStylePopoverPosition(): void {
   const vvPageLeft = vv ? vv.pageLeft : window.pageXOffset;
   const vvPageTop = vv ? vv.pageTop : window.pageYOffset;
   const vvWidth = vv ? vv.width : window.innerWidth;
+  const vvHeight = vv ? vv.height : window.innerHeight;
 
   const boxVisualLeft = (boxRectPage.left - vvPageLeft) * scale;
   const boxVisualTop = (boxRectPage.top - vvPageTop) * scale;
@@ -1178,13 +1194,52 @@ export function updateStylePopoverPosition(): void {
   const notePopVisualTop = boxBottomVisualY + POPOVER_OFFSET;
   const notePopVisualRight = notePopVisualLeft + POPOVER_WIDTH;
 
-  // Right default; flip left when right overflows.
-  let styleVisualLeft = notePopVisualRight + STYLE_POPOVER_GAP;
-  if (styleVisualLeft + STYLE_POPOVER_WIDTH > vvWidth) {
+  const isMobile = window.innerWidth < STYLE_POPOVER_MOBILE_BREAKPOINT;
+  stylePopoverElement.classList.toggle('is-mobile', isMobile);
+
+  let styleVisualLeft: number;
+  let styleVisualTop: number;
+
+  if (isMobile) {
+    // Stack under the note popover, horizontally centered on the same
+    // box-center anchor so the two popovers form a single vertical
+    // column. Note popover height is read from layout (offsetHeight
+    // ignores the counter-scale transform, which is exactly what we
+    // need — that height IS the visual height of the rendered popover).
+    const notePopEl = document.getElementById('dmna-popover');
+    const notePopHeight = notePopEl ? notePopEl.offsetHeight : 0;
+
     styleVisualLeft =
-      notePopVisualLeft - STYLE_POPOVER_GAP - STYLE_POPOVER_WIDTH;
+      notePopVisualLeft + (POPOVER_WIDTH - STYLE_POPOVER_WIDTH) / 2;
+
+    // Max-height clamps the popover so it never overflows the visible
+    // viewport — overflow-y: auto inside .is-mobile lets the user
+    // scroll the rest into view. Set BEFORE reading offsetHeight so
+    // the clamped layout is what we measure.
+    const availableHeight = Math.max(
+      120,
+      vvHeight - 2 * STYLE_POPOVER_MOBILE_VMARGIN,
+    );
+    stylePopoverElement.style.maxHeight = `${availableHeight}px`;
+
+    const styleHeight = stylePopoverElement.offsetHeight;
+    const desiredTop = notePopVisualTop + notePopHeight + STYLE_POPOVER_GAP;
+    const maxTop = vvHeight - styleHeight - STYLE_POPOVER_MOBILE_VMARGIN;
+    styleVisualTop = Math.min(
+      desiredTop,
+      Math.max(STYLE_POPOVER_MOBILE_VMARGIN, maxTop),
+    );
+  } else {
+    stylePopoverElement.style.maxHeight = '';
+
+    // Right default; flip left when right overflows.
+    styleVisualLeft = notePopVisualRight + STYLE_POPOVER_GAP;
+    if (styleVisualLeft + STYLE_POPOVER_WIDTH > vvWidth) {
+      styleVisualLeft =
+        notePopVisualLeft - STYLE_POPOVER_GAP - STYLE_POPOVER_WIDTH;
+    }
+    styleVisualTop = notePopVisualTop;
   }
-  const styleVisualTop = notePopVisualTop;
 
   const tx = vvPageLeft + styleVisualLeft / scale;
   const ty = vvPageTop + styleVisualTop / scale;

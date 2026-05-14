@@ -936,6 +936,22 @@ export const STYLES = `
     #dmna-style-popover.show #dmna-style-popover-inner {
       transform: translateX(0);
     }
+    /* Narrow-viewport mode: popover stacks under the note popover with
+       a slide-up animation instead of the desktop side-attach. Source
+       order matters — these rules come AFTER the desktop .show rule so
+       the .is-mobile.show pair (same specificity, written later) wins
+       the cascade and swaps translateX for translateY. max-height is
+       set inline from updateStylePopoverPosition; overflow-y here lets
+       any extra rows scroll internally when the stack can't fit. */
+    #dmna-style-popover.is-mobile {
+      overflow-y: auto;
+    }
+    #dmna-style-popover.is-mobile #dmna-style-popover-inner {
+      transform: translateY(20px);
+    }
+    #dmna-style-popover.is-mobile.show #dmna-style-popover-inner {
+      transform: translateY(0);
+    }
     .dmna-style-row {
       display: grid;
       gap: 8px;
