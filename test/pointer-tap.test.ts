@@ -91,4 +91,46 @@ describe('listenDocumentTap', () => {
     dispatch('pointerup', 100, 100);
     expect(onTap).not.toHaveBeenCalled();
   });
+
+  describe('with visualViewport.scale', () => {
+    afterEach(() => {
+      // Restore between cases — leaving a stubbed visualViewport on
+      // window would leak into the next test's clean baseline.
+      Object.defineProperty(window, 'visualViewport', {
+        value: undefined,
+        configurable: true,
+      });
+    });
+
+    function stubScale(scale: number): void {
+      Object.defineProperty(window, 'visualViewport', {
+        value: {scale},
+        configurable: true,
+      });
+    }
+
+    it('counts movement in visible pixels (3 layout px × scale 2 = 6 > 5 → drag)', () => {
+      stubScale(2);
+      dispatch('pointerdown', 100, 100);
+      dispatch('pointermove', 103, 100);
+      dispatch('pointerup', 103, 100);
+      expect(onTap).not.toHaveBeenCalled();
+    });
+
+    it('still taps when visible movement stays within threshold (2 layout × 2 = 4 ≤ 5)', () => {
+      stubScale(2);
+      dispatch('pointerdown', 100, 100);
+      dispatch('pointermove', 102, 100);
+      dispatch('pointerup', 102, 100);
+      expect(onTap).toHaveBeenCalledTimes(1);
+    });
+
+    it('higher zoom shrinks the layout-pixel slack (2 layout × 3 = 6 > 5 → drag)', () => {
+      stubScale(3);
+      dispatch('pointerdown', 100, 100);
+      dispatch('pointermove', 102, 100);
+      dispatch('pointerup', 102, 100);
+      expect(onTap).not.toHaveBeenCalled();
+    });
+  });
 });

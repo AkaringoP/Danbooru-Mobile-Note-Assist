@@ -1,14 +1,19 @@
 /**
  * Document-level "tap (not drag)" detector — wraps the pointerdown /
  * move / up sequence into a single callback that fires only when the
- * pointer didn't travel beyond DRAG_THRESHOLD_PX between down and up.
+ * pointer didn't travel beyond DRAG_THRESHOLD_PX of *visible*
+ * (visual-viewport) movement between down and up.
  *
  * Used by the sub-modal pickers (color, stroke, link, ruby) to drive
  * their outside-tap dismiss without also dismissing on the first
- * pointerdown of a scroll/swipe gesture. Mirrors the threshold
- * semantics already in `drag-resize.ts` so a finger drift within the
- * same slack the rest of the UI tolerates as "still a tap" reads the
- * same way here.
+ * pointerdown of a scroll/swipe gesture. `event.clientX/Y` is in
+ * layout-viewport CSS pixels (unaffected by pinch zoom), so we scale
+ * the raw delta by `visualViewport.scale` before thresholding — that
+ * way "5 px of movement" reads the same to the user whether the page
+ * is at 1× or pinched in 3×. Without this, a small finger drift on a
+ * heavily-zoomed image would consume far more layout pixels than the
+ * user saw move on screen, and a brisk tap could still register as a
+ * drag.
  *
  * Layer 1 (utils): depends only on config (Layer 0).
  */
@@ -40,9 +45,11 @@ export function listenDocumentTap(
 
   const onPointerMove = (e: PointerEvent): void => {
     if (!tracking || dragged) return;
-    if (
-      Math.hypot(e.clientX - startX, e.clientY - startY) > DRAG_THRESHOLD_PX
-    ) {
+    const vv = window.visualViewport;
+    const visScale = vv ? vv.scale : 1;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (Math.hypot(dx, dy) * visScale > DRAG_THRESHOLD_PX) {
       dragged = true;
     }
   };
