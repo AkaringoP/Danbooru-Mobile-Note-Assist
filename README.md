@@ -88,7 +88,7 @@ The default box size is 10% of the image's shorter dimension, clamped to 30–15
 
 ### The per-note popover
 
-<img width="822" height="619" alt="Image" src="https://github.com/user-attachments/assets/ae957558-ac0d-497d-9f16-07d50749f0f9" />
+<img width="648" height="622" alt="Image" src="https://github.com/user-attachments/assets/ea03e8d4-ca79-4c8a-8309-688f1d25d640" />
 
 | Button | What it does |
 |---|---|
@@ -106,6 +106,8 @@ The default box size is 10% of the image's shorter dimension, clamped to 30–15
 > The four translation tags (`Translated`, `Translation request`, `Check translation`, `Partially translated`) **don't appear in the per-note popover.** They're handled once per ✓ Confirm, in a separate tag popover.
 
 ### Style markup (the Aa sub-popover)
+
+<img width="456" height="601" alt="Image" src="https://github.com/user-attachments/assets/bdfe998c-a04d-421f-b86f-1af4ef7cb062" />
 
 Select text in the textarea, then tap **Aa** to open the style sub-popover. Buttons mutate only the selected text and re-select it after each tap, so you can stack multiple styles by tapping in sequence (B then I, then a color, etc.). An already-applied style lights up its button, and tapping a lit button removes that one layer while leaving the others alone.
 
@@ -154,6 +156,8 @@ If a box has multiple states at once (e.g. a deleted box you've tapped to reveal
 ---
 
 ## Sending your work to the server
+
+<img width="278" height="308" alt="Image" src="https://github.com/user-attachments/assets/302dd6a5-3b84-4529-a2a7-531b4e413d41" />
 
 When you're done editing all the boxes, tap the floating button to open the arc menu, then tap **✓ Confirm**.
 
