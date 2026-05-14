@@ -940,12 +940,11 @@ export const STYLES = `
        a slide-up animation instead of the desktop side-attach. Source
        order matters — these rules come AFTER the desktop .show rule so
        the .is-mobile.show pair (same specificity, written later) wins
-       the cascade and swaps translateX for translateY. max-height is
-       set inline from updateStylePopoverPosition; overflow-y here lets
-       any extra rows scroll internally when the stack can't fit. */
-    #dmna-style-popover.is-mobile {
-      overflow-y: auto;
-    }
+       the cascade and swaps translateX for translateY. No max-height /
+       overflow here: the popover keeps its natural size and the page
+       scrolls to reveal any portion that lands under the keyboard, the
+       same way the user already scrolls to reveal off-screen note
+       boxes. */
     #dmna-style-popover.is-mobile #dmna-style-popover-inner {
       transform: translateY(20px);
     }

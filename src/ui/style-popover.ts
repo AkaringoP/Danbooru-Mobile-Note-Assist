@@ -74,7 +74,6 @@ const STYLE_POPOVER_GAP = 8;
 // popover with a slide-up animation. window.innerWidth (layout viewport)
 // is the trigger so pinch-zoom doesn't flip the layout mode mid-gesture.
 const STYLE_POPOVER_MOBILE_BREAKPOINT = 600;
-const STYLE_POPOVER_MOBILE_VMARGIN = 12;
 
 interface StyleTagButton {
   tag: string;
@@ -1180,7 +1179,6 @@ export function updateStylePopoverPosition(): void {
   const vvPageLeft = vv ? vv.pageLeft : window.pageXOffset;
   const vvPageTop = vv ? vv.pageTop : window.pageYOffset;
   const vvWidth = vv ? vv.width : window.innerWidth;
-  const vvHeight = vv ? vv.height : window.innerHeight;
 
   const boxVisualLeft = (boxRectPage.left - vvPageLeft) * scale;
   const boxVisualTop = (boxRectPage.top - vvPageTop) * scale;
@@ -1206,32 +1204,23 @@ export function updateStylePopoverPosition(): void {
     // column. Note popover height is read from layout (offsetHeight
     // ignores the counter-scale transform, which is exactly what we
     // need — that height IS the visual height of the rendered popover).
+    //
+    // No viewport-bottom clamp: the visualViewport shrinks when the
+    // virtual keyboard is up, and clamping against vvHeight would yank
+    // the style popover up over the note popover (the keyboard-blocked
+    // region IS where this popover is supposed to live). Instead we
+    // anchor unconditionally to notePopBottom + gap; when the stack
+    // overflows the visible area the user scrolls the page — same
+    // visualViewport-scroll → updatePopoverPosition pipeline that
+    // re-pins the note popover also re-pins this one, so a page swipe
+    // brings the whole column into view together.
     const notePopEl = document.getElementById('dmna-popover');
     const notePopHeight = notePopEl ? notePopEl.offsetHeight : 0;
 
     styleVisualLeft =
       notePopVisualLeft + (POPOVER_WIDTH - STYLE_POPOVER_WIDTH) / 2;
-
-    // Max-height clamps the popover so it never overflows the visible
-    // viewport — overflow-y: auto inside .is-mobile lets the user
-    // scroll the rest into view. Set BEFORE reading offsetHeight so
-    // the clamped layout is what we measure.
-    const availableHeight = Math.max(
-      120,
-      vvHeight - 2 * STYLE_POPOVER_MOBILE_VMARGIN,
-    );
-    stylePopoverElement.style.maxHeight = `${availableHeight}px`;
-
-    const styleHeight = stylePopoverElement.offsetHeight;
-    const desiredTop = notePopVisualTop + notePopHeight + STYLE_POPOVER_GAP;
-    const maxTop = vvHeight - styleHeight - STYLE_POPOVER_MOBILE_VMARGIN;
-    styleVisualTop = Math.min(
-      desiredTop,
-      Math.max(STYLE_POPOVER_MOBILE_VMARGIN, maxTop),
-    );
+    styleVisualTop = notePopVisualTop + notePopHeight + STYLE_POPOVER_GAP;
   } else {
-    stylePopoverElement.style.maxHeight = '';
-
     // Right default; flip left when right overflows.
     styleVisualLeft = notePopVisualRight + STYLE_POPOVER_GAP;
     if (styleVisualLeft + STYLE_POPOVER_WIDTH > vvWidth) {
