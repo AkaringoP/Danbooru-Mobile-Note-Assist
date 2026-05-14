@@ -26,6 +26,7 @@ import {
   Note,
   NoteId,
   NoteState,
+  TextSnapshot,
   ToastLevel,
 } from '../types';
 import {fetchPostMeta} from '../api/posts';
@@ -106,6 +107,15 @@ export interface NotesStoreHooks {
    *   - confirm/classify: `hasPendingChanges()`.
    */
   hasPendingChanges: () => boolean;
+
+  /**
+   * popoverUndo popped a `'text'` action — restore the textarea value
+   * and selection from the snapshot. The state layer can't poke the
+   * DOM directly (Z5 layer 2 → layer 3 would invert), so the
+   * concrete restore lives in ui/popover via this hook. Subscribers:
+   *   - ui/popover: `applyTextUndoSnapshot(noteId, snapshot)`.
+   */
+  onTextUndo: (noteId: NoteId, snapshot: TextSnapshot) => void;
 }
 
 let hooks: NotesStoreHooks | null = null;
@@ -220,6 +230,27 @@ export function pushAction(
     actionLog.set(noteId, stack);
   }
   stack.push({noteId, type, prevState} as ActionLogEntry);
+}
+
+/**
+ * Pushes a `'text'` action — separate from `pushAction` because the
+ * payload shape is `TextSnapshot`, not `NoteState`, and TypeScript
+ * narrows the discriminated union by `type`. Callers are the style-
+ * popover mutate helpers (applyWrap / applyUnwrap / applySpanStyle /
+ * removeSpanStyle / applyLinkWrap / applyRubyWrap / applyRubyUnwrap),
+ * each capturing the textarea value + selection just before they
+ * rewrite the textarea.
+ */
+export function pushTextAction(
+  noteId: NoteId,
+  prevState: TextSnapshot,
+): void {
+  let stack = actionLog.get(noteId);
+  if (!stack) {
+    stack = [];
+    actionLog.set(noteId, stack);
+  }
+  stack.push({noteId, type: 'text', prevState});
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +508,13 @@ export function popoverUndo(noteId: NoteId): void {
     note.current.w = entry.prevState.w;
     note.current.h = entry.prevState.h;
     hooks!.onNoteRenderRequested(noteId);
+  } else if (entry.type === 'text') {
+    // Sync the in-memory `current.text` so the next ✔ commits the
+    // restored value (and any draft snapshot captured before the user
+    // re-types). The textarea's own value + caret is restored by the
+    // ui-side hook below.
+    note.current.text = entry.prevState.text;
+    hooks!.onTextUndo(noteId, entry.prevState);
   }
 }
 

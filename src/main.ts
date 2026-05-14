@@ -75,6 +75,7 @@ import {createColorPicker} from './ui/color-picker';
 import {createLinkPopover} from './ui/link-popover';
 import {createStrokePicker} from './ui/stroke-picker';
 import {
+  applyTextUndoSnapshot,
   createPopover,
   hidePopover,
   refreshActivePopover,
@@ -138,6 +139,7 @@ const notesStoreHooks: NotesStoreHooks = {
   onToast: (msg, level, err) => showToast(msg, level, err),
   onReopenMenuRequested: () => openMenu(),
   hasPendingChanges: () => hasPendingChanges(),
+  onTextUndo: (id, snapshot) => applyTextUndoSnapshot(id, snapshot),
 };
 
 const confirmFlowHooks: ConfirmFlowHooks = {

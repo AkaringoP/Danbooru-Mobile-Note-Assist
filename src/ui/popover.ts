@@ -29,7 +29,7 @@
  *     here too via interactions/keyboard)
  */
 
-import {NoteId, isServerNoteId} from '../types';
+import {NoteId, TextSnapshot, isServerNoteId} from '../types';
 import {
   POPOVER_OFFSET,
   POPOVER_WIDTH,
@@ -570,6 +570,32 @@ export function refreshActivePopover(): void {
  */
 export function isPopoverInput(el: Element | null): boolean {
   return el !== null && el === popoverInputElement;
+}
+
+/**
+ * Restore the popover textarea's value + selection from a `TextSnapshot`
+ * captured before a style-popover mutation. Called by main.ts's
+ * `onTextUndo` hook subscriber when `popoverUndo` pops a `'text'`
+ * entry. No-op when the textarea isn't currently bound to this note
+ * (the user moved active selection away before pressing ↶) — the
+ * snapshot still pops off the stack in notes-store, which is the
+ * deliberate trade-off: the snapshot is per-note, but the textarea
+ * only renders the active one, so cross-note text undo would be a
+ * confusing UI.
+ */
+export function applyTextUndoSnapshot(
+  noteId: NoteId,
+  snapshot: TextSnapshot,
+): void {
+  if (!popoverInputElement) return;
+  if (popoverInputElement.dataset.boundNoteId !== noteId) return;
+  popoverInputElement.value = snapshot.text;
+  popoverInputElement.focus();
+  popoverInputElement.setSelectionRange(
+    snapshot.selectionStart,
+    snapshot.selectionEnd,
+  );
+  popoverInputElement.dispatchEvent(new Event('input', {bubbles: true}));
 }
 
 /**

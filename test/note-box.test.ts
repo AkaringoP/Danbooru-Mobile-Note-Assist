@@ -80,6 +80,7 @@ function makeStoreHooks(): NotesStoreHooks {
     onToast: vi.fn(),
     onReopenMenuRequested: vi.fn(),
     hasPendingChanges: vi.fn(() => false),
+    onTextUndo: vi.fn(),
   };
 }
 

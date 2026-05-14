@@ -34,7 +34,11 @@
 
 import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
 import {getOriginalWidth} from '../state/image-state';
-import {getActiveNoteId, notes} from '../state/notes-store';
+import {
+  getActiveNoteId,
+  notes,
+  pushTextAction,
+} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {parseStyleAttr, serializeStyleAttr} from '../utils/style-attr';
 import {showColorPicker} from './color-picker';
@@ -317,6 +321,24 @@ function buildOpenTag(
 }
 
 /**
+ * Captures the textarea's current value + caret range, then pushes a
+ * `'text'` action onto the active note's undo stack. Called at the
+ * top of every style-popover mutate helper so a single ↶ tap reverses
+ * exactly one style click. No-op when no note is active (style popover
+ * shouldn't be wired without one, but the guard keeps the helpers
+ * safe to call standalone).
+ */
+function captureUndoSnapshot(ta: HTMLTextAreaElement): void {
+  const noteId = getActiveNoteId();
+  if (!noteId) return;
+  pushTextAction(noteId, {
+    text: ta.value,
+    selectionStart: ta.selectionStart,
+    selectionEnd: ta.selectionEnd,
+  });
+}
+
+/**
  * Applies (or replaces) a single CSS property on the textarea's
  * current selection using the option-A "unified inline style span"
  * model: when the nearest outer `<span>` around the selection already
@@ -335,6 +357,7 @@ export function applySpanStyle(prop: string, value: string): void {
   const start = ta.selectionStart;
   const end = ta.selectionEnd;
   if (start === end) return;
+  captureUndoSnapshot(ta);
 
   const before = ta.value.slice(0, start);
   const after = ta.value.slice(end);
@@ -384,6 +407,10 @@ export function removeSpanStyle(prop: string): void {
   const layers = detectOuterLayers(before, after);
   const target = layers.find(l => l.tag === 'span' && l.styleProps?.has(prop));
   if (!target) return;
+  // Snapshot AFTER the target-found check so a no-op call (e.g. user
+  // tapped a color "remove" with no matching style to remove) doesn't
+  // pollute the undo stack with an entry that would do nothing.
+  captureUndoSnapshot(ta);
 
   const newProps = new Map(target.styleProps);
   newProps.delete(prop);
@@ -423,6 +450,7 @@ function applyWrap(tag: string): void {
   const start = ta.selectionStart;
   const end = ta.selectionEnd;
   if (start === end) return;
+  captureUndoSnapshot(ta);
   const open = `<${tag}>`;
   const close = `</${tag}>`;
   const before = ta.value.slice(0, start);
@@ -453,6 +481,7 @@ function applyUnwrap(tag: string): void {
   const layers = detectOuterLayers(before, after);
   const found = layers.find(l => l.tag === tag);
   if (!found) return;
+  captureUndoSnapshot(ta);
   const newBefore =
     before.slice(0, found.openStart) +
     before.slice(found.openStart + found.openLen);
@@ -491,6 +520,7 @@ function handleLinkClick(): void {
 function applyLinkWrap(start: number, end: number, url: string): void {
   const ta = getPopoverInputElement();
   if (!ta) return;
+  captureUndoSnapshot(ta);
   const open = `<a href="${url}">`;
   const close = '</a>';
   const before = ta.value.slice(0, start);
