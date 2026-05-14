@@ -93,13 +93,36 @@ The default box size is 10% of the image's shorter dimension, clamped to 30–15
 | Button | What it does |
 |---|---|
 | **Textarea** | Type or edit the note text. |
+| **👁 Preview** (header) | Toggle between Edit and Preview. Preview round-trips the body through Danbooru's own sanitizer and shows the rendered HTML in place of the textarea — exactly what other readers will see, including `<b>`/`<i>`/`<tn>`/wiki markup. Tap **✎ Edit** to flip back. |
+| **view help** (header) | Opens Danbooru's notes wiki page in a new tab. |
+| **Aa Style** (side) | Opens the **style sub-popover** — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons + Text / Stroke / Background color pickers + Size / Font dropdowns. Enabled only while the textarea has selected text (the wrap target). |
+| **↶ Undo** (side) | Step back through this note's history. Each box has its own undo stack — independent from every other box. Reverts ✔ commits, drag/resize moves, 🗑 deletes, and **individual style toggles** one at a time. |
+| **👁 Peek** (side) | Hold this button to temporarily reveal the box's invisible touch zones (red squares, see below). Useful for aiming on small boxes. |
 | **✔ Commit** | Save the current text + geometry as the note's local checkpoint. The popover closes and the box turns blue. **Does not** send to the server yet — that happens at ✓ Confirm time. |
 | **✖ Cancel** | Discard uncommitted changes. On a brand-new box that was never ✔'d, this hard-deletes it. On a ✔'d or server-loaded box, this reverts text and geometry to the last checkpoint. |
 | **🗑 Delete** | Mark this note for deletion. New boxes are deleted immediately. Already-✔'d or server-loaded notes turn into a red dashed box (soft-deleted) — they aren't gone until ✓ Confirm runs, so you can ↶ to bring them back. |
-| **↶ Undo** | Step back through this note's history. Each box has its own undo stack — independent from every other box. Reverts ✔ commits, drag/resize moves, and 🗑 deletes one at a time. |
-| **👁 Peek** | Hold this button to temporarily reveal the box's invisible touch zones (red squares, see below). Useful for aiming on small boxes. |
+| **📜 History** | Opens the server-side version log for this note in a new tab. Disabled for brand-new (not-yet-saved) boxes. |
 
 > The four translation tags (`Translated`, `Translation request`, `Check translation`, `Partially translated`) **don't appear in the per-note popover.** They're handled once per ✓ Confirm, in a separate tag popover.
+
+### Style markup (the Aa sub-popover)
+
+Select text in the textarea, then tap **Aa** to open the style sub-popover. Buttons mutate only the selected text and re-select it after each tap, so you can stack multiple styles by tapping in sequence (B then I, then a color, etc.). An already-applied style lights up its button, and tapping a lit button removes that one layer while leaving the others alone.
+
+| Group | Buttons | Output |
+|---|---|---|
+| **Weight / decoration** | B / I / U / S | `<b>` / `<i>` / `<u>` / `<s>` |
+| **Position** | sub / sup | `<sub>` / `<sup>` |
+| **Semantic** | tn / code | `<tn>` (translator note) / `<code>` |
+| **Link** | a | Opens a URL modal. Pasted Danbooru URLs auto-strip the host so internal links become relative paths. |
+| **Ruby** | ruby | Opens a reading modal. Wraps as `<ruby>{base}<rt>{reading}</rt></ruby>` and re-selects the whole thing so you can pile other styles on top. |
+| **Color** | Text / Strk / BG | 14 swatch palette (Material-tone) + HEX input. Stroke has an Advanced section with thickness (1/2/3 px) and per-side checkboxes; output is a `text-shadow` value. |
+| **Size** | dropdown | `−2 / −1 / Default / +1 / +2 / +3` (maps to `70%`/`85%`/normal/`125%`/`150%`/`200%`). |
+| **Font** | dropdown | The 12 Danbooru wiki fonts, each `<option>` styled in its own font so you preview the typeface inside the dropdown. |
+
+The transparent swatch (Strk and BG only) clears the property. For Text, tapping black does the same — black is the textarea's default ink, so applying it would just be dead markup.
+
+Per-style undo: every tap that mutates the textarea pushes a snapshot, so a single ↶ tap rewinds exactly one style toggle. Raw keystrokes are still under the browser's native textarea undo, so the per-note ↶ doesn't get spammed by character-by-character history.
 
 ### Moving and resizing
 
@@ -180,6 +203,8 @@ A drag is registered when the pointer moves more than 5px during the press; belo
 - **Hold 👁 when aiming on a small box.** The corner touch zones extend ~30px past the visible box edge, which is invisible by default. Holding 👁 shows you exactly where they are.
 - **Tap any box to switch focus.** No need to ✔ before moving on — tapping a different box will close the current popover. If the current note has a useful checkpoint (text was changed), it stays as `dirty` (green) and waits for ✓ Confirm.
 - **Force-quit safe (v4.1+).** If the OS kills your tab while you have unsaved edits — phone went to sleep, you switched apps for too long, the browser crashed — your work is snapshotted on background-into and offered back as a Restore prompt the next time you open the same post. Drafts age out after 24 hours and are cleared automatically when you press ✓ Confirm or explicitly leave Edit mode.
+- **Plays nice with Danbooru's native note tool (v5.0+).** If you tap Danbooru's own `Translate` button or open a note's edit dialog, the floating button hides itself so the two UIs don't fight. `Shift+N` is gated symmetrically. Close the native tool and the button reappears.
+- **Preview before submit (v5.0+).** The header **👁 Preview** toggle round-trips the body through Danbooru's own renderer, so you can confirm `<b>` / `<tn>` / wiki markup looks right before ✓ Confirm flushes it. No commit until you tap ✔.
 
 ---
 
@@ -246,9 +271,9 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v4.1.0** (2026-05-13). v4.1 adds force-quit / OS-kill recovery — your in-progress note edits are snapshotted to `localStorage` on lifecycle events (tab close, app background, OS kill), and the next time you open the same post you get a Restore / Discard prompt. Bundled with internal type / structure cleanups deferred from v4.0; see [CHANGELOG.md](./CHANGELOG.md) for the full list.
+The current release is **v5.0.0** (2026-05-15). v5 turns the popover into a markup-aware editor — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons, color / stroke / background pickers, Size / Font dropdowns, plus a Preview mode that renders through Danbooru's own sanitizer and a History button that opens the server-side version log. Bundles a native-conflict guard (auto-hide while Danbooru's translation mode or edit dialog is up), per-style undo via the popover ↶, and a v4.1 force-quit-recovery polish round. No backwards-incompatible changes — every prior keyboard shortcut, gesture, and API contract works as before. See [CHANGELOG.md](./CHANGELOG.md) for the full list.
 
-v4.0 was the TypeScript migration — same user-facing behavior as v3.1.1, with two minor UX deviations (long-press shortened from 1.5s to 1.0s; tag-fetch failure now aborts Confirm instead of opening with all tags off). The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
+v4.1 added force-quit / OS-kill recovery: in-progress edits are snapshotted to `localStorage` on lifecycle events (tab close, app background, OS kill), and the next time you open the same post you get a Restore / Discard prompt. v4.0 was the TypeScript migration. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 
 ---
 
@@ -259,18 +284,22 @@ The script is authored in TypeScript across `src/` and bundled to a single `.use
 ```
 src/
 ├── main.ts                  Boot wire — calls init* on every layer at module-load.
-├── types.ts                 Domain types (NoteState, Note, NoteId, ActionLogEntry, BoxState, …).
+├── types.ts                 Domain types (NoteState, Note, NoteId, ActionLogEntry,
+│                            TextSnapshot, BoxState, …).
 ├── config.ts                Constants (BTN_SIZE, LONG_PRESS_DURATION, TAG_OPTIONS, …).
 ├── styles.ts                The single STYLES string injected into <head> at boot.
 ├── version.ts               Auto-injected `__VERSION__` build constant.
-├── utils/                   Layer 1 — pure helpers (coords, dom, visual-viewport).
+├── utils/                   Layer 1 — pure helpers (coords, dom, visual-viewport,
+│                            style-attr).
 ├── api/                     Layer 2 — Danbooru API surface (csrf, posts, notes).
-├── state/                   Layer 2 — module-level state (image-state, notes-store).
+├── state/                   Layer 2 — module-level state (image-state, notes-store,
+│                            draft, native-conflict).
 ├── confirm/                 Layer 3 — Confirm-time orchestration (classify, batch).
-├── ui/                      Layer 3 — DOM modules (note-box, popover, tag-popover,
-│                            floating-button, arc-menu, toast).
-└── interactions/            Layer 4 — touch / pointer handlers (image-pointer,
-                             drag-resize, keyboard).
+├── ui/                      Layer 3 — DOM modules (note-box, popover, style-popover,
+│                            color-picker, stroke-picker, link-popover, ruby-popover,
+│                            tag-popover, floating-button, arc-menu, toast).
+└── interactions/            Layer 4 — touch / pointer / keyboard handlers
+                             (image-pointer, drag-resize, keyboard, native-block).
 ```
 
 Z5 layer rule: imports flow `utils ← state/api ← confirm/ui ← interactions ← main` only. Cross-imports between same-layer siblings (`confirm/ ↔ ui/`, `ui/ ↔ interactions/`) are forbidden — the layer graph is enforced by `test/architecture.test.ts`.
@@ -297,7 +326,7 @@ The `dist/` directory is `.gitignore`d on `main`; release artifacts live on the 
 
 ### Testing
 
-213 vitest cases across 8 files (7 unit + 1 architecture fitness). Architecture tests verify Z5 layer direction, hook-bag completeness at boot, and that type-only re-exports stay type-only. Unit tests cover coords, classify, csrf, tag-popover, notes-store, note-box, and confirm/batch.
+298 vitest cases across 11 files (10 unit + 1 architecture fitness). Architecture tests verify Z5 layer direction, hook-bag completeness at boot (NotesStore / ConfirmFlow / NoteBox / ArcMenu), and that type-only re-exports stay type-only. Unit tests cover coords, classify, csrf, tag-popover, notes-store, note-box, confirm/batch, draft, style-attr, and detect-outer-layers (the style-popover regex parser).
 
 For UI regressions that depend on real layout (pinch-zoom, viewport positioning, real `<img>` `getBoundingClientRect` values), manual verification on a Danbooru post page in Tampermonkey is the floor.
 
