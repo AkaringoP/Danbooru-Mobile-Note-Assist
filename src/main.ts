@@ -44,16 +44,20 @@ import {
 
 import {hasPendingChanges} from './confirm/classify';
 import {
+  getIsInConfirmPipeline,
   getIsSending,
   initConfirmFlow,
+  runConfirmFlow,
   type ConfirmFlowHooks,
 } from './confirm/batch';
 
 import {
   closeMenu,
   createArcMenu,
+  initArcMenu,
   openMenu,
   updateArcMenuPosition,
+  type ArcMenuHooks,
 } from './ui/arc-menu';
 import {
   createFloatingButton,
@@ -166,6 +170,10 @@ const noteBoxHooks: NoteBoxHooks = {
   consumeBoxClickSuppression: () => consumeBoxClickSuppression(),
 };
 
+const arcMenuHooks: ArcMenuHooks = {
+  onConfirm: () => void runConfirmFlow(),
+};
+
 // ---------------------------------------------------------------------------
 // Viewport update orchestrator (Task 1.4 composition site)
 // ---------------------------------------------------------------------------
@@ -206,13 +214,22 @@ function scheduleViewportUpdate(): void {
 
 /**
  * Persists the current collection as a draft if there's something
- * worth saving and a send isn't in flight. The `isSending` gate is
- * critical: during runConfirmFlow's PUT/POST/DELETE sequence, a
- * partial-server-commit snapshot would mix local and server truth
- * in confusing ways. The Confirm flow itself clears the draft on
- * entry and on success (confirm/batch.ts), so a force-quit mid-send
- * falls back to fetchServerNotes on next page entry rather than to
- * the draft (PLAN D6).
+ * worth saving and a Confirm pipeline isn't running. Two gates:
+ *   - `getIsSending()` — narrow lock around the actual HTTP requests
+ *     (sendBatch's try/finally). A snapshot here would catch the
+ *     partial-server-commit state mid-write.
+ *   - `getIsInConfirmPipeline()` — broader guard added in v4.2 Phase
+ *     5-h Task 5.21. Stays latched across `applyServerStateToLocal`
+ *     and the error-modal Retry/Cancel wait, where local state
+ *     already mirrors partial server commits but the user might
+ *     still tap Retry. Without this guard, a force-quit while the
+ *     error modal was up could persist a half-applied snapshot that
+ *     double-sends the already-PUT items on the next page entry.
+ *
+ * The Confirm flow itself clears the draft on entry and on success
+ * (confirm/batch.ts), so a force-quit mid-pipeline falls back to
+ * fetchServerNotes on next page entry rather than to the draft
+ * (PLAN D6).
  *
  * Called from three lifecycle handlers — beforeunload (PC),
  * pagehide (mobile-friendly), and visibilitychange→hidden (most
@@ -221,7 +238,7 @@ function scheduleViewportUpdate(): void {
  * key.
  */
 function saveDraftIfNeeded(): void {
-  if (getIsSending()) {
+  if (getIsSending() || getIsInConfirmPipeline()) {
     return;
   }
   if (!hasContentToSave()) {
@@ -316,12 +333,14 @@ function init(): void {
   createStrokePicker();
   createRubyPopover();
 
-  // 3. Wire the three Hook bags. Must happen before any state mutation
+  // 3. Wire the four Hook bags. Must happen before any state mutation
   //    or send-flow trigger — the `hooks!` non-null asserts inside
-  //    notes-store / confirm-batch / note-box rely on this ordering.
+  //    notes-store / confirm-batch / note-box / arc-menu rely on this
+  //    ordering.
   initNotesStore(notesStoreHooks);
   initConfirmFlow(confirmFlowHooks);
   initNoteBox(noteBoxHooks);
+  initArcMenu(arcMenuHooks);
 
   // 4. Bind document-level interactions. `bindImageHandlers` self-
   //    retries on a 1 s timer if the post image isn't in the DOM yet.

@@ -83,6 +83,14 @@ function handleGlobalHotkeys(e: KeyboardEvent): void {
     if (isTextInputElement(ae) && !isPopoverInput(ae)) {
       return;
     }
+    // IME composition guard — on Korean / Japanese / Chinese IMEs the
+    // user typically hits Esc to cancel an in-progress conversion.
+    // Routing that Esc to dismissActivePopover would close the popover
+    // (and on a fresh-new note, hard-delete it) instead of letting the
+    // IME swallow the keystroke (Phase 5-h Task 5.23).
+    if (e.isComposing || e.keyCode === 229) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     dismissActivePopover();

@@ -40,6 +40,7 @@ import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {apiPreviewNote} from '../api/notes';
 import {getOriginalWidth} from '../state/image-state';
 import {
+  clearTextActionsForNote,
   getActiveNoteId,
   hardDeleteNote,
   notes,
@@ -117,6 +118,20 @@ function onTextareaSelectionChanged(): void {
     popoverStyleToggleElement.disabled = collapsed;
   }
   refreshStylePopoverState();
+}
+
+/**
+ * Document-level selectionchange handler — only kept bound while the
+ * popover is shown (Phase 5-h Task 5.31). v4.2 had this attached at
+ * boot, so every text selection on the surrounding Danbooru page
+ * triggered our callback (cheap but unnecessary). Module-level
+ * reference (rather than re-creating per show/hide) so add/remove
+ * stay symmetric.
+ */
+function selectionChangeHandler(): void {
+  if (document.activeElement === popoverInputElement) {
+    onTextareaSelectionChanged();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -202,8 +217,18 @@ export function createPopover(): void {
   // a newline. Esc is handled at document level
   // (interactions/keyboard) so it works whether or not the textarea
   // has focus.
+  //
+  // IME composition guard (`!e.isComposing` + Safari's `keyCode !==
+  // 229` fallback): on Korean / Japanese / Chinese IMEs the user
+  // sometimes hits Ctrl+Enter to commit the in-progress conversion.
+  // Without this guard the shortcut routes to ✔ with the half-typed
+  // composition still in the textarea, committing partial Hangul /
+  // Kana / Pinyin to the server (Phase 5-h Task 5.23).
   input.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (e.isComposing || e.keyCode === 229) {
+        return;
+      }
       e.preventDefault();
       handlePopoverAction('confirm');
     }
@@ -312,12 +337,9 @@ export function createPopover(): void {
   // state and refresh the sub-popover's active-tag highlights without
   // them going stale. `selectionchange` fires for cursor / drag /
   // keyboard navigation — broader than `select` alone, which only
-  // fires on non-collapsed selections.
-  document.addEventListener('selectionchange', () => {
-    if (document.activeElement === popoverInputElement) {
-      onTextareaSelectionChanged();
-    }
-  });
+  // fires on non-collapsed selections. Bound/unbound by show/hide
+  // (Phase 5-h Task 5.31) so the page-wide listener doesn't run
+  // while the popover is closed.
 
   inputRow.appendChild(sideStack);
   root.appendChild(inputRow);
@@ -407,6 +429,7 @@ export function showPopover(noteId: NoteId): void {
   // tapped open and trigger ✓ Confirm prematurely. CSS in STYLES
   // does the actual hide.
   document.body.classList.add('dmna-note-popover-open');
+  document.addEventListener('selectionchange', selectionChangeHandler);
 }
 
 /** Hides the popover without destroying it. */
@@ -418,6 +441,7 @@ export function hidePopover(): void {
     delete popoverInputElement.dataset.boundNoteId;
   }
   document.body.classList.remove('dmna-note-popover-open');
+  document.removeEventListener('selectionchange', selectionChangeHandler);
   // Preview mode is per-session-of-this-popover; close drops it so a
   // future open starts in Edit mode (v4.2 Phase 3).
   resetPreviewMode();
@@ -669,6 +693,10 @@ export function dismissActivePopover(): void {
     hardDeleteNote(activeId);
   } else {
     note.current = {...note.confirmedState};
+    // Same revert semantics as popoverCancel — strip 'text' snapshots
+    // so a later ↶ doesn't resurrect the canceled markup (Phase 5-h
+    // Task 5.22).
+    clearTextActionsForNote(activeId);
     renderNoteBox(activeId);
     setActiveNote(null);
   }
@@ -713,6 +741,14 @@ async function handleModeToggle(): Promise<void> {
     const res = await apiPreviewNote(popoverInputElement.value);
     if (myReq !== previewRequestId) {
       return;
+    }
+    // Defensive sink-side gate even though apiPreviewNote already
+    // throws on a malformed response — Preview HTML is the only
+    // `innerHTML` write in the codebase, so any future regression
+    // that bypasses the api-layer check still fails closed here
+    // (Phase 5-h Task 5.25).
+    if (typeof res.sanitized_body !== 'string') {
+      throw new Error('Malformed preview response');
     }
     popoverPreviewElement.innerHTML = res.sanitized_body;
     popoverInputElement.style.display = 'none';

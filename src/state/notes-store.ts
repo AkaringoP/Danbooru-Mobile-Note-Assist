@@ -213,12 +213,21 @@ export function isDirty(note: Note): boolean {
 
 /**
  * Pushes an action onto this note's per-note undo stack. Lazily
- * creates the stack on first push.
- *
- * The cast on the constructed entry is Phase 1's compromise — Phase 2
- * will replace this with overloads so the discriminated union narrows
- * correctly per `type`.
+ * creates the stack on first push. Overloaded so `'create'` requires
+ * `prevState: null` and the geometry-bearing types require a non-null
+ * `NoteState` — replaces the v4.1 `as ActionLogEntry` cast (Phase 5-h
+ * Task 5.30) with type-safe dispatch.
  */
+export function pushAction(
+  noteId: NoteId,
+  type: 'create',
+  prevState: null,
+): void;
+export function pushAction(
+  noteId: NoteId,
+  type: 'edit' | 'delete' | 'transform',
+  prevState: NoteState,
+): void;
 export function pushAction(
   noteId: NoteId,
   type: 'create' | 'edit' | 'delete' | 'transform',
@@ -229,7 +238,11 @@ export function pushAction(
     stack = [];
     actionLog.set(noteId, stack);
   }
-  stack.push({noteId, type, prevState} as ActionLogEntry);
+  if (type === 'create') {
+    stack.push({noteId, type, prevState: null});
+  } else if (prevState !== null) {
+    stack.push({noteId, type, prevState});
+  }
 }
 
 /**
@@ -241,16 +254,35 @@ export function pushAction(
  * each capturing the textarea value + selection just before they
  * rewrite the textarea.
  */
-export function pushTextAction(
-  noteId: NoteId,
-  prevState: TextSnapshot,
-): void {
+export function pushTextAction(noteId: NoteId, prevState: TextSnapshot): void {
   let stack = actionLog.get(noteId);
   if (!stack) {
     stack = [];
     actionLog.set(noteId, stack);
   }
   stack.push({noteId, type: 'text', prevState});
+}
+
+/**
+ * Strips every `'text'` snapshot from this note's stack while leaving
+ * geometry-bearing entries (`create` / `edit` / `delete` / `transform`)
+ * intact. Called from the cancel/dismiss revert paths (popoverCancel +
+ * ui/popover.dismissActivePopover): both revert `current` back to
+ * `confirmedState`, which makes the in-progress style-mutation
+ * snapshots unreachable — leaving them on the stack would let a later
+ * ↶ resurrect a markup the user just canceled (Phase 5-h Task 5.22).
+ */
+export function clearTextActionsForNote(noteId: NoteId): void {
+  const stack = actionLog.get(noteId);
+  if (!stack) {
+    return;
+  }
+  const filtered = stack.filter(e => e.type !== 'text');
+  if (filtered.length === 0) {
+    actionLog.delete(noteId);
+  } else {
+    actionLog.set(noteId, filtered);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -567,6 +599,11 @@ export function popoverCancel(noteId: NoteId): void {
     return;
   }
   note.current = {...note.confirmedState};
+  // Drop accumulated 'text' snapshots — current text just rolled back
+  // to confirmedState, so any in-progress style-mutation history is
+  // now unreachable and would otherwise let a later ↶ resurrect a
+  // markup the user just canceled (Phase 5-h Task 5.22).
+  clearTextActionsForNote(noteId);
   hooks!.onNoteRenderRequested(noteId);
   setActiveNote(null);
 }
@@ -821,9 +858,25 @@ export async function applyDraftSnapshot(
   }
   for (const [rawId, entries] of snapshot.actionLog) {
     const noteId = rebrandNoteId(rawId);
-    // Each entry carries its own noteId field too — rebrand both
-    // the Map key and the inner reference for consistency.
-    const rebranded = entries.map(e => ({...e, noteId}) as ActionLogEntry);
+    // Each entry carries its own noteId field too — rebrand both the
+    // Map key and the inner reference for consistency. Switch on
+    // `type` so TypeScript narrows the discriminated union per arm
+    // (Phase 5-h Task 5.30) instead of needing the prior
+    // `as ActionLogEntry` cast on a spread.
+    const rebranded: ActionLogEntry[] = entries.map(e => {
+      switch (e.type) {
+        case 'create':
+          return {noteId, type: 'create', prevState: null};
+        case 'edit':
+          return {noteId, type: 'edit', prevState: e.prevState};
+        case 'delete':
+          return {noteId, type: 'delete', prevState: e.prevState};
+        case 'transform':
+          return {noteId, type: 'transform', prevState: e.prevState};
+        case 'text':
+          return {noteId, type: 'text', prevState: e.prevState};
+      }
+    });
     actionLog.set(noteId, rebranded);
   }
 

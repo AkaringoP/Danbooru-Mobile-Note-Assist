@@ -166,6 +166,21 @@ export function initConfirmFlow(h: ConfirmFlowHooks): void {
  */
 let isSending = false;
 
+/**
+ * `runConfirmFlow` re-entrancy guard, broader than `isSending`. Stays
+ * latched across the whole pipeline — tag popover wait, sendBatch,
+ * applyServerStateToLocal, error modal wait, retry recursion. The
+ * narrower `isSending` only covers `sendBatch`'s try/finally (the
+ * actual HTTP requests + UI lock CSS), and unlatches before the error
+ * modal opens — leaving a window in `handleSendResult` where local
+ * state already reflects partial server commits but the user might
+ * still tap Retry. A force-quit `saveDraftIfNeeded` firing in that
+ * window would persist a half-applied snapshot that double-sends on
+ * the next page entry. `isInConfirmPipeline` closes the gap (Phase
+ * 5-h Task 5.21). Read by main.ts's lifecycle save handlers.
+ */
+let isInConfirmPipeline = false;
+
 let errorModalElement: HTMLElement | null = null;
 let errorModalBackdropElement: HTMLElement | null = null;
 let pendingErrorModalResolver: ((choice: 'retry' | 'cancel') => void) | null =
@@ -174,6 +189,16 @@ let pendingErrorModalResolver: ((choice: 'retry' | 'cancel') => void) | null =
 /** Cross-module read of the in-flight lock. */
 export function getIsSending(): boolean {
   return isSending;
+}
+
+/**
+ * Cross-module read of the broader Confirm-pipeline guard. True from
+ * `runConfirmFlow` entry through error-modal dismissal / retry
+ * resolution. Used by `main.ts#saveDraftIfNeeded` to skip lifecycle
+ * draft saves while local state may be mid-transition.
+ */
+export function getIsInConfirmPipeline(): boolean {
+  return isInConfirmPipeline;
 }
 
 // ---------------------------------------------------------------------------
@@ -654,37 +679,42 @@ function showErrorModal(result: SendBatchResult): Promise<'retry' | 'cancel'> {
  * are guarded by their own backdrops covering the floating button.
  */
 export async function runConfirmFlow(): Promise<void> {
-  if (isSending) {
+  if (isSending || isInConfirmPipeline) {
     return;
   }
-  // Clear any stale draft — entering the send pipeline transfers
-  // authority to the server. A force-quit mid-send shouldn't
-  // surface a "Restore?" prompt with mixed local/server state on
-  // next page entry; fetchServerNotes is the canonical recovery
-  // path in that case (PLAN D4 + D6, v4.1).
-  clearDraft();
-  // Close any open popover before showing modals or starting sends —
-  // the popover is positioned above boxes but below modals; leaving
-  // it open would visually layer awkwardly behind a tag modal, and
-  // its textarea stays editable until sendBatch's CSS lock kicks in.
-  setActiveNote(null);
+  isInConfirmPipeline = true;
+  try {
+    // Clear any stale draft — entering the send pipeline transfers
+    // authority to the server. A force-quit mid-send shouldn't
+    // surface a "Restore?" prompt with mixed local/server state on
+    // next page entry; fetchServerNotes is the canonical recovery
+    // path in that case (PLAN D4 + D6, v4.1).
+    clearDraft();
+    // Close any open popover before showing modals or starting sends —
+    // the popover is positioned above boxes but below modals; leaving
+    // it open would visually layer awkwardly behind a tag modal, and
+    // its textarea stays editable until sendBatch's CSS lock kicks in.
+    setActiveNote(null);
 
-  const classified = classifyChanges();
-  if (!classified.hasChanges) {
-    hooks!.onToast('No changes to confirm', 'info');
-    return;
-  }
-
-  let tagDelta: TagDelta | null = null;
-  if (needsTagPopover(classified)) {
-    tagDelta = await hooks!.showTagPopover();
-    if (tagDelta === null) {
-      // User canceled the tag modal — abort the entire Confirm
-      // flow. State unchanged, user back in active mode.
+    const classified = classifyChanges();
+    if (!classified.hasChanges) {
+      hooks!.onToast('No changes to confirm', 'info');
       return;
     }
-  }
 
-  const result = await sendBatch(classified, tagDelta);
-  await handleSendResult(result, tagDelta);
+    let tagDelta: TagDelta | null = null;
+    if (needsTagPopover(classified)) {
+      tagDelta = await hooks!.showTagPopover();
+      if (tagDelta === null) {
+        // User canceled the tag modal — abort the entire Confirm
+        // flow. State unchanged, user back in active mode.
+        return;
+      }
+    }
+
+    const result = await sendBatch(classified, tagDelta);
+    await handleSendResult(result, tagDelta);
+  } finally {
+    isInConfirmPipeline = false;
+  }
 }
