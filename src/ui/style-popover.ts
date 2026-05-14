@@ -32,7 +32,11 @@
  * `console.log` for now.
  */
 
-import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
+import {
+  POPOVER_OFFSET,
+  POPOVER_VIEWPORT_PADDING,
+  POPOVER_WIDTH,
+} from '../config';
 import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes, pushTextAction} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
@@ -1187,8 +1191,15 @@ export function updateStylePopoverPosition(): void {
   const boxCenterVisualX = boxVisualLeft + boxVisualWidth / 2;
   const boxBottomVisualY = boxVisualTop + boxVisualHeight;
 
-  // Note popover's visual anchor (must match updatePopoverPosition).
-  const notePopVisualLeft = boxCenterVisualX - POPOVER_WIDTH / 2;
+  // Note popover's visual anchor (must match updatePopoverPosition,
+  // including the in-viewport horizontal clamp — otherwise the mobile
+  // stack drifts off-anchor when the note popover slides to fit).
+  let notePopVisualLeft = boxCenterVisualX - POPOVER_WIDTH / 2;
+  if (POPOVER_WIDTH + POPOVER_VIEWPORT_PADDING * 2 <= vvWidth) {
+    const minLeft = POPOVER_VIEWPORT_PADDING;
+    const maxLeft = vvWidth - POPOVER_WIDTH - POPOVER_VIEWPORT_PADDING;
+    notePopVisualLeft = Math.max(minLeft, Math.min(notePopVisualLeft, maxLeft));
+  }
   const notePopVisualTop = boxBottomVisualY + POPOVER_OFFSET;
   const notePopVisualRight = notePopVisualLeft + POPOVER_WIDTH;
 

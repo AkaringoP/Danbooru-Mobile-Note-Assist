@@ -32,6 +32,7 @@
 import {NoteId, TextSnapshot, isServerNoteId} from '../types';
 import {
   POPOVER_OFFSET,
+  POPOVER_VIEWPORT_PADDING,
   POPOVER_WIDTH,
   SCRIPT_NAME,
   SCRIPT_VERSION,
@@ -535,6 +536,7 @@ export function updatePopoverPosition(): void {
   const invScale = 1 / scale;
   const vvPageLeft = vv ? vv.pageLeft : window.pageXOffset;
   const vvPageTop = vv ? vv.pageTop : window.pageYOffset;
+  const vvWidth = vv ? vv.width : window.innerWidth;
 
   // Box's visual rect in viewport-CSS-pixels.
   const boxVisualLeft = (boxRectPage.left - vvPageLeft) * scale;
@@ -544,19 +546,22 @@ export function updatePopoverPosition(): void {
   const boxCenterVisualX = boxVisualLeft + boxVisualWidth / 2;
   const boxBottomVisualY = boxVisualTop + boxVisualHeight;
 
-  // Popover visual position: centered on the box. NO horizontal
-  // clamp — earlier versions clamped the popover to stay within the
-  // visual viewport, but at high pinch-zoom the available range
-  // collapses (e.g., vvWidth=300, popover=260 → only 30 px of
-  // horizontal slack), which pinned the popover to the viewport's
-  // left edge and broke the "anchored to box" illusion entirely. We
-  // now accept that the popover may overflow at extreme zoom; the
-  // user can pinch out or pan to see the rest. Box-anchoring is the
-  // higher-priority affordance. The arrow stays at the popover's
-  // CSS-center (set statically in createPopover); no per-call slide
-  // needed.
-  const popVisualLeft = boxCenterVisualX - POPOVER_WIDTH / 2;
+  // Popover visual position: centered on the box, then clamped
+  // horizontally to keep it inside the visual viewport WHEN it fits.
+  // At extreme pinch-zoom the popover is wider than the visual
+  // viewport (e.g., vvWidth=300, popover=343), where any clamp would
+  // pin it to the viewport edge and break the "anchored to box"
+  // illusion — in that case we skip the clamp and let it overflow
+  // (pinch out / pan to see the rest). The arrow stays at the
+  // popover's CSS-center (set statically in createPopover); no
+  // per-call slide needed.
+  let popVisualLeft = boxCenterVisualX - POPOVER_WIDTH / 2;
   const popVisualTop = boxBottomVisualY + POPOVER_OFFSET;
+  if (POPOVER_WIDTH + POPOVER_VIEWPORT_PADDING * 2 <= vvWidth) {
+    const minLeft = POPOVER_VIEWPORT_PADDING;
+    const maxLeft = vvWidth - POPOVER_WIDTH - POPOVER_VIEWPORT_PADDING;
+    popVisualLeft = Math.max(minLeft, Math.min(popVisualLeft, maxLeft));
+  }
 
   // Convert visual coords back to document coords for the transform.
   const tx = vvPageLeft + popVisualLeft / scale;
