@@ -36,6 +36,7 @@ import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
 import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {parseStyleAttr} from '../utils/style-attr';
 import {showLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
 
@@ -80,6 +81,14 @@ interface OuterLayer {
   closeStart: number;
   /** Length of the closing tag string (e.g. `</b>` is 4). */
   closeLen: number;
+  /**
+   * Parsed `style="..."` attribute as a property → value map.
+   * Populated only when the tag carried an inline style attribute
+   * (`<span>` / `<div>` in v4.2 markup); undefined when the tag had
+   * no style attr. Empty Map is possible when the style attr was
+   * present but parsed to nothing (all declarations malformed).
+   */
+  styleProps?: Map<string, string>;
 }
 
 /**
@@ -106,27 +115,97 @@ function detectOuterLayers(before: string, after: string): OuterLayer[] {
   let consumedAfter = 0;
   while (true) {
     const slice = before.slice(0, bLen);
-    const openMatch = slice.match(/<([a-zA-Z][a-zA-Z0-9]*)(?:\s+[^<>]*)?>$/);
+    const openMatch = slice.match(/<([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)>$/);
     if (!openMatch) {
       break;
     }
     const tag = openMatch[1].toLowerCase();
+    const attrs = openMatch[2];
     const expectedClose = `</${tag}>`;
     if (!after.startsWith(expectedClose, consumedAfter)) {
       break;
     }
     const openStart = bLen - openMatch[0].length;
-    layers.push({
+    const layer: OuterLayer = {
       tag,
       openStart,
       openLen: openMatch[0].length,
       closeStart: consumedAfter,
       closeLen: expectedClose.length,
-    });
+    };
+    const styleStr = extractStyleAttr(attrs);
+    if (styleStr !== null) {
+      layer.styleProps = parseStyleAttr(styleStr);
+    }
+    layers.push(layer);
     bLen = openStart;
     consumedAfter += expectedClose.length;
   }
   return layers;
+}
+
+/**
+ * Pulls the value of a `style="…"` attribute out of an open-tag's
+ * attribute string. Returns `null` when the tag carried no style attr
+ * (versus an empty string when the attr was present but blank). The
+ * HTML spec disallows a literal `"` inside a `"`-quoted value (it
+ * must be encoded as `&quot;`), so a simple regex suffices — no full
+ * attribute parser is needed. Falls back to single-quoted form
+ * because Danbooru's sanitize pipeline may re-emit attrs that way.
+ */
+function extractStyleAttr(attrs: string): string | null {
+  const dq = attrs.match(/\bstyle\s*=\s*"([^"]*)"/i);
+  if (dq) return dq[1];
+  const sq = attrs.match(/\bstyle\s*=\s*'([^']*)'/i);
+  if (sq) return sq[1];
+  return null;
+}
+
+/**
+ * Collects, from the textarea's current selection, the union of CSS
+ * property → value pairs carried by the outer `<span>` / `<div>`
+ * wrappers around the selection. Inner layers' values shadow outer
+ * ones (closer-to-the-selection wins), mirroring how browsers
+ * resolve inline style on nested elements. Span (inline) and div
+ * (block) snapshots are kept separate so callers can target the
+ * right wrapper type.
+ *
+ * Used by Phase 5 apply / remove helpers (Task 5.3) and the active
+ * state UI (Task 5.6) so neither has to walk OuterLayer itself.
+ * Returns empty maps when there's no textarea or no live selection.
+ */
+export function getActiveStyleSnapshot(): {
+  spanProps: Map<string, string>;
+  divProps: Map<string, string>;
+} {
+  const spanProps = new Map<string, string>();
+  const divProps = new Map<string, string>();
+  const ta = getPopoverInputElement();
+  if (!ta || ta.selectionStart === ta.selectionEnd) {
+    return {spanProps, divProps};
+  }
+  const before = ta.value.slice(0, ta.selectionStart);
+  const after = ta.value.slice(ta.selectionEnd);
+  // detectOuterLayers returns inner-to-outer; iterate outer-to-inner
+  // so inner values overwrite outer values (closer wins).
+  const layers = detectOuterLayers(before, after);
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
+    if (!layer.styleProps) continue;
+    let target: Map<string, string> | null;
+    if (layer.tag === 'span') {
+      target = spanProps;
+    } else if (layer.tag === 'div') {
+      target = divProps;
+    } else {
+      target = null;
+    }
+    if (!target) continue;
+    for (const [k, v] of layer.styleProps) {
+      target.set(k, v);
+    }
+  }
+  return {spanProps, divProps};
 }
 
 /**
