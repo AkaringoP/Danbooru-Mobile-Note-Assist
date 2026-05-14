@@ -41,9 +41,23 @@ let isShown = false;
 let suppressNextClick = false;
 
 const DANBOORU_HOST_RE = /^https?:\/\/danbooru\.donmai\.us/i;
+const DANGEROUS_SCHEME_RE = /^\s*(javascript|data|vbscript|file):/i;
 
+/**
+ * Trim → strip Danbooru host prefix → defense-in-depth scheme + HTML-
+ * char filter. The client-side filter is intentionally redundant with
+ * Danbooru's NoteSanitizer (which is the authoritative backstop), but
+ * keeps a malformed or scripted URL from entering the request payload
+ * in the first place (Phase 5-h Task 5.24). Returns the empty string
+ * for rejected schemes so `handleConfirm` falls through its no-url
+ * branch (modal closes, no `<a>` wrap inserted).
+ */
 function normalizeUrl(input: string): string {
-  return input.trim().replace(DANBOORU_HOST_RE, '');
+  const trimmed = input.trim().replace(DANBOORU_HOST_RE, '');
+  if (DANGEROUS_SCHEME_RE.test(trimmed)) {
+    return '';
+  }
+  return trimmed.replace(/[<>"]/g, '');
 }
 
 export function hideLinkPopover(): void {
@@ -103,6 +117,11 @@ function onOutsideTap(e: PointerEvent): void {
     e.preventDefault();
     e.stopPropagation();
     suppressNextClick = true;
+    // TTL safety net — see color-picker.ts onOutsideTap for details
+    // (Phase 5-h Task 5.27).
+    window.setTimeout(() => {
+      suppressNextClick = false;
+    }, 500);
   }
 }
 

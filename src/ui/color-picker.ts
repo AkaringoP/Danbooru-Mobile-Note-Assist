@@ -178,6 +178,15 @@ function onOutsideTap(e: PointerEvent): void {
     e.preventDefault();
     e.stopPropagation();
     suppressNextClick = true;
+    // TTL safety net (Phase 5-h Task 5.27): if the matching click
+    // somehow never lands (browser swallowed it after we cancelled
+    // pointerdown, or another handler stopped propagation first), the
+    // flag would otherwise stay latched and silently eat the next
+    // unrelated click. Same 500ms ceiling as drag-resize's click
+    // suppression.
+    window.setTimeout(() => {
+      suppressNextClick = false;
+    }, 500);
   }
 }
 

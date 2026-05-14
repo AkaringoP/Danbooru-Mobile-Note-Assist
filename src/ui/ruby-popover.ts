@@ -91,6 +91,11 @@ function onOutsideTap(e: PointerEvent): void {
     e.preventDefault();
     e.stopPropagation();
     suppressNextClick = true;
+    // TTL safety net — see color-picker.ts onOutsideTap for details
+    // (Phase 5-h Task 5.27).
+    window.setTimeout(() => {
+      suppressNextClick = false;
+    }, 500);
   }
 }
 
