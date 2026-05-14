@@ -295,20 +295,16 @@ export const STYLES = `
       border-color: transparent transparent rgba(30, 30, 30, 0.96) transparent;
       pointer-events: none;
     }
-    /* Input row layout: 2-column grid where the side stack (👁 + ↶)
-       occupies HALF of one bottom-row button column (= 1/6 of the
-       grid track width), and the textarea takes everything else.
-       v3.1.7 had the side stack take a full button column (1/3),
-       which was clean alignment-wise but ate too much textarea
-       width. Per user request the side-stack column is halved and
-       the textarea grows by the freed space (+ ~47 CSS px). The
-       side-stack is right-aligned with the delete button's right
-       edge — both end at the popover's right padding edge — by
-       design (the 2nd grid column ends at 100% just like the
-       3rd column of the bottom row).
-       The calc((100% - 16px) / 6) width matches half a bottom-row
-       button: bottom is 3 buttons + 2*8px gap = 100%, so each
-       button is (100% - 16px) / 3, and half is (100% - 16px) / 6. */
+    /* Input row layout: 2-column grid — textarea soaks up the slack,
+       sideStack pinned to a fixed width so its buttons stay roughly
+       square (height 36 from .dmna-popover-side-btn min-height).
+       Earlier this was a calc proportional to the popover width;
+       Phase 4 polish widened the popover (POPOVER_WIDTH 260 → 343)
+       to match action-row cell widths to the style sub-popover, and
+       a proportional side stack would have ballooned into a wide
+       rectangle. 40 px is just a hair above the 36 px button square
+       so the buttons read as compact icons rather than stretched
+       chips. */
     /* Header row (Phase 3, v4.2): hosts the Preview/Edit mode toggle
        on the left. justify-content keeps room for a future close /
        help affordance on the right. */
@@ -344,7 +340,7 @@ export const STYLES = `
     }
     #dmna-popover-input-row {
       display: grid;
-      grid-template-columns: 1fr calc((100% - 16px) / 6);
+      grid-template-columns: 1fr 40px;
       gap: 8px;
       align-items: stretch;
     }

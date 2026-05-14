@@ -38,10 +38,12 @@ import {getActiveNoteId, notes} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {getPopoverInputElement} from './popover';
 
-// Style popover shares the note popover's width so the attach math
-// reads symmetrically (left/right flip is a simple width subtraction).
-// Imported from config to keep the contract one-sourced.
-const STYLE_POPOVER_WIDTH = POPOVER_WIDTH;
+// Style popover has its own width independent of POPOVER_WIDTH —
+// the note popover grew wider in Phase 4 polish to match action-row
+// cell widths to the style row, but the style popover keeps the
+// original 260 so the B/I/U cell width (the reference target) stays
+// where it was. Kept in sync with the literal in styles.ts.
+const STYLE_POPOVER_WIDTH = 260;
 const STYLE_POPOVER_GAP = 8;
 
 interface StyleTagButton {
@@ -224,7 +226,7 @@ function buildColorRow(): HTMLElement {
   text.setAttribute('aria-label', 'Pick text color');
   const textLabel = document.createElement('span');
   textLabel.className = 'dmna-style-color-label';
-  textLabel.textContent = '글자';
+  textLabel.textContent = 'Text';
   const textSwatch = document.createElement('span');
   textSwatch.className = 'dmna-style-color-swatch';
   textSwatch.style.background = '#000';
@@ -244,7 +246,7 @@ function buildColorRow(): HTMLElement {
   bg.setAttribute('aria-label', 'Pick background color');
   const bgLabel = document.createElement('span');
   bgLabel.className = 'dmna-style-color-label';
-  bgLabel.textContent = '배경';
+  bgLabel.textContent = 'BG';
   const bgSwatch = document.createElement('span');
   bgSwatch.className = 'dmna-style-color-swatch dmna-style-color-transparent';
   bg.appendChild(bgLabel);
@@ -300,8 +302,8 @@ export function createStylePopover(): void {
   inner.appendChild(buildTagRow(ROW_1_BUTTONS));
   inner.appendChild(buildTagRow(ROW_2_BUTTONS));
   inner.appendChild(buildColorRow());
-  inner.appendChild(buildSelectRow('size', '글자 크기'));
-  inner.appendChild(buildSelectRow('font', '폰트'));
+  inner.appendChild(buildSelectRow('size', 'Size'));
+  inner.appendChild(buildSelectRow('font', 'Font'));
 
   root.appendChild(inner);
   document.body.appendChild(root);
