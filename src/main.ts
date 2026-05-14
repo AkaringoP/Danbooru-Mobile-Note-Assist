@@ -73,6 +73,7 @@ import {
 } from './ui/note-box';
 import {createColorPicker} from './ui/color-picker';
 import {createLinkPopover} from './ui/link-popover';
+import {createRubyPopover} from './ui/ruby-popover';
 import {createStrokePicker} from './ui/stroke-picker';
 import {
   applyTextUndoSnapshot,
@@ -313,6 +314,7 @@ function init(): void {
   createLinkPopover();
   createColorPicker();
   createStrokePicker();
+  createRubyPopover();
 
   // 3. Wire the three Hook bags. Must happen before any state mutation
   //    or send-flow trigger — the `hooks!` non-null asserts inside

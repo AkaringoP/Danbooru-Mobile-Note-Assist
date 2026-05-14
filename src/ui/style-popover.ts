@@ -41,10 +41,24 @@ import {
 } from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {parseStyleAttr, serializeStyleAttr} from '../utils/style-attr';
-import {showColorPicker} from './color-picker';
+import {
+  getColorPickerTarget,
+  hideColorPicker,
+  isColorPickerShown,
+  showColorPicker,
+} from './color-picker';
 import {showLinkPopover} from './link-popover';
-import {getPopoverInputElement} from './popover';
-import {showStrokePicker} from './stroke-picker';
+import {getIsPreviewMode, getPopoverInputElement} from './popover';
+import {
+  hideRubyPopover,
+  isRubyPopoverShown,
+  showRubyPopover,
+} from './ruby-popover';
+import {
+  hideStrokePicker,
+  isStrokePickerShown,
+  showStrokePicker,
+} from './stroke-picker';
 
 // Style popover has its own width independent of POPOVER_WIDTH —
 // the note popover grew wider in Phase 4 polish to match action-row
@@ -104,7 +118,7 @@ interface SelectOption {
 const SIZE_OPTIONS: ReadonlyArray<SelectOption> = [
   {label: '−2', value: '70%'},
   {label: '−1', value: '85%'},
-  {label: 'Normal', value: 'normal'},
+  {label: 'Default', value: 'normal'},
   {label: '+1', value: '125%'},
   {label: '+2', value: '150%'},
   {label: '+3', value: '200%'},
@@ -119,6 +133,9 @@ const SIZE_OPTIONS: ReadonlyArray<SelectOption> = [
 // fallback, which is exactly how their note will look on devices
 // missing the font.
 const FONT_OPTIONS: ReadonlyArray<SelectOption> = [
+  // Leading empty option — acts as the "no font-family" choice and
+  // doubles as the default selected state for plain text.
+  {label: ' ', value: ''},
   {label: 'comic', value: 'comic', preview: 'comic'},
   {label: 'narrow', value: 'narrow', preview: 'narrow'},
   {label: 'mono', value: 'mono', preview: 'mono'},
@@ -511,6 +528,80 @@ function handleLinkClick(): void {
 }
 
 /**
+ * Ruby button click — captures the selection (the base text, e.g. a
+ * kanji span) and opens the ruby modal to collect the reading text
+ * (furigana / pronunciation gloss). On Confirm the selection is
+ * replaced with `<ruby>{base}<rt>{reading}</rt></ruby>` and re-selected
+ * as `{base}<rt>{reading}</rt>` (the entire ruby content). Re-selecting
+ * the whole content lets `detectOuterLayers` recognize the outer
+ * `<ruby>` so the button's `is-active` highlight fires and the user
+ * can pile other style tags on top.
+ */
+function handleRubyClick(): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  if (start === end) return;
+  showRubyPopover(reading => applyRubyWrap(start, end, reading));
+}
+
+function applyRubyWrap(start: number, end: number, reading: string): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  captureUndoSnapshot(ta);
+  const open = '<ruby>';
+  const close = '</ruby>';
+  const rt = `<rt>${reading}</rt>`;
+  const before = ta.value.slice(0, start);
+  const selected = ta.value.slice(start, end);
+  const after = ta.value.slice(end);
+  const inner = selected + rt;
+  ta.value = before + open + inner + close + after;
+  ta.setSelectionRange(start + open.length, start + open.length + inner.length);
+  ta.focus();
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  refreshStylePopoverState();
+}
+
+/**
+ * Ruby unwrap — peels the outer `<ruby></ruby>` AND strips the
+ * `<rt>...</rt>` annotation from the selection content, leaving just
+ * the base text re-selected. Plain `applyUnwrap('ruby')` is not used
+ * because that would leave an orphan `<rt>...</rt>` in the textarea
+ * (the ruby annotation only makes sense inside a `<ruby>` parent).
+ */
+function applyRubyUnwrap(): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  if (start === end) return;
+  const before = ta.value.slice(0, start);
+  const selected = ta.value.slice(start, end);
+  const after = ta.value.slice(end);
+  const layers = detectOuterLayers(before, after);
+  const found = layers.find(l => l.tag === 'ruby');
+  if (!found) return;
+  captureUndoSnapshot(ta);
+  // Strip the first <rt>...</rt> inside the selection. Multi-rt is
+  // not produced by this UI and parsing arbitrary nested ruby markup
+  // is out of scope — the simple replace covers the common case.
+  const base = selected.replace(/<rt\b[^>]*>[\s\S]*?<\/rt>/i, '');
+  const newBefore =
+    before.slice(0, found.openStart) +
+    before.slice(found.openStart + found.openLen);
+  const newAfter =
+    after.slice(0, found.closeStart) +
+    after.slice(found.closeStart + found.closeLen);
+  ta.value = newBefore + base + newAfter;
+  ta.setSelectionRange(newBefore.length, newBefore.length + base.length);
+  ta.focus();
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  refreshStylePopoverState();
+}
+
+/**
  * Wraps the textarea slice between `start` and `end` in
  * `<a href="…">…</a>` using the URL from the link modal. Mirrors
  * `applyWrap` but inserts the attribute-carrying opening tag; the
@@ -559,14 +650,25 @@ function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
       e.preventDefault();
       e.stopPropagation();
       if (b.classList.contains('is-active')) {
-        applyUnwrap(btn.tag);
+        // Ruby unwrap needs to strip `<rt>...</rt>` from the selection
+        // content as well as peeling the `<ruby>` wrapper — plain
+        // applyUnwrap would leave an orphan `<rt>`.
+        if (btn.tag === 'ruby') {
+          applyRubyUnwrap();
+        } else {
+          applyUnwrap(btn.tag);
+        }
       } else if (btn.tag === 'a') {
+        // Same-button toggle: closing the link modal beats reopening
+        // it when the user taps the still-armed `a` button.
+        if (isRubyPopoverShown()) hideRubyPopover();
         handleLinkClick();
       } else if (btn.tag === 'ruby') {
-        // Task 5.5.5 will wire this into ui/ruby-popover.ts; for now
-        // the button surfaces in the UI but the click is a no-op
-        // beyond logging so the row layout is testable in isolation.
-        console.log('[MobileNoteAssist] ruby placeholder');
+        if (isRubyPopoverShown()) {
+          hideRubyPopover();
+        } else {
+          handleRubyClick();
+        }
       } else {
         applyWrap(btn.tag);
       }
@@ -597,8 +699,18 @@ function buildColorRow(): HTMLElement {
   text.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
+    // Same-button toggle: close instead of re-opening when the
+    // picker is already showing for this control.
+    if (isColorPickerShown() && getColorPickerTarget() === 'text') {
+      hideColorPicker();
+      return;
+    }
     showColorPicker('text', color => {
-      applySpanStyle('color', color);
+      if (color) {
+        applySpanStyle('color', color);
+      } else {
+        removeSpanStyle('color');
+      }
     });
   });
 
@@ -609,7 +721,9 @@ function buildColorRow(): HTMLElement {
   stroke.setAttribute('aria-label', 'Pick stroke (outline) color');
   const strokeLabel = document.createElement('span');
   strokeLabel.className = 'dmna-style-color-label';
-  strokeLabel.textContent = 'Stroke';
+  // Abbreviated to fit alongside the swatch in the 3-col row — the
+  // full word "Stroke" pushed the swatch out of the button.
+  strokeLabel.textContent = 'Strk';
   const strokeSwatch = document.createElement('span');
   strokeSwatch.className =
     'dmna-style-color-swatch dmna-style-color-transparent';
@@ -619,6 +733,10 @@ function buildColorRow(): HTMLElement {
   stroke.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
+    if (isStrokePickerShown()) {
+      hideStrokePicker();
+      return;
+    }
     showStrokePicker(textShadow => {
       // Empty string from the picker = the user picked "Remove stroke"
       // (or no sides were checked). Translate to a property removal.
@@ -646,8 +764,16 @@ function buildColorRow(): HTMLElement {
   bg.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
+    if (isColorPickerShown() && getColorPickerTarget() === 'bg') {
+      hideColorPicker();
+      return;
+    }
     showColorPicker('bg', color => {
-      applySpanStyle('background-color', color);
+      if (color) {
+        applySpanStyle('background-color', color);
+      } else {
+        removeSpanStyle('background-color');
+      }
     });
   });
 
@@ -659,16 +785,11 @@ function buildColorRow(): HTMLElement {
 
 function buildSelectControl(
   control: string,
-  placeholder: string,
   options: ReadonlyArray<SelectOption>,
 ): HTMLSelectElement {
   const select = document.createElement('select');
   select.className = 'dmna-style-select';
   select.dataset.control = control;
-  const placeholderOpt = document.createElement('option');
-  placeholderOpt.textContent = placeholder;
-  placeholderOpt.value = '';
-  select.appendChild(placeholderOpt);
   for (const opt of options) {
     const o = document.createElement('option');
     o.textContent = opt.label;
@@ -678,40 +799,71 @@ function buildSelectControl(
     }
     select.appendChild(o);
   }
+  // No placeholder option and no post-change reset — the dropdown is
+  // a persistent reflection of the current applied style. The default
+  // value falls out of the option list itself (Size's "Normal"
+  // sentinel sits at index 2; Font's leading empty option at index 0).
+  // refreshStylePopoverState re-syncs the selected option to match
+  // the textarea's current selection.
   select.addEventListener('change', () => {
     handleSelectChange(control, select.value);
-    // One-shot pattern: snap the dropdown back to the placeholder so
-    // re-selecting the same value re-fires, and so the control reads
-    // as a "do this" command rather than a persistent state UI.
-    select.value = '';
     refreshStylePopoverState();
+  });
+  // The native dropdown popup blurs the textarea while it's open, so
+  // the visual selection highlight disappears. Restoring on `blur`
+  // (rather than only on `change`) covers the case where the user
+  // opens the dropdown and dismisses it without picking a different
+  // option — `change` doesn't fire then.
+  select.addEventListener('blur', () => {
+    const ta = getPopoverInputElement();
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(ta.selectionStart, ta.selectionEnd);
+    }
   });
   return select;
 }
 
 /**
  * Routes a dropdown change into the span apply / remove helpers.
- * `value` may be the empty string (placeholder — no-op), the literal
- * `'normal'` for Size's revert-to-default sentinel, or a CSS value
- * string for the relevant property.
+ * Size: `'normal'` removes the `font-size` property (default); any
+ * other value applies it. Font: empty string removes the
+ * `font-family` property (the leading empty option doubles as "no
+ * font set"); any other value applies it.
  */
 function handleSelectChange(control: string, value: string): void {
-  if (!value) return;
   if (control === 'size') {
     if (value === 'normal') {
       removeSpanStyle('font-size');
-    } else {
+    } else if (value) {
       applySpanStyle('font-size', value);
     }
   } else if (control === 'font') {
-    applySpanStyle('font-family', value);
+    if (value) {
+      applySpanStyle('font-family', value);
+    } else {
+      removeSpanStyle('font-family');
+    }
   }
 }
 
-function buildSelectRow(...controls: HTMLSelectElement[]): HTMLElement {
+/**
+ * Single-dropdown row with a left-side inline label. The label is
+ * the only persistent indicator of what this control is — the
+ * dropdown itself now shows the currently applied value (Normal /
+ * +1 / comic / …) rather than a "Size" / "Font" placeholder.
+ */
+function buildLabeledSelectRow(
+  label: string,
+  control: HTMLSelectElement,
+): HTMLElement {
   const row = document.createElement('div');
-  row.className = `dmna-style-row dmna-style-row-${controls.length}`;
-  controls.forEach(c => row.appendChild(c));
+  row.className = 'dmna-style-labeled-select-row';
+  const lab = document.createElement('span');
+  lab.className = 'dmna-style-select-label';
+  lab.textContent = label;
+  row.appendChild(lab);
+  row.appendChild(control);
   return row;
 }
 
@@ -738,10 +890,10 @@ export function createStylePopover(): void {
   inner.appendChild(buildTagRow(ROW_4_BUTTONS));
   inner.appendChild(buildColorRow());
   inner.appendChild(
-    buildSelectRow(buildSelectControl('size', 'Size', SIZE_OPTIONS)),
+    buildLabeledSelectRow('Size', buildSelectControl('size', SIZE_OPTIONS)),
   );
   inner.appendChild(
-    buildSelectRow(buildSelectControl('font', 'Font', FONT_OPTIONS)),
+    buildLabeledSelectRow('Font', buildSelectControl('font', FONT_OPTIONS)),
   );
 
   root.appendChild(inner);
@@ -764,6 +916,23 @@ export function createStylePopover(): void {
  */
 export function refreshStylePopoverState(): void {
   if (!stylePopoverElement) return;
+  // Preview mode: every control is disabled and any active highlight
+  // is dropped. The popover stays visible (no `hideStylePopover` here)
+  // so its content doesn't pop in and out as the user toggles between
+  // Edit and Preview — only the interactivity is suppressed.
+  if (getIsPreviewMode()) {
+    stylePopoverElement
+      .querySelectorAll<
+        HTMLButtonElement | HTMLSelectElement
+      >('.dmna-style-btn, .dmna-style-select')
+      .forEach(el => {
+        el.disabled = true;
+      });
+    stylePopoverElement
+      .querySelectorAll('.is-active')
+      .forEach(el => el.classList.remove('is-active'));
+    return;
+  }
   const ta = getPopoverInputElement();
   const hasSelection =
     !!ta && ta.selectionStart !== ta.selectionEnd && !ta.disabled;
@@ -845,6 +1014,45 @@ export function refreshStylePopoverState(): void {
       strokeSwatch.style.background = '';
       strokeSwatch.classList.add('dmna-style-color-transparent');
     }
+  }
+
+  // Highlight Text / Stroke / BG color buttons when the matching
+  // property is set on the outer span — same is-active treatment as
+  // the tag buttons so the user can see at a glance what's applied.
+  stylePopoverElement
+    .querySelector('.dmna-style-color-text')
+    ?.classList.toggle('is-active', spanProps.has('color'));
+  stylePopoverElement
+    .querySelector('.dmna-style-color-stroke')
+    ?.classList.toggle('is-active', spanProps.has('text-shadow'));
+  stylePopoverElement
+    .querySelector('.dmna-style-color-bg')
+    ?.classList.toggle('is-active', spanProps.has('background-color'));
+
+  // Sync the Size / Font dropdowns to the current selection. Both
+  // controls are now persistent (no placeholder, no one-shot reset),
+  // so the selected option always reflects the applied style. Size
+  // defaults to 'normal' (no font-size set); Font defaults to the
+  // empty leading option (no font-family set).
+  const sizeSelect = stylePopoverElement.querySelector<HTMLSelectElement>(
+    '.dmna-style-select[data-control="size"]',
+  );
+  if (sizeSelect) {
+    const fontSize = spanProps.get('font-size');
+    const match = fontSize
+      ? SIZE_OPTIONS.find(o => o.value === fontSize)
+      : undefined;
+    sizeSelect.value = match ? match.value : 'normal';
+  }
+  const fontSelect = stylePopoverElement.querySelector<HTMLSelectElement>(
+    '.dmna-style-select[data-control="font"]',
+  );
+  if (fontSelect) {
+    const fontFamily = spanProps.get('font-family');
+    const match = fontFamily
+      ? FONT_OPTIONS.find(o => o.value === fontFamily)
+      : undefined;
+    fontSelect.value = match ? match.value : '';
   }
 }
 

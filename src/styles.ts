@@ -443,15 +443,29 @@ export const STYLES = `
          and the user gets a taller writing area for free. */
       min-height: 36px;
     }
+    /* Generic press feedback for side-stack buttons (covers Aa; the
+       eye and undo IDs below override with their own variants).
+       Uses the popover's blue accent rather than a white tint so the
+       white "Aa" / "↶" glyphs stay legible at peak press. */
+    .dmna-popover-side-btn:active {
+      background: rgba(74, 158, 255, 0.26);
+    }
+    /* Hover / press text-color shift for the white-glyph side buttons
+       (Aa / ↶). 👁 is an emoji and ignores color; undo's highlighted
+       state has its own hue rule (specificity wins below). */
+    .dmna-popover-side-btn:hover,
+    .dmna-popover-side-btn:active {
+      color: #1a1a1a;
+    }
     /* Eye uses pointer events for press-and-hold, so it overrides
        touch-action to disable scroll/zoom while held. */
     #dmna-popover-eye { touch-action: none; }
     #dmna-popover-eye:active,
     #dmna-popover-eye.is-pressed {
-      background: rgba(255, 255, 255, 0.22);
+      background: rgba(74, 158, 255, 0.30);
     }
     #dmna-popover-undo:active {
-      background: rgba(255, 255, 255, 0.22);
+      background: rgba(74, 158, 255, 0.30);
     }
     /* Disabled state for the popover's interactive controls — used when
        the active note is soft-deleted, leaving only ↶ (highlighted) live. */
@@ -496,7 +510,7 @@ export const STYLES = `
       touch-action: manipulation;
     }
     .dmna-popover-btn:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     /* Light/white character color for ✔ / ✖ (text-glyph presentation
        forced via VS-15 in createPopover). 🗑 ignores this — it renders
@@ -519,6 +533,16 @@ export const STYLES = `
       pointer-events: none;
     }
     .dmna-popover-btn[data-action="delete"] { color: #ff8b8b; }
+    /* Hover / press text-color shift for the all-white glyphs (✔ / ✖)
+       so they stay legible when the background lifts. 🗑 / 📜 are
+       emoji and ignore the color property; delete's red and undo's
+       highlighted orange keep their per-state hues. */
+    .dmna-popover-btn[data-action="confirm"]:hover,
+    .dmna-popover-btn[data-action="confirm"]:active,
+    .dmna-popover-btn[data-action="cancel"]:hover,
+    .dmna-popover-btn[data-action="cancel"]:active {
+      color: #1a1a1a;
+    }
 
     /* Phase 4 (D11): Confirm in-flight UI lock. Pointer events off on
        boxes + popover + floating button so any stray tap/drag is a
@@ -703,7 +727,7 @@ export const STYLES = `
       touch-action: manipulation;
     }
     .dmna-tag-popover-btn:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     /* Primary action (Submit) — Danbooru convention: primary first. */
     .dmna-tag-popover-btn[data-action="submit"] {
@@ -792,7 +816,7 @@ export const STYLES = `
       touch-action: manipulation;
     }
     .dmna-error-modal-btn:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     .dmna-error-modal-btn[data-action="retry"] {
       border-color: rgba(0, 115, 255, 0.6);
@@ -936,8 +960,14 @@ export const STYLES = `
       min-width: 0;
       box-sizing: border-box;
     }
-    .dmna-style-btn:hover { background: rgba(255, 255, 255, 0.20); }
-    .dmna-style-btn:active { background: rgba(255, 255, 255, 0.28); }
+    /* Hover / press feedback uses the popover's blue accent rather
+       than a white tint. White text glyphs (B/I/U/S/sub/sup) wash out
+       against a bright white-tint bg; the blue family keeps contrast
+       intact AND ties the press feedback to the same accent color used
+       for .is-active highlights, .dmna-popover-help-link, and the link
+       button. */
+    .dmna-style-btn:hover { background: rgba(74, 158, 255, 0.18); }
+    .dmna-style-btn:active { background: rgba(74, 158, 255, 0.40); }
     .dmna-style-btn:disabled,
     .dmna-style-select:disabled {
       opacity: 0.4;
@@ -956,6 +986,32 @@ export const STYLES = `
     }
     .dmna-style-btn.is-active:hover {
       background: rgba(74, 158, 255, 0.36);
+    }
+    /* Hover / press lift the background bright enough that the all-
+       white glyph buttons (B / I / U / S / sub / sup) can wash out.
+       Swap their text to dark on those transient states so the
+       affordance stays legible across hover (PC) and press (mobile +
+       PC). Colored siblings (tn / code / a / ruby) keep their hue
+       because these rules don't touch the color property on them. */
+    .dmna-style-btn-bold:hover,
+    .dmna-style-btn-bold:active,
+    .dmna-style-btn-italic:hover,
+    .dmna-style-btn-italic:active,
+    .dmna-style-btn-underline:hover,
+    .dmna-style-btn-underline:active,
+    .dmna-style-btn-strike:hover,
+    .dmna-style-btn-strike:active,
+    .dmna-style-btn-sub:hover,
+    .dmna-style-btn-sub:active,
+    .dmna-style-btn-sup:hover,
+    .dmna-style-btn-sup:active,
+    .dmna-style-color-text:hover,
+    .dmna-style-color-text:active,
+    .dmna-style-color-stroke:hover,
+    .dmna-style-color-stroke:active,
+    .dmna-style-color-bg:hover,
+    .dmna-style-color-bg:active {
+      color: #1a1a1a;
     }
     /* Per-tag preview rendering — each button styles its glyph the
        way the tag would render so the user knows the effect before
@@ -1053,6 +1109,22 @@ export const STYLES = `
       background-repeat: no-repeat;
     }
     .dmna-style-select:hover { background-color: rgba(255, 255, 255, 0.20); }
+    /* Labeled select row — small inline label on the left ("Size" /
+       "Font") plus the dropdown on the right. The dropdown now
+       reflects the currently applied value rather than a placeholder,
+       so the label is the only persistent cue for what the menu is. */
+    .dmna-style-labeled-select-row {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .dmna-style-select-label {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: 500;
+      user-select: none;
+    }
 
     /* Link sub-popover (Phase 5, v4.2) — inline modal mounted as a
        child of #dmna-popover so it inherits the popover's transform/
@@ -1132,7 +1204,7 @@ export const STYLES = `
       box-sizing: border-box;
     }
     #dmna-link-modal-confirm:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
 
     /* Color picker (Phase 5, v4.2) — inline modal mounted as a child
@@ -1198,6 +1270,19 @@ export const STYLES = `
     .dmna-color-swatch:active {
       transform: scale(0.92);
     }
+    /* Transparent swatch — diagonal red slash on a transparent ground,
+       matching the style popover's color-row button. Used as the
+       "remove this property" swatch in the BG and Stroke pickers. */
+    .dmna-color-swatch-transparent {
+      background:
+        linear-gradient(
+          to top right,
+          transparent 47%,
+          rgba(255, 80, 80, 0.85) 47%,
+          rgba(255, 80, 80, 0.85) 53%,
+          transparent 53%
+        ) !important;
+    }
     #dmna-color-input-row {
       display: grid;
       grid-template-columns: 1fr 40px;
@@ -1239,7 +1324,7 @@ export const STYLES = `
       box-sizing: border-box;
     }
     #dmna-color-apply:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     #dmna-color-apply:disabled {
       opacity: 0.4;
@@ -1334,7 +1419,7 @@ export const STYLES = `
       box-sizing: border-box;
     }
     #dmna-stroke-apply:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     #dmna-stroke-apply:disabled {
       opacity: 0.4;
@@ -1439,5 +1524,85 @@ export const STYLES = `
       text-decoration: underline;
       text-underline-offset: 2px;
       color: rgba(255, 150, 150, 0.95);
+    }
+
+    /* Ruby modal (Phase 5, v4.2) — inline modal mounted as a child of
+       #dmna-popover, mirroring link-popover layout (single-line input
+       + ✔ Apply button). Collects the reading text (furigana /
+       pronunciation gloss) used inside the <rt> annotation. z-index
+       5/6 places it above stroke (3/4) and color (3/4); pickers are
+       mutually exclusive in practice so the stacking just keeps the
+       ordering unambiguous. */
+    #dmna-ruby-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 5;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-ruby-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-ruby-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 10px;
+      z-index: 6;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-ruby-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-ruby-modal-input {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-size: 13px;
+      font-family: inherit;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-ruby-modal-input:focus {
+      border-color: #0073ff;
+    }
+    #dmna-ruby-modal-confirm {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-ruby-modal-confirm:active {
+      background: rgba(74, 158, 255, 0.36);
     }
   `;

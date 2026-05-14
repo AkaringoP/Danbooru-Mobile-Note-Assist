@@ -1,52 +1,38 @@
 /**
- * Link sub-popover — inline modal layered above the note popover that
- * collects a URL for an `<a href="…">` wrap around the textarea's
- * current selection. Triggered from the style sub-popover's `<a>`
- * button when the selection is not already wrapped in `<a>`.
+ * Ruby sub-popover — inline modal layered above the note popover that
+ * collects a reading (furigana / pronunciation gloss) for a
+ * `<ruby>{base}<rt>{reading}</rt></ruby>` wrap around the textarea's
+ * current selection. Triggered from the style sub-popover's `ruby`
+ * button when the selection is not already wrapped in `<ruby>`.
  *
- * Layer 3 (ui). Mounted as a child of `#dmna-popover` so it inherits
- * the popover's transform/scale automatically; the dim overlay covers
- * the note popover area only, not the full viewport.
+ * Layer 3 (ui). Mirrors the link-popover pattern (DOM child of
+ * `#dmna-popover` so it inherits the popover's transform/scale; dim
+ * overlay covers the note popover area only). Same outside-tap close +
+ * keyboard-mitigation focus rules apply.
  *
- * Behavior:
- *   - Open: focus the URL input synchronously inside the triggering
- *     click handler so iOS Safari keeps the on-screen keyboard up
- *     across the textarea → URL input transition.
- *   - Confirm: normalize the URL (trim + strip the internal
- *     `https://danbooru.donmai.us` prefix so internal posts become
- *     relative paths) and hand it back via the onConfirm callback;
- *     the caller restores the textarea selection and wraps the
- *     selected text.
- *   - Cancel (outside tap / empty URL Confirm): hide without firing
- *     the callback; the textarea is re-focused so the keyboard stays
- *     up and the captured selection remains usable.
- *
- * Danbooru sanitizer note: NoteSanitizer accepts only `href` on `<a>`
- * (target / rel are stripped) and the server auto-injects
- * `rel="external noreferrer nofollow"` on save, so this module only
- * needs to deal with the href value.
+ * Active-state contract: callers set the post-Confirm textarea
+ * selection to `{base}<rt>{reading}</rt>` (the entire content of the
+ * `<ruby>` element). That keeps the outer `<ruby>` immediately around
+ * the live selection, so `detectOuterLayers` recognizes it and the
+ * ruby button lights up `is-active`. It also lets the user pile other
+ * style tags (B/I/U, color span, …) on top via the same applyWrap /
+ * applySpanStyle paths used for any other selection.
  */
 
 import {hideColorPicker} from './color-picker';
+import {hideLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
-import {hideRubyPopover} from './ruby-popover';
 import {hideStrokePicker} from './stroke-picker';
 
 let modalElement: HTMLElement | null = null;
 let overlayElement: HTMLElement | null = null;
-let urlInput: HTMLInputElement | null = null;
-let onConfirmCallback: ((url: string) => void) | null = null;
+let readingInput: HTMLInputElement | null = null;
+let onConfirmCallback: ((reading: string) => void) | null = null;
 let isShown = false;
 // Paired with onOutsideClick — see color-picker.ts for the rationale.
 let suppressNextClick = false;
 
-const DANBOORU_HOST_RE = /^https?:\/\/danbooru\.donmai\.us/i;
-
-function normalizeUrl(input: string): string {
-  return input.trim().replace(DANBOORU_HOST_RE, '');
-}
-
-export function hideLinkPopover(): void {
+export function hideRubyPopover(): void {
   if (!modalElement || !overlayElement) return;
   modalElement.classList.remove('show');
   overlayElement.classList.remove('show');
@@ -62,24 +48,24 @@ function restoreTextareaSelection(): void {
 }
 
 function handleConfirm(): void {
-  if (!urlInput) return;
-  const url = normalizeUrl(urlInput.value);
+  if (!readingInput) return;
+  const reading = readingInput.value.trim();
   const callback = onConfirmCallback;
-  hideLinkPopover();
-  if (url && callback) {
-    callback(url);
+  hideRubyPopover();
+  if (reading && callback) {
+    callback(reading);
   } else {
     restoreTextareaSelection();
   }
 }
 
 function handleCancel(): void {
-  hideLinkPopover();
+  hideRubyPopover();
   restoreTextareaSelection();
 }
 
 /**
- * Document-level pointerdown handler — closes the link popover when
+ * Document-level pointerdown handler — closes the ruby popover when
  * the tap lands outside its modal. Taps that fall outside both the
  * note popover and the style popover have their propagation
  * suppressed so the page-level "dismiss active note" path can't
@@ -90,10 +76,12 @@ function onOutsideTap(e: PointerEvent): void {
   const target = e.target as Element | null;
   if (!target) return;
   if (modalElement.contains(target)) return;
-  if (target.closest('.dmna-style-btn-link')) {
+  // Tap on the ruby button itself — defer to the button's click
+  // handler so its same-button toggle path (close vs. re-open) wins.
+  if (target.closest('.dmna-style-btn-ruby')) {
     return;
   }
-  hideLinkPopover();
+  hideRubyPopover();
   restoreTextareaSelection();
   const notePop = document.getElementById('dmna-popover');
   const stylePop = document.getElementById('dmna-style-popover');
@@ -113,7 +101,7 @@ function onOutsideClick(e: MouseEvent): void {
   e.stopPropagation();
 }
 
-export function createLinkPopover(): void {
+export function createRubyPopover(): void {
   if (modalElement && overlayElement) {
     return;
   }
@@ -123,11 +111,8 @@ export function createLinkPopover(): void {
   }
 
   const overlay = document.createElement('div');
-  overlay.id = 'dmna-link-overlay';
+  overlay.id = 'dmna-ruby-overlay';
   overlay.addEventListener('mousedown', e => {
-    // Stop bubbling past #dmna-popover so an outside-tap listener
-    // higher up doesn't read the overlay tap as a tap outside the
-    // note popover and close it.
     e.preventDefault();
     e.stopPropagation();
   });
@@ -138,16 +123,22 @@ export function createLinkPopover(): void {
   });
 
   const modal = document.createElement('div');
-  modal.id = 'dmna-link-modal';
+  modal.id = 'dmna-ruby-modal';
 
   const input = document.createElement('input');
-  input.type = 'url';
-  input.id = 'dmna-link-modal-input';
-  input.placeholder = 'Paste link URL';
+  input.type = 'text';
+  input.id = 'dmna-ruby-modal-input';
+  input.placeholder = 'Reading (furigana)';
   input.autocomplete = 'off';
   input.spellcheck = false;
   input.addEventListener('keydown', e => {
-    // e.isComposing: see ruby-popover.ts for the IME-leak rationale.
+    // `e.isComposing` guards IME composition: when a Korean / Japanese
+    // / Chinese IME is mid-composition, the first Enter is the user
+    // asking the IME to commit the candidate — not asking us to
+    // submit. Firing handleConfirm here would close the modal while
+    // the IME still has an uncommitted composition; the IME then
+    // commits onto the now-focused textarea and the trailing Enter
+    // adds a newline there, corrupting the wrap output.
     if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
       e.stopPropagation();
@@ -158,9 +149,9 @@ export function createLinkPopover(): void {
 
   const confirmBtn = document.createElement('button');
   confirmBtn.type = 'button';
-  confirmBtn.id = 'dmna-link-modal-confirm';
+  confirmBtn.id = 'dmna-ruby-modal-confirm';
   confirmBtn.textContent = '✔';
-  confirmBtn.setAttribute('aria-label', 'Confirm link');
+  confirmBtn.setAttribute('aria-label', 'Confirm reading');
   confirmBtn.addEventListener('mousedown', e => e.preventDefault());
   confirmBtn.addEventListener('click', e => {
     e.preventDefault();
@@ -174,7 +165,7 @@ export function createLinkPopover(): void {
 
   overlayElement = overlay;
   modalElement = modal;
-  urlInput = input;
+  readingInput = input;
 
   document.addEventListener('pointerdown', onOutsideTap, true);
   document.addEventListener('click', onOutsideClick, true);
@@ -182,25 +173,25 @@ export function createLinkPopover(): void {
 
 /**
  * Open the modal and hand future Confirm results to `onConfirm`. The
- * `urlInput.focus()` call below MUST run synchronously inside the
+ * `readingInput.focus()` call below MUST run synchronously inside the
  * caller's user-gesture chain (i.e. caller is itself a click handler);
  * otherwise iOS Safari treats the focus as programmatic and refuses
  * to surface the on-screen keyboard.
  */
-export function showLinkPopover(onConfirm: (url: string) => void): void {
+export function showRubyPopover(onConfirm: (reading: string) => void): void {
   hideColorPicker();
+  hideLinkPopover();
   hideStrokePicker();
-  hideRubyPopover();
-  createLinkPopover();
-  if (!modalElement || !overlayElement || !urlInput) return;
-  urlInput.value = '';
+  createRubyPopover();
+  if (!modalElement || !overlayElement || !readingInput) return;
+  readingInput.value = '';
   onConfirmCallback = onConfirm;
   overlayElement.classList.add('show');
   modalElement.classList.add('show');
   isShown = true;
-  urlInput.focus();
+  readingInput.focus();
 }
 
-export function isLinkPopoverShown(): boolean {
+export function isRubyPopoverShown(): boolean {
   return isShown;
 }

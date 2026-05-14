@@ -83,6 +83,16 @@ let popoverPreviewElement: HTMLElement | null = null;
 let popoverModeToggleElement: HTMLButtonElement | null = null;
 let popoverStyleToggleElement: HTMLButtonElement | null = null;
 let isPreviewMode = false;
+
+/**
+ * Whether the popover is currently in Preview mode (sanitized HTML
+ * shown in place of the textarea). Used by `style-popover` to disable
+ * all of its controls while preview is active — style markup edits
+ * make no sense when the user isn't looking at the raw textarea.
+ */
+export function getIsPreviewMode(): boolean {
+  return isPreviewMode;
+}
 let previewRequestId = 0;
 
 /**
@@ -709,6 +719,9 @@ async function handleModeToggle(): Promise<void> {
     popoverPreviewElement.style.display = 'block';
     isPreviewMode = true;
     popoverModeToggleElement.textContent = '✎ Edit';
+    // Disable every control in the style sub-popover — markup edits
+    // are meaningless while the user is viewing the rendered preview.
+    refreshStylePopoverState();
   } catch (err) {
     if (myReq === previewRequestId) {
       showToast('⚠️ Preview failed', 'error', err);
@@ -735,6 +748,9 @@ function enterEditMode(): void {
   popoverModeToggleElement.textContent = '👁 Preview';
   popoverModeToggleElement.disabled = false;
   isPreviewMode = false;
+  // Re-enable the style sub-popover's controls now that we're back
+  // on the editable textarea.
+  refreshStylePopoverState();
 }
 
 /**

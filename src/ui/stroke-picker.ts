@@ -25,7 +25,10 @@
  * `text-shadow` value.
  */
 
+import {hideColorPicker} from './color-picker';
+import {hideLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
+import {hideRubyPopover} from './ruby-popover';
 
 const SWATCHES: ReadonlyArray<string> = [
   '#000000',
@@ -64,6 +67,8 @@ let onConfirmCallback: ((textShadow: string) => void) | null = null;
 let isShown = false;
 let isAdvancedOpen = false;
 let selectedThickness: Thickness = 1;
+// Paired with onOutsideClick — see color-picker.ts for the rationale.
+let suppressNextClick = false;
 
 function normalizeHex(input: string): string | null {
   const trimmed = input.trim();
@@ -135,7 +140,7 @@ function resetState(): void {
   }
 }
 
-function hideStrokePicker(): void {
+export function hideStrokePicker(): void {
   if (!modalElement || !overlayElement) return;
   modalElement.classList.remove('show');
   overlayElement.classList.remove('show');
@@ -150,10 +155,9 @@ function commitStroke(color: string): void {
   if (callback && shadow) {
     callback(shadow);
   } else {
-    // Empty shadow (no sides checked) or no callback — fall back to
-    // a textarea refocus so the keyboard chain isn't broken.
-    const ta = getPopoverInputElement();
-    if (ta) ta.focus();
+    // Empty shadow (no sides checked) or no callback — restore the
+    // textarea selection so the highlight reappears.
+    restoreTextareaSelection();
   }
 }
 
@@ -163,15 +167,59 @@ function commitRemove(): void {
   if (callback) {
     callback('');
   } else {
-    const ta = getPopoverInputElement();
-    if (ta) ta.focus();
+    restoreTextareaSelection();
   }
+}
+
+function restoreTextareaSelection(): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  ta.focus();
+  ta.setSelectionRange(ta.selectionStart, ta.selectionEnd);
 }
 
 function handleCancel(): void {
   hideStrokePicker();
-  const ta = getPopoverInputElement();
-  if (ta) ta.focus();
+  restoreTextareaSelection();
+}
+
+/**
+ * Document-level pointerdown handler — closes the stroke picker
+ * when the tap lands outside its modal. Taps that fall outside both
+ * the note popover and the style popover have their propagation
+ * suppressed so the page-level "dismiss active note" path can't
+ * piggy-back on the same tap and close the note popover too.
+ */
+function onOutsideTap(e: PointerEvent): void {
+  if (!isShown || !modalElement) return;
+  const target = e.target as Element | null;
+  if (!target) return;
+  if (modalElement.contains(target)) return;
+  if (
+    target.closest(
+      '.dmna-style-color-text, .dmna-style-color-stroke, .dmna-style-color-bg',
+    )
+  ) {
+    return;
+  }
+  hideStrokePicker();
+  restoreTextareaSelection();
+  const notePop = document.getElementById('dmna-popover');
+  const stylePop = document.getElementById('dmna-style-popover');
+  const inNote = !!notePop?.contains(target);
+  const inStyle = !!stylePop?.contains(target);
+  if (!inNote && !inStyle) {
+    e.preventDefault();
+    e.stopPropagation();
+    suppressNextClick = true;
+  }
+}
+
+function onOutsideClick(e: MouseEvent): void {
+  if (!suppressNextClick) return;
+  suppressNextClick = false;
+  e.preventDefault();
+  e.stopPropagation();
 }
 
 function handleHexApply(): void {
@@ -188,7 +236,13 @@ export function createStrokePicker(): void {
 
   const overlay = document.createElement('div');
   overlay.id = 'dmna-stroke-overlay';
-  overlay.addEventListener('mousedown', e => e.preventDefault());
+  overlay.addEventListener('mousedown', e => {
+    // Stop bubbling past #dmna-popover so an outside-tap listener
+    // higher up doesn't read the overlay tap as a tap outside the
+    // note popover and close it.
+    e.preventDefault();
+    e.stopPropagation();
+  });
   overlay.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -198,9 +252,24 @@ export function createStrokePicker(): void {
   const modal = document.createElement('div');
   modal.id = 'dmna-stroke-modal';
 
-  // Swatch grid (14 colors, same palette as color-picker — D14).
+  // Swatch grid: leading transparent tile (= Remove stroke, mirrors
+  // the BG picker pattern) + 14-color palette (D14).
   const grid = document.createElement('div');
   grid.id = 'dmna-stroke-swatches';
+
+  const transparent = document.createElement('button');
+  transparent.type = 'button';
+  transparent.className = 'dmna-color-swatch dmna-color-swatch-transparent';
+  transparent.dataset.color = 'transparent';
+  transparent.setAttribute('aria-label', 'Remove stroke');
+  transparent.addEventListener('mousedown', e => e.preventDefault());
+  transparent.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    commitRemove();
+  });
+  grid.appendChild(transparent);
+
   for (const hex of SWATCHES) {
     const sw = document.createElement('button');
     sw.type = 'button';
@@ -230,8 +299,10 @@ export function createStrokePicker(): void {
   input.maxLength = 7;
   input.addEventListener('input', refreshApplyState);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
+    // e.isComposing: see ruby-popover.ts for the IME-leak rationale.
+    if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
+      e.stopPropagation();
       handleHexApply();
     }
   });
@@ -348,6 +419,9 @@ export function createStrokePicker(): void {
 
   setThickness(1);
   setAdvancedOpen(false);
+
+  document.addEventListener('pointerdown', onOutsideTap, true);
+  document.addEventListener('click', onOutsideClick, true);
 }
 
 /**
@@ -359,6 +433,9 @@ export function createStrokePicker(): void {
 export function showStrokePicker(
   onConfirm: (textShadow: string) => void,
 ): void {
+  hideColorPicker();
+  hideLinkPopover();
+  hideRubyPopover();
   createStrokePicker();
   if (!modalElement || !overlayElement || !hexInput) return;
   resetState();
