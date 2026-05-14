@@ -971,6 +971,23 @@ export const STYLES = `
       color: #4a9eff;
       text-decoration: underline;
     }
+    /* sub / sup / code / ruby — Phase 5 v4.2 additions. The label
+       itself ("sub", "sup", etc.) carries the meaning; the styling
+       below just adds a subtle visual cue so the buttons don't read
+       as a wall of identical chips. */
+    .dmna-style-btn-sub,
+    .dmna-style-btn-sup {
+      font-size: 14px;
+    }
+    .dmna-style-btn-code {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 16px;
+      color: rgba(255, 200, 130, 0.95);
+    }
+    .dmna-style-btn-ruby {
+      font-size: 14px;
+      color: rgba(180, 220, 180, 0.95);
+    }
     /* Color row: button is a label + swatch pair in inline-flex.
        Padding tightens vertically vs tag buttons since two pieces of
        content share the same row. */

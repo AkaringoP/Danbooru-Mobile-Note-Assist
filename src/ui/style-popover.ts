@@ -37,6 +37,7 @@ import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {parseStyleAttr, serializeStyleAttr} from '../utils/style-attr';
+import {showColorPicker} from './color-picker';
 import {showLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
 
@@ -61,11 +62,78 @@ const ROW_1_BUTTONS: StyleTagButton[] = [
   {tag: 'u', label: 'U', className: 'dmna-style-btn-underline'},
 ];
 
-// Row 2: S / tn / a
+// Row 2: S / sub / sup — visual variant (strike, subscript, superscript)
 const ROW_2_BUTTONS: StyleTagButton[] = [
   {tag: 's', label: 'S', className: 'dmna-style-btn-strike'},
+  {tag: 'sub', label: 'sub', className: 'dmna-style-btn-sub'},
+  {tag: 'sup', label: 'sup', className: 'dmna-style-btn-sup'},
+];
+
+// Row 3: tn / code — semantic, simple wrap
+const ROW_3_BUTTONS: StyleTagButton[] = [
   {tag: 'tn', label: 'tn', className: 'dmna-style-btn-tn'},
+  {tag: 'code', label: 'code', className: 'dmna-style-btn-code'},
+];
+
+// Row 4: a / ruby — semantic, modal-triggering
+const ROW_4_BUTTONS: StyleTagButton[] = [
   {tag: 'a', label: 'a', className: 'dmna-style-btn-link'},
+  {tag: 'ruby', label: 'ruby', className: 'dmna-style-btn-ruby'},
+];
+
+interface SelectOption {
+  label: string;
+  value: string;
+  /**
+   * Optional inline font-family applied to the `<option>` element so
+   * the dropdown previews the typeface (per D16). Unused on Size
+   * options where the label itself is the visual.
+   */
+  preview?: string;
+}
+
+// Size dropdown options (D15). The sentinel 'normal' value tells the
+// change handler to remove the font-size property rather than apply
+// one, letting the user revert to the textarea's default size from
+// any other choice.
+const SIZE_OPTIONS: ReadonlyArray<SelectOption> = [
+  {label: '−2', value: '70%'},
+  {label: '−1', value: '85%'},
+  {label: 'Normal', value: 'normal'},
+  {label: '+1', value: '125%'},
+  {label: '+2', value: '150%'},
+  {label: '+3', value: '200%'},
+];
+
+// Font dropdown options (D16 + wiki "Fonts" section). Multi-word
+// names are CSS-quoted in `value`; the visible `label` keeps the
+// bare wiki form so the dropdown reads naturally. `preview` is the
+// same string applied as inline font-family on the option so users
+// see the typeface in the dropdown — Danbooru ships these as
+// @font-face on the server, so locally the user sees the OS's
+// fallback, which is exactly how their note will look on devices
+// missing the font.
+const FONT_OPTIONS: ReadonlyArray<SelectOption> = [
+  {label: 'comic', value: 'comic', preview: 'comic'},
+  {label: 'narrow', value: 'narrow', preview: 'narrow'},
+  {label: 'mono', value: 'mono', preview: 'mono'},
+  {label: 'slab sans', value: '"slab sans"', preview: '"slab sans"'},
+  {label: 'slab serif', value: '"slab serif"', preview: '"slab serif"'},
+  {
+    label: 'formal serif',
+    value: '"formal serif"',
+    preview: '"formal serif"',
+  },
+  {
+    label: 'formal cursive',
+    value: '"formal cursive"',
+    preview: '"formal cursive"',
+  },
+  {label: 'print', value: 'print', preview: 'print'},
+  {label: 'hand', value: 'hand', preview: 'hand'},
+  {label: 'childlike', value: 'childlike', preview: 'childlike'},
+  {label: 'blackletter', value: 'blackletter', preview: 'blackletter'},
+  {label: 'scary', value: 'scary', preview: 'scary'},
 ];
 
 let stylePopoverElement: HTMLElement | null = null;
@@ -463,6 +531,11 @@ function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
         applyUnwrap(btn.tag);
       } else if (btn.tag === 'a') {
         handleLinkClick();
+      } else if (btn.tag === 'ruby') {
+        // Task 5.5.5 will wire this into ui/ruby-popover.ts; for now
+        // the button surfaces in the UI but the click is a no-op
+        // beyond logging so the row layout is testable in isolation.
+        console.log('[MobileNoteAssist] ruby placeholder');
       } else {
         applyWrap(btn.tag);
       }
@@ -493,7 +566,9 @@ function buildColorRow(): HTMLElement {
   text.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[MobileNoteAssist] color-text placeholder');
+    showColorPicker('text', color => {
+      applySpanStyle('color', color);
+    });
   });
 
   const bg = document.createElement('button');
@@ -512,7 +587,9 @@ function buildColorRow(): HTMLElement {
   bg.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[MobileNoteAssist] color-bg placeholder');
+    showColorPicker('bg', color => {
+      applySpanStyle('background-color', color);
+    });
   });
 
   row.appendChild(text);
@@ -523,6 +600,7 @@ function buildColorRow(): HTMLElement {
 function buildSelectControl(
   control: string,
   placeholder: string,
+  options: ReadonlyArray<SelectOption>,
 ): HTMLSelectElement {
   const select = document.createElement('select');
   select.className = 'dmna-style-select';
@@ -531,12 +609,43 @@ function buildSelectControl(
   placeholderOpt.textContent = placeholder;
   placeholderOpt.value = '';
   select.appendChild(placeholderOpt);
+  for (const opt of options) {
+    const o = document.createElement('option');
+    o.textContent = opt.label;
+    o.value = opt.value;
+    if (opt.preview) {
+      o.style.fontFamily = opt.preview;
+    }
+    select.appendChild(o);
+  }
   select.addEventListener('change', () => {
-    console.log(
-      `[MobileNoteAssist] style ${control} placeholder: ${select.value}`,
-    );
+    handleSelectChange(control, select.value);
+    // One-shot pattern: snap the dropdown back to the placeholder so
+    // re-selecting the same value re-fires, and so the control reads
+    // as a "do this" command rather than a persistent state UI.
+    select.value = '';
+    refreshStylePopoverState();
   });
   return select;
+}
+
+/**
+ * Routes a dropdown change into the span apply / remove helpers.
+ * `value` may be the empty string (placeholder — no-op), the literal
+ * `'normal'` for Size's revert-to-default sentinel, or a CSS value
+ * string for the relevant property.
+ */
+function handleSelectChange(control: string, value: string): void {
+  if (!value) return;
+  if (control === 'size') {
+    if (value === 'normal') {
+      removeSpanStyle('font-size');
+    } else {
+      applySpanStyle('font-size', value);
+    }
+  } else if (control === 'font') {
+    applySpanStyle('font-family', value);
+  }
 }
 
 function buildSelectRow(...controls: HTMLSelectElement[]): HTMLElement {
@@ -565,14 +674,15 @@ export function createStylePopover(): void {
 
   inner.appendChild(buildTagRow(ROW_1_BUTTONS));
   inner.appendChild(buildTagRow(ROW_2_BUTTONS));
+  inner.appendChild(buildTagRow(ROW_3_BUTTONS));
+  inner.appendChild(buildTagRow(ROW_4_BUTTONS));
   inner.appendChild(buildColorRow());
   inner.appendChild(
-    buildSelectRow(
-      buildSelectControl('size', 'Size'),
-      buildSelectControl('align', 'Align'),
-    ),
+    buildSelectRow(buildSelectControl('size', 'Size', SIZE_OPTIONS)),
   );
-  inner.appendChild(buildSelectRow(buildSelectControl('font', 'Font')));
+  inner.appendChild(
+    buildSelectRow(buildSelectControl('font', 'Font', FONT_OPTIONS)),
+  );
 
   root.appendChild(inner);
   document.body.appendChild(root);
