@@ -131,10 +131,9 @@ export function createPopover(): void {
   arrow.id = 'dmna-popover-arrow';
   root.appendChild(arrow);
 
-  // Header row (Phase 3, v4.2) — currently hosts the Preview/Edit
-  // mode toggle. Click routes through `handleModeToggle`, which
-  // synchronously enters Edit mode or awaits an `apiPreviewNote`
-  // before swapping into Preview mode.
+  // Header row (Phase 3, v4.2) — hosts the Preview/Edit mode toggle
+  // on the left and a "view help" wiki link on the right, mirroring
+  // Danbooru's own Editing-note dialog header.
   const header = document.createElement('div');
   header.id = 'dmna-popover-header';
   const modeToggle = document.createElement('button');
@@ -153,6 +152,16 @@ export function createPopover(): void {
     void handleModeToggle();
   });
   header.appendChild(modeToggle);
+
+  const helpLink = document.createElement('a');
+  helpLink.id = 'dmna-popover-help-link';
+  helpLink.className = 'dmna-popover-help-link';
+  helpLink.href = 'https://danbooru.donmai.us/wiki_pages/help:notes';
+  helpLink.target = '_blank';
+  helpLink.rel = 'noopener noreferrer';
+  helpLink.textContent = 'view help';
+  header.appendChild(helpLink);
+
   root.appendChild(header);
   popoverModeToggleElement = modeToggle;
 

@@ -310,14 +310,17 @@ export const STYLES = `
        help affordance on the right. */
     #dmna-popover-header {
       display: flex;
-      justify-content: flex-start;
+      justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
     }
-    /* Mode toggle styled as an inline link rather than a chip — mirrors
-       Danbooru's own Edit Comment header where "Preview" is a textual
-       affordance with an icon, not a button. (v4.2 Phase 4 visual.) */
-    .dmna-popover-mode-toggle {
+    /* Mode toggle + "view help" wiki link styled as inline text-links
+       rather than chips — mirrors Danbooru's own Editing-note header
+       (Preview affordance on the left, "view help" anchor on the right,
+       both as underlined textual links). The help link is an <a>, not
+       a button, so :disabled handling is mode-toggle-only. */
+    .dmna-popover-mode-toggle,
+    .dmna-popover-help-link {
       background: transparent;
       border: none;
       color: #4a9eff;
@@ -330,7 +333,8 @@ export const STYLES = `
       text-decoration: underline;
       text-underline-offset: 2px;
     }
-    .dmna-popover-mode-toggle:hover {
+    .dmna-popover-mode-toggle:hover,
+    .dmna-popover-help-link:hover {
       color: #6bb6ff;
     }
     .dmna-popover-mode-toggle:disabled {
