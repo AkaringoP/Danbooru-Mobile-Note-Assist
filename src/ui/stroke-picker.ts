@@ -212,6 +212,11 @@ function onOutsideTap(e: PointerEvent): void {
     e.preventDefault();
     e.stopPropagation();
     suppressNextClick = true;
+    // TTL safety net — see color-picker.ts onOutsideTap for details
+    // (Phase 5-h Task 5.27).
+    window.setTimeout(() => {
+      suppressNextClick = false;
+    }, 500);
   }
 }
 
@@ -393,19 +398,6 @@ export function createStrokePicker(): void {
   advanced.appendChild(sidesRow);
 
   modal.appendChild(advanced);
-
-  // Remove link — clears the text-shadow property entirely.
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.id = 'dmna-stroke-remove';
-  remove.textContent = 'Remove stroke';
-  remove.addEventListener('mousedown', e => e.preventDefault());
-  remove.addEventListener('click', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    commitRemove();
-  });
-  modal.appendChild(remove);
 
   host.appendChild(overlay);
   host.appendChild(modal);

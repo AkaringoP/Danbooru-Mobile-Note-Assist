@@ -34,11 +34,7 @@
 
 import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
 import {getOriginalWidth} from '../state/image-state';
-import {
-  getActiveNoteId,
-  notes,
-  pushTextAction,
-} from '../state/notes-store';
+import {getActiveNoteId, notes, pushTextAction} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {parseStyleAttr, serializeStyleAttr} from '../utils/style-attr';
 import {
@@ -47,7 +43,11 @@ import {
   isColorPickerShown,
   showColorPicker,
 } from './color-picker';
-import {showLinkPopover} from './link-popover';
+import {
+  hideLinkPopover,
+  isLinkPopoverShown,
+  showLinkPopover,
+} from './link-popover';
 import {getIsPreviewMode, getPopoverInputElement} from './popover';
 import {
   hideRubyPopover,
@@ -205,8 +205,11 @@ interface OuterLayer {
  * Close tag is required to be the bare `</tag>` form — that's what
  * a balanced wrap produces, and matching arbitrary close variants
  * would let detection drift over malformed input.
+ *
+ * Exported for unit testing (Phase 5-h Task 5.33); module-internal
+ * otherwise.
  */
-function detectOuterLayers(before: string, after: string): OuterLayer[] {
+export function detectOuterLayers(before: string, after: string): OuterLayer[] {
   const layers: OuterLayer[] = [];
   let bLen = before.length;
   let consumedAfter = 0;
@@ -549,10 +552,16 @@ function handleRubyClick(): void {
 function applyRubyWrap(start: number, end: number, reading: string): void {
   const ta = getPopoverInputElement();
   if (!ta) return;
+  // Defense-in-depth: strip HTML-special chars from the user-supplied
+  // reading so it can't break out of `<rt>...</rt>` and inject markup.
+  // Danbooru's NoteSanitizer is the authoritative backstop, but the
+  // client-side filter keeps the request payload always well-formed
+  // (Phase 5-h Task 5.24).
+  const safeReading = reading.replace(/[<>"]/g, '');
   captureUndoSnapshot(ta);
   const open = '<ruby>';
   const close = '</ruby>';
-  const rt = `<rt>${reading}</rt>`;
+  const rt = `<rt>${safeReading}</rt>`;
   const before = ta.value.slice(0, start);
   const selected = ta.value.slice(start, end);
   const after = ta.value.slice(end);
@@ -584,10 +593,12 @@ function applyRubyUnwrap(): void {
   const found = layers.find(l => l.tag === 'ruby');
   if (!found) return;
   captureUndoSnapshot(ta);
-  // Strip the first <rt>...</rt> inside the selection. Multi-rt is
-  // not produced by this UI and parsing arbitrary nested ruby markup
-  // is out of scope — the simple replace covers the common case.
-  const base = selected.replace(/<rt\b[^>]*>[\s\S]*?<\/rt>/i, '');
+  // Strip every <rt>...</rt> inside the selection. Our wrap path only
+  // emits a single rt, but server notes can carry multi-rt markup
+  // (per-character furigana on a multi-character base) — the prior
+  // single-replace would leave the second rt orphaned (Phase 5-h
+  // Task 5.28).
+  const base = selected.replace(/<rt\b[^>]*>[\s\S]*?<\/rt>/gi, '');
   const newBefore =
     before.slice(0, found.openStart) +
     before.slice(found.openStart + found.openLen);
@@ -659,10 +670,13 @@ function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
           applyUnwrap(btn.tag);
         }
       } else if (btn.tag === 'a') {
-        // Same-button toggle: closing the link modal beats reopening
-        // it when the user taps the still-armed `a` button.
-        if (isRubyPopoverShown()) hideRubyPopover();
-        handleLinkClick();
+        // Same-button toggle — re-tap closes the modal instead of
+        // re-opening it. Mirrors the ruby button below.
+        if (isLinkPopoverShown()) {
+          hideLinkPopover();
+        } else {
+          handleLinkClick();
+        }
       } else if (btn.tag === 'ruby') {
         if (isRubyPopoverShown()) {
           hideRubyPopover();
@@ -951,9 +965,20 @@ export function refreshStylePopoverState(): void {
       .forEach(el => el.classList.remove('is-active'));
     // Selection went away (user moved the cursor, deleted the
     // selected text, or moved focus off the textarea) — auto-close
-    // the popover so it doesn't linger as a dead UI panel. Cheap
-    // no-op when the popover wasn't open in the first place.
-    hideStylePopover();
+    // the popover so it doesn't linger as a dead UI panel. Skip the
+    // hide while a sub-modal (color / stroke / link / ruby picker)
+    // is up: those modals steal focus from the textarea, which fires
+    // selectionchange with no live selection and would otherwise
+    // race the picker's own close path and tear the popover out from
+    // under the user's interaction (Phase 5-h Task 5.31).
+    if (
+      !isColorPickerShown() &&
+      !isStrokePickerShown() &&
+      !isLinkPopoverShown() &&
+      !isRubyPopoverShown()
+    ) {
+      hideStylePopover();
+    }
     return;
   }
 

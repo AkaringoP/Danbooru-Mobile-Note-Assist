@@ -1505,26 +1505,6 @@ export const STYLES = `
       cursor: pointer;
       margin: 0;
     }
-    #dmna-stroke-remove {
-      background: transparent;
-      border: none;
-      color: rgba(255, 120, 120, 0.85);
-      font-size: 12px;
-      font-family: inherit;
-      padding: 6px 0 2px;
-      cursor: pointer;
-      user-select: none;
-      touch-action: manipulation;
-      text-decoration: none;
-      margin-top: 8px;
-      text-align: center;
-      width: 100%;
-    }
-    #dmna-stroke-remove:hover {
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      color: rgba(255, 150, 150, 0.95);
-    }
 
     /* Ruby modal (Phase 5, v4.2) — inline modal mounted as a child of
        #dmna-popover, mirroring link-popover layout (single-line input
