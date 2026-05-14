@@ -5,6 +5,13 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.2] - 2026-05-14
+
+Patch release for one mobile-only UX bug surfaced during post-v5.0.1 testing.
+
+### Fixed
+- **Note popover clipped at viewport edge.** When a note box sat near the left or right edge of a narrow screen, the box-centered popover (343 px wide) ran off the side and the leftmost / rightmost toolbar buttons (✖ / 📜) became unreachable. `updatePopoverPosition` now clamps `popVisualLeft` to `[POPOVER_VIEWPORT_PADDING, vvWidth − POPOVER_WIDTH − POPOVER_VIEWPORT_PADDING]` whenever the popover actually fits in the visual viewport. The clamp is intentionally skipped at extreme pinch-zoom (`vvWidth < POPOVER_WIDTH + 2 × PADDING`) — there pinning to the viewport edge would break the box-anchoring illusion entirely, so the v5.0.1 "let it overflow under pinch" behavior is preserved. The mobile-stacked style popover mirrors the same clamp so the two popovers slide together as one column.
+
 ## [5.0.1] - 2026-05-15
 
 Patch release for two mobile-only UX regressions surfaced during post-v5.0.0 testing on real phones, plus a CI tooling change that lets future WIP branches publish to `testbuild` automatically.
