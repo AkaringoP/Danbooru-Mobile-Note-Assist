@@ -1114,4 +1114,115 @@ export const STYLES = `
     #dmna-link-modal-confirm:active {
       background: rgba(255, 255, 255, 0.28);
     }
+
+    /* Color picker (Phase 5, v4.2) — inline modal mounted as a child
+       of #dmna-popover, mirroring the link-popover pattern. 14-swatch
+       grid (7×2) + HEX input row. z-index above the link modal so the
+       two layer cleanly when both are wired (in practice only one is
+       shown at a time — the user picks color OR enters a link, not
+       both in the same gesture). */
+    #dmna-color-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 3;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-color-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-color-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 12px;
+      z-index: 4;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-color-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-color-swatches {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .dmna-color-swatch {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      cursor: pointer;
+      padding: 0;
+      box-sizing: border-box;
+      transition: transform 0.08s ease;
+    }
+    .dmna-color-swatch:hover {
+      transform: scale(1.08);
+      border-color: rgba(255, 255, 255, 0.6);
+    }
+    .dmna-color-swatch:active {
+      transform: scale(0.92);
+    }
+    #dmna-color-input-row {
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+    }
+    #dmna-color-hex {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-color-hex:focus {
+      border-color: #0073ff;
+    }
+    #dmna-color-hex.is-invalid {
+      border-color: #e53935;
+    }
+    #dmna-color-apply {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-color-apply:active {
+      background: rgba(255, 255, 255, 0.28);
+    }
+    #dmna-color-apply:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
   `;
