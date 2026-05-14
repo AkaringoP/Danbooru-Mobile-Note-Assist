@@ -1244,4 +1244,199 @@ export const STYLES = `
       opacity: 0.4;
       cursor: not-allowed;
     }
+
+    /* Stroke picker (Phase 5, v4.2 D19) — same overlay/modal pattern
+       as color-picker plus a collapsible Advanced section for thickness
+       and per-side controls. Swatch tiles reuse .dmna-color-swatch so
+       the two pickers share visual rhythm. */
+    #dmna-stroke-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 3;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-stroke-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-stroke-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 12px;
+      z-index: 4;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+      max-height: calc(100% - 32px);
+      overflow-y: auto;
+    }
+    #dmna-stroke-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-stroke-swatches {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    #dmna-stroke-input-row {
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+      margin-bottom: 8px;
+    }
+    #dmna-stroke-hex {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-stroke-hex:focus {
+      border-color: #0073ff;
+    }
+    #dmna-stroke-hex.is-invalid {
+      border-color: #e53935;
+    }
+    #dmna-stroke-apply {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-stroke-apply:active {
+      background: rgba(255, 255, 255, 0.28);
+    }
+    #dmna-stroke-apply:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    #dmna-stroke-advanced-toggle {
+      background: transparent;
+      border: none;
+      color: #4a9eff;
+      font-size: 13px;
+      font-family: inherit;
+      padding: 4px 0;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      text-decoration: none;
+      width: 100%;
+      text-align: left;
+    }
+    #dmna-stroke-advanced-toggle:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    #dmna-stroke-advanced {
+      display: none;
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    #dmna-stroke-advanced.is-open {
+      display: block;
+    }
+    .dmna-stroke-advanced-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .dmna-stroke-advanced-row:last-child {
+      margin-bottom: 0;
+    }
+    .dmna-stroke-advanced-label {
+      flex: 0 0 70px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .dmna-stroke-thickness-group {
+      display: flex;
+      gap: 4px;
+    }
+    .dmna-stroke-thickness-btn {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .dmna-stroke-thickness-btn.is-active {
+      background: rgba(74, 158, 255, 0.28);
+      border-color: rgba(74, 158, 255, 0.7);
+      color: white;
+    }
+    .dmna-stroke-sides-group {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px 12px;
+      flex: 1;
+    }
+    .dmna-stroke-side-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.85);
+      cursor: pointer;
+      user-select: none;
+    }
+    .dmna-stroke-side-label input[type="checkbox"] {
+      cursor: pointer;
+      margin: 0;
+    }
+    #dmna-stroke-remove {
+      background: transparent;
+      border: none;
+      color: rgba(255, 120, 120, 0.85);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 6px 0 2px;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      text-decoration: none;
+      margin-top: 8px;
+      text-align: center;
+      width: 100%;
+    }
+    #dmna-stroke-remove:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      color: rgba(255, 150, 150, 0.95);
+    }
   `;

@@ -73,6 +73,7 @@ import {
 } from './ui/note-box';
 import {createColorPicker} from './ui/color-picker';
 import {createLinkPopover} from './ui/link-popover';
+import {createStrokePicker} from './ui/stroke-picker';
 import {
   createPopover,
   hidePopover,
@@ -309,6 +310,7 @@ function init(): void {
   createStylePopover();
   createLinkPopover();
   createColorPicker();
+  createStrokePicker();
 
   // 3. Wire the three Hook bags. Must happen before any state mutation
   //    or send-flow trigger — the `hooks!` non-null asserts inside

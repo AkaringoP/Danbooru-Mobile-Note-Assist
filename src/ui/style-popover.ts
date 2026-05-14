@@ -40,6 +40,7 @@ import {parseStyleAttr, serializeStyleAttr} from '../utils/style-attr';
 import {showColorPicker} from './color-picker';
 import {showLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
+import {showStrokePicker} from './stroke-picker';
 
 // Style popover has its own width independent of POPOVER_WIDTH —
 // the note popover grew wider in Phase 4 polish to match action-row
@@ -547,7 +548,7 @@ function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
 
 function buildColorRow(): HTMLElement {
   const row = document.createElement('div');
-  row.className = 'dmna-style-row dmna-style-row-2';
+  row.className = 'dmna-style-row dmna-style-row-3';
 
   const text = document.createElement('button');
   text.type = 'button';
@@ -568,6 +569,34 @@ function buildColorRow(): HTMLElement {
     e.stopPropagation();
     showColorPicker('text', color => {
       applySpanStyle('color', color);
+    });
+  });
+
+  const stroke = document.createElement('button');
+  stroke.type = 'button';
+  stroke.className = 'dmna-style-btn dmna-style-color-stroke';
+  stroke.dataset.control = 'color-stroke';
+  stroke.setAttribute('aria-label', 'Pick stroke (outline) color');
+  const strokeLabel = document.createElement('span');
+  strokeLabel.className = 'dmna-style-color-label';
+  strokeLabel.textContent = 'Stroke';
+  const strokeSwatch = document.createElement('span');
+  strokeSwatch.className =
+    'dmna-style-color-swatch dmna-style-color-transparent';
+  stroke.appendChild(strokeLabel);
+  stroke.appendChild(strokeSwatch);
+  stroke.addEventListener('mousedown', e => e.preventDefault());
+  stroke.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    showStrokePicker(textShadow => {
+      // Empty string from the picker = the user picked "Remove stroke"
+      // (or no sides were checked). Translate to a property removal.
+      if (textShadow) {
+        applySpanStyle('text-shadow', textShadow);
+      } else {
+        removeSpanStyle('text-shadow');
+      }
     });
   });
 
@@ -593,6 +622,7 @@ function buildColorRow(): HTMLElement {
   });
 
   row.appendChild(text);
+  row.appendChild(stroke);
   row.appendChild(bg);
   return row;
 }
@@ -765,6 +795,25 @@ export function refreshStylePopoverState(): void {
     } else {
       bgSwatch.style.background = '';
       bgSwatch.classList.add('dmna-style-color-transparent');
+    }
+  }
+  // Stroke swatch reflects the FIRST hex found in the text-shadow
+  // value — that's the easy 80% case (color picker output always uses
+  // a single color across all shadow segments). Full multi-shadow
+  // parsing (per-side, per-thickness recovery) is v4.3+. Falls back to
+  // the transparent hatch when no text-shadow property is present.
+  const strokeSwatch = stylePopoverElement.querySelector<HTMLElement>(
+    '.dmna-style-color-stroke .dmna-style-color-swatch',
+  );
+  if (strokeSwatch) {
+    const ts = spanProps.get('text-shadow');
+    const match = ts?.match(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/);
+    if (match) {
+      strokeSwatch.style.background = match[0];
+      strokeSwatch.classList.remove('dmna-style-color-transparent');
+    } else {
+      strokeSwatch.style.background = '';
+      strokeSwatch.classList.add('dmna-style-color-transparent');
     }
   }
 }
