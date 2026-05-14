@@ -46,6 +46,7 @@ import {hideLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
 import {hideRubyPopover} from './ruby-popover';
 import {hideStrokePicker} from './stroke-picker';
+import {listenDocumentTap} from '../utils/pointer-tap';
 
 const SWATCHES: ReadonlyArray<string> = [
   '#000000',
@@ -318,10 +319,13 @@ export function createColorPicker(): void {
   hexInput = input;
   applyButton = apply;
 
-  // Capture-phase document listeners — pointerdown closes the picker
-  // and (when the tap is outside both popovers) suppresses the
-  // sibling click via the flag.
-  document.addEventListener('pointerdown', onOutsideTap, true);
+  // Outside-tap dismiss routed through listenDocumentTap so a finger
+  // drift beyond DRAG_THRESHOLD_PX between pointerdown and pointerup
+  // is read as a drag (scroll/swipe) and skips dismissal — same slack
+  // drag-resize allows for click-vs-drag on the image. The companion
+  // click handler still runs in capture so the suppressNextClick flag
+  // can swallow the sibling click after an outside-popover dismiss.
+  listenDocumentTap(onOutsideTap);
   document.addEventListener('click', onOutsideClick, true);
 }
 

@@ -1,14 +1,23 @@
 # Builds the userscript bundle and force-pushes the single artifact
-# to a publish branch. Runs on every main / develop push and is the
-# sole writer for the `build` and `testbuild` branches.
+# to a publish branch. Runs on push to main and on push to any active
+# dev branch (develop, claude/**, feature/**, fix/**, hotfix/**), and
+# is the sole writer for the `build` and `testbuild` branches.
 #
-#   main    → build      (production-mode artifact, the @updateURL target)
-#   develop → testbuild  (development-mode artifact, scriptName "(dev)")
+#   main                     → build      (production-mode artifact,
+#                                          the @updateURL target)
+#   anything else (matched)  → testbuild  (development-mode artifact,
+#                                          scriptName "(dev)")
+#
+# The "everything-non-main → testbuild" routing matches the
+# Danbooru-Insights workflow: any working branch's latest push is
+# installable from the same testbuild raw URL, so reviewers can
+# Tampermonkey-refresh to pick up the latest WIP build without
+# bumping the production @updateURL.
 #
 # Force-push is intentional: each publish branch is a single-file
 # orphan-style branch carrying just the latest bundled artifact, with
-# no source history. Past artifacts are recoverable from `main`/`develop`
-# at the corresponding source SHA (the commit message records it).
+# no source history. Past artifacts are recoverable from the source
+# branch at the SHA recorded in the commit message.
 name: Publish build branch
 
 on:
@@ -16,6 +25,10 @@ on:
     branches:
       - main
       - develop
+      - 'claude/**'
+      - 'feature/**'
+      - 'fix/**'
+      - 'hotfix/**'
   workflow_dispatch:
 
 permissions:
@@ -45,12 +58,12 @@ jobs:
       - name: Determine publish target
         id: target
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
-            echo "branch=testbuild" >> "$GITHUB_OUTPUT"
-            echo "mode=development" >> "$GITHUB_OUTPUT"
-          else
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "branch=build" >> "$GITHUB_OUTPUT"
             echo "mode=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=testbuild" >> "$GITHUB_OUTPUT"
+            echo "mode=development" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build (test + tsc + vite)

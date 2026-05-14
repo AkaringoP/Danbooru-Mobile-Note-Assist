@@ -936,6 +936,21 @@ export const STYLES = `
     #dmna-style-popover.show #dmna-style-popover-inner {
       transform: translateX(0);
     }
+    /* Narrow-viewport mode: popover stacks under the note popover with
+       a slide-up animation instead of the desktop side-attach. Source
+       order matters — these rules come AFTER the desktop .show rule so
+       the .is-mobile.show pair (same specificity, written later) wins
+       the cascade and swaps translateX for translateY. No max-height /
+       overflow here: the popover keeps its natural size and the page
+       scrolls to reveal any portion that lands under the keyboard, the
+       same way the user already scrolls to reveal off-screen note
+       boxes. */
+    #dmna-style-popover.is-mobile #dmna-style-popover-inner {
+      transform: translateY(20px);
+    }
+    #dmna-style-popover.is-mobile.show #dmna-style-popover-inner {
+      transform: translateY(0);
+    }
     .dmna-style-row {
       display: grid;
       gap: 8px;
