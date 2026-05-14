@@ -316,9 +316,11 @@ export const STYLES = `
     }
     /* Mode toggle + "view help" wiki link styled as inline text-links
        rather than chips — mirrors Danbooru's own Editing-note header
-       (Preview affordance on the left, "view help" anchor on the right,
-       both as underlined textual links). The help link is an <a>, not
-       a button, so :disabled handling is mode-toggle-only. */
+       (Preview affordance on the left, "view help" anchor on the
+       right). Danbooru's native links are not underlined at rest;
+       the underline surfaces only on hover, so we match that pattern.
+       The help link is an <a>, not a button, so :disabled handling
+       is mode-toggle-only. */
     .dmna-popover-mode-toggle,
     .dmna-popover-help-link {
       background: transparent;
@@ -330,17 +332,17 @@ export const STYLES = `
       cursor: pointer;
       user-select: none;
       touch-action: manipulation;
-      text-decoration: underline;
-      text-underline-offset: 2px;
+      text-decoration: none;
     }
     .dmna-popover-mode-toggle:hover,
     .dmna-popover-help-link:hover {
       color: #6bb6ff;
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
     .dmna-popover-mode-toggle:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-      text-decoration: none;
     }
     #dmna-popover-input-row {
       display: grid;
