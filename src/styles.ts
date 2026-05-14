@@ -994,6 +994,7 @@ export const STYLES = `
        Padding tightens vertically vs tag buttons since two pieces of
        content share the same row. */
     .dmna-style-color-text,
+    .dmna-style-color-stroke,
     .dmna-style-color-bg {
       display: inline-flex;
       align-items: center;
