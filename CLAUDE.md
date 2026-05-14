@@ -15,6 +15,8 @@ Adds a floating button to post pages. When enabled, users can tap/drag on the im
 - Long-press button to toggle debug zones
 - CSRF token handling for Danbooru API submissions
 - **Force-quit / OS-kill recovery (v4.1+)** — in-progress notes snapshotted to `localStorage` on lifecycle events (`beforeunload` / `pagehide` / `visibilitychange→hidden`) and restored via two-button toast prompt on next entry to the same post. 24h TTL, per-post key, cleared on Confirm success or explicit idle-toggle
+- **Markup-aware popover (v5.0+)** — style sub-popover with B/I/U/S/sub/sup/tn/code/`<a>`/ruby tag buttons, color/stroke/background pickers (Material swatches + HEX), Size/Font dropdowns, Preview mode (sanitizer round-trip via `/notes/preview.json`), History button (server version log), per-style undo via `'text'` ActionLogEntry + `TextSnapshot`
+- **Danbooru native conflict guard (v5.0+)** — auto-hide floating button + gate `setMode('active')` while `body.mode-translation` or `.ui-dialog.note-edit-dialog` is up. Reverse direction blocks bare-N keydown / `#translate` clicks while our active mode is on (`interactions/native-block`)
 
 ## Architecture (Layer Structure)
 
@@ -30,15 +32,22 @@ ui/    confirm/          Layer 3 — DOM modules / Confirm orchestration
    ↓
 state/    api/           Layer 2 — module-level state / Danbooru API
    ↓
-utils/                   Layer 1 — pure helpers (coords, dom, visual-viewport)
+utils/                   Layer 1 — pure helpers (coords, dom,
+                                                visual-viewport, style-attr)
 
 types.ts, config.ts, styles.ts, version.ts — Layer 0 (universal,
                                               importable from anywhere)
 ```
 
-The cross-layer wires that the legacy IIFE expressed via shared closure are now hook bags (`NotesStoreHooks`, `ConfirmFlowHooks`, `NoteBoxHooks`) injected by `main.ts` at boot. The `state/notes-store` calling into `confirm/classify` (`hasPendingChanges`) goes through `NotesStoreHooks` — preserves the `state ← confirm` direction.
+Layer 3 ui/ modules (v5.0): `note-box`, `popover`, `style-popover`, `color-picker`, `stroke-picker`, `link-popover`, `ruby-popover`, `tag-popover`, `floating-button`, `arc-menu`, `toast`. Layer 2 state/ modules: `notes-store`, `image-state`, `draft`, `native-conflict`. Layer 4 interactions/ modules: `image-pointer`, `drag-resize`, `keyboard`, `native-block`.
 
-The architecture invariants are mechanically enforced by `test/architecture.test.ts` (Z5 layer direction, hook-bag completeness at boot, `STYLES` injection site, type-only re-export integrity).
+The cross-layer wires that the legacy IIFE expressed via shared closure are now hook bags injected by `main.ts` at boot:
+- `NotesStoreHooks` (9 callbacks) — most state→ui side effects + `hasPendingChanges` reverse-pull from `confirm/classify` + `onTextUndo` for the `'text'` action-log restore
+- `ConfirmFlowHooks` (6 callbacks) — confirm→ui send-flow lifecycle + tag popover entry
+- `NoteBoxHooks` (3 callbacks) — `ui/note-box` → `interactions/drag-resize` listener attach + box-click suppression
+- `ArcMenuHooks` (1 callback, `onConfirm`) — `ui/arc-menu` → `confirm/batch.runConfirmFlow` (replaces the prior direct sibling import; Phase 5-h Task 5.19)
+
+The architecture invariants are mechanically enforced by `test/architecture.test.ts` (Z5 layer direction in both directions including the `ui/ → confirm/` sibling restriction, hook-bag completeness at boot, `STYLES` injection site, type-only re-export integrity).
 
 ## Build & Dev
 
@@ -146,4 +155,11 @@ When a gate fails, fix the root cause — do not whitelist, suppress, or work ar
 - **All CSS lives in `src/styles.ts`** as a single `STYLES` template string injected at boot from `main.ts`. CSS files (`.css`) are not loaded by the userscript runtime; do not introduce them.
 - **Touch events use `{passive: false}`** — the userscript intentionally cancels default scrolling/pinch in specific paths (image-pointer create/drag, drag-resize). Preserve this when modifying any touch handler.
 - **Coordinate space**: `NoteState` (`x/y/w/h`) is **always** in original-image pixel space. Display-space numbers go through `imageToScreenRect` / `screenToImageRect` (`utils/coords.ts`). Do not store display-space values in `Note.current` / `initialState` / `confirmedState`.
-- **Branded `NoteId`**: never cast a plain `string` to `NoteId`. Use `asTempNoteId` / `asServerNoteId` at the trust boundary, then forward the typed value.
+- **Branded `NoteId`**: never cast a plain `string` to `NoteId`. Use `asTempNoteId` / `asServerNoteId` at the trust boundary, then forward the typed value. `pushAction` is overloaded so the `'create'` arm requires `prevState: null` and the geometry-bearing arms require non-null `NoteState` — don't reintroduce the v4.x `as ActionLogEntry` cast.
+- **Confirm pipeline locks (v5.0)**: two flags coexist in `confirm/batch.ts`. `isSending` is the narrow UI lock around `sendBatch`'s try/finally (HTTP requests + `dmna-sending` body class). `isInConfirmPipeline` is the broader guard spanning `runConfirmFlow`'s full try/finally — it stays latched across `applyServerStateToLocal`, the error-modal Retry/Cancel wait, and retry recursion. `main.ts#saveDraftIfNeeded` must gate on **both** so a force-quit during the modal-open window can't persist a half-applied snapshot.
+- **`'text'` action log + `clearTextActionsForNote`**: style-popover mutate helpers push a `TextSnapshot` (`{text, selectionStart, selectionEnd}`) before rewriting the textarea. The `popoverCancel` and `dismissActivePopover` revert paths MUST call `clearTextActionsForNote(noteId)` after rolling `current` back to `confirmedState` — otherwise a later popover ↶ resurrects markup the user just canceled (Phase 5-h Task 5.22).
+- **IME composition guard**: any keyboard handler routing Enter/Esc to a destructive action (Confirm, dismiss) must gate on `!e.isComposing` (with the Safari `keyCode === 229` fallback). Applies to popover textarea Ctrl/Cmd+Enter, global Esc dismissal, and the 4 picker modals' Enter-to-confirm. Half-typed Hangul/Kana/Pinyin must not commit (Phase 5-h Task 5.23).
+- **Sub-modal outside-tap pattern**: color/stroke/link/ruby pickers all share a `suppressNextClick` flag paired with a 500 ms `setTimeout` reset. Without the TTL the flag can latch indefinitely if no matching click arrives, silently eating the next unrelated tap. Mirrors `drag-resize`'s suppression pattern (Phase 5-h Task 5.27).
+- **Style popover auto-hide gate**: `refreshStylePopoverState`'s "no selection → hide" branch must skip while any sub-modal is up (`isColorPickerShown() || isStrokePickerShown() || isLinkPopoverShown() || isRubyPopoverShown()`). Sub-modal focus steals the textarea selection, which fires `selectionchange` with no live selection — the prior auto-hide raced the picker's close path (Phase 5-h Task 5.31).
+- **Preview innerHTML sink**: `apiPreviewNote` validates `sanitized_body` is a string before returning, AND the `popover.ts` sink re-validates before assigning to `innerHTML`. This is the only `innerHTML` write in the codebase; double gate is intentional defense in depth.
+- **Defense-in-depth user input escape**: `link-popover.normalizeUrl` rejects `javascript:` / `data:` / `vbscript:` / `file:` schemes and strips `<>"`; `style-popover.applyRubyWrap` strips `<>"` from the reading. Danbooru's `NoteSanitizer` is the authoritative backstop, but the client filter ensures the request payload is always well-formed.

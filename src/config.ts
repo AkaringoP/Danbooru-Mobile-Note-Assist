@@ -112,10 +112,17 @@ export const MIN_BOX_SIZE_DISPLAY = 48;
 export const MIN_DRAG_CREATE_SIZE_DISPLAY = 24;
 
 /**
- * Popover CSS width in display pixels (counter-scaled
- * by visualViewport so the visual width stays constant under pinch).
+ * Note popover CSS width in display pixels (counter-scaled by
+ * visualViewport so the visual width stays constant under pinch).
+ *
+ * Sized so the 4-button action row (Confirm / Cancel / Delete /
+ * History) lands at the same per-cell width as the style sub-
+ * popover's 3-button rows (B / I / U). Solving
+ *   (note_inner - 3 × 8) / 4 = (style_inner - 2 × 8) / 3
+ * with style popover width 260 (style_inner = 240) gives
+ * note_inner ≈ 323 → note_width ≈ 343. (v4.2 Phase 4 polish.)
  */
-export const POPOVER_WIDTH = 260;
+export const POPOVER_WIDTH = 343;
 
 /**
  * Vertical gap (display px) between the active box's

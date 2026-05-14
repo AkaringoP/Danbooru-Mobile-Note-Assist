@@ -230,13 +230,10 @@ export function clearDraft(): void {
 }
 
 /**
- * Structural type guard. Validates only the skeleton — per-entry
- * `NoteState` / `ActionLogEntry` shape is trusted once schemaVersion
- * matches, since the data came out of our own serialize at v=1.
- * A hand-edited localStorage entry that passes this skeleton check
- * but has garbage inner fields could still crash
- * applyDraftSnapshot, but hand-editing localStorage is outside the
- * v4.1 threat model.
+ * Structural type guard. Validates skeleton + per-entry shape so a
+ * tampered or partially-corrupt localStorage entry can't propagate
+ * NaN coords / non-string text into `applyDraftSnapshot` (Phase 5-h
+ * Task 5.26). Failure → caller drops the whole draft.
  */
 function isPersistedDraftV1(v: unknown): v is PersistedDraftV1 {
   if (typeof v !== 'object' || v === null) {
@@ -258,5 +255,95 @@ function isPersistedDraftV1(v: unknown): v is PersistedDraftV1 {
   if (!Array.isArray(o.notes) || !Array.isArray(o.actionLog)) {
     return false;
   }
+  if (!o.notes.every(isNotesEntry)) {
+    return false;
+  }
+  if (!o.actionLog.every(isActionLogStackEntry)) {
+    return false;
+  }
   return true;
+}
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+function isNoteState(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return (
+    isFiniteNumber(o.x) &&
+    isFiniteNumber(o.y) &&
+    isFiniteNumber(o.w) &&
+    isFiniteNumber(o.h) &&
+    typeof o.text === 'string'
+  );
+}
+
+function isSerializedNote(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return (
+    isNoteState(o.current) &&
+    isNoteState(o.initialState) &&
+    isNoteState(o.confirmedState) &&
+    typeof o.isDeleted === 'boolean' &&
+    typeof o.isServerNote === 'boolean' &&
+    typeof o.everConfirmed === 'boolean'
+  );
+}
+
+function isNotesEntry(v: unknown): boolean {
+  if (!Array.isArray(v) || v.length !== 2) {
+    return false;
+  }
+  return typeof v[0] === 'string' && isSerializedNote(v[1]);
+}
+
+function isTextSnapshot(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.text === 'string' &&
+    isFiniteNumber(o.selectionStart) &&
+    isFiniteNumber(o.selectionEnd)
+  );
+}
+
+function isActionLogEntry(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  if (typeof o.noteId !== 'string') {
+    return false;
+  }
+  switch (o.type) {
+    case 'create':
+      return o.prevState === null;
+    case 'edit':
+    case 'delete':
+    case 'transform':
+      return isNoteState(o.prevState);
+    case 'text':
+      return isTextSnapshot(o.prevState);
+    default:
+      return false;
+  }
+}
+
+function isActionLogStackEntry(v: unknown): boolean {
+  if (!Array.isArray(v) || v.length !== 2) {
+    return false;
+  }
+  if (typeof v[0] !== 'string' || !Array.isArray(v[1])) {
+    return false;
+  }
+  return v[1].every(isActionLogEntry);
 }

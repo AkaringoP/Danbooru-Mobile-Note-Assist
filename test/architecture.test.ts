@@ -176,6 +176,17 @@ describe('Z5 — layer direction', () => {
     expect(violations).toEqual([]);
   });
 
+  it('ui/ does not import from confirm/ (Z5 layer-3 sibling restriction, the other direction)', () => {
+    const violations: string[] = [];
+    for (const e of ALL_EDGES) {
+      if (e.isTypeOnly) continue;
+      if (e.from.startsWith('ui/') && e.to.startsWith('confirm/')) {
+        violations.push(`${e.from} → ${e.to}`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it('ui/ does not import from interactions/ (Z5: interactions sits above ui)', () => {
     const violations: string[] = [];
     for (const e of ALL_EDGES) {
@@ -232,6 +243,7 @@ const NOTES_STORE_HOOK_KEYS = [
   'onToast',
   'onReopenMenuRequested',
   'hasPendingChanges',
+  'onTextUndo',
 ] as const;
 
 const CONFIRM_FLOW_HOOK_KEYS = [
@@ -249,6 +261,8 @@ const NOTE_BOX_HOOK_KEYS = [
   'consumeBoxClickSuppression',
 ] as const;
 
+const ARC_MENU_HOOK_KEYS = ['onConfirm'] as const;
+
 describe('Hook bag completeness — main.ts wires every callback', () => {
   const MAIN = FILE_CONTENTS.get('main.ts');
 
@@ -256,7 +270,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(MAIN).toBeDefined();
   });
 
-  it('main.ts wires all 8 NotesStoreHooks callbacks', () => {
+  it('main.ts wires all 9 NotesStoreHooks callbacks', () => {
     const missing = NOTES_STORE_HOOK_KEYS.filter(
       k => !new RegExp(`\\b${k}\\b`).test(MAIN!),
     );
@@ -277,13 +291,21 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(missing).toEqual([]);
   });
 
-  it('main.ts calls all three init* functions', () => {
+  it('main.ts wires all ArcMenuHooks callbacks', () => {
+    const missing = ARC_MENU_HOOK_KEYS.filter(
+      k => !new RegExp(`\\b${k}\\b`).test(MAIN!),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('main.ts calls all four init* functions', () => {
     expect(MAIN).toMatch(/\binitNotesStore\s*\(/);
     expect(MAIN).toMatch(/\binitConfirmFlow\s*\(/);
     expect(MAIN).toMatch(/\binitNoteBox\s*\(/);
+    expect(MAIN).toMatch(/\binitArcMenu\s*\(/);
   });
 
-  it('NotesStoreHooks interface in state/notes-store.ts exposes exactly the 8 keys main.ts wires', () => {
+  it('NotesStoreHooks interface in state/notes-store.ts exposes exactly the 9 keys main.ts wires', () => {
     const src = FILE_CONTENTS.get('state/notes-store.ts')!;
     const ifaceMatch = src.match(
       /export interface NotesStoreHooks\s*{([\s\S]*?)\n}/,
@@ -315,6 +337,18 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(ifaceMatch).not.toBeNull();
     const body = ifaceMatch![1];
     for (const k of NOTE_BOX_HOOK_KEYS) {
+      expect(body).toMatch(new RegExp(`\\b${k}\\b`));
+    }
+  });
+
+  it('ArcMenuHooks interface in ui/arc-menu.ts exposes exactly the 1 key main.ts wires', () => {
+    const src = FILE_CONTENTS.get('ui/arc-menu.ts')!;
+    const ifaceMatch = src.match(
+      /export interface ArcMenuHooks\s*{([\s\S]*?)\n}/,
+    );
+    expect(ifaceMatch).not.toBeNull();
+    const body = ifaceMatch![1];
+    for (const k of ARC_MENU_HOOK_KEYS) {
       expect(body).toMatch(new RegExp(`\\b${k}\\b`));
     }
   });

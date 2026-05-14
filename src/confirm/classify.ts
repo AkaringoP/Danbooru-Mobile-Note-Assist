@@ -9,7 +9,7 @@
  * Shapes consumed by `confirm/batch.sendBatch` and the debug surface.
  */
 
-import {NoteId, NoteState, ServerNoteId} from '../types';
+import {NoteId, NoteState, ServerNoteId, isServerNoteId} from '../types';
 import {notes} from '../state/notes-store';
 
 /** A new temp note that will be POSTed. */
@@ -139,8 +139,18 @@ export function classifyChanges(): ClassifiedChanges {
 
   for (const [noteId, note] of notes.entries()) {
     if (note.isServerNote) {
+      // The `isServerNote` boolean and the `temp-` / numeric brand
+      // should always agree (assigned together in addServerNote /
+      // applyServerStateToLocal). The runtime guard narrows `noteId`
+      // to `ServerNoteId` so the dispatch below drops the prior
+      // unsafe casts (Phase 5-h Task 5.30); a mismatch is treated
+      // defensively as a skip rather than letting a temp id reach
+      // the server-routed bucket.
+      if (!isServerNoteId(noteId)) {
+        continue;
+      }
       if (note.isDeleted) {
-        deletes.push({noteId, serverId: noteId as ServerNoteId});
+        deletes.push({noteId, serverId: noteId});
         continue;
       }
       const a = note.current;
@@ -151,7 +161,7 @@ export function classifyChanges(): ClassifiedChanges {
       if (geomChanged || textChanged) {
         puts.push({
           noteId,
-          serverId: noteId as ServerNoteId,
+          serverId: noteId,
           state: {...a},
           textChanged,
         });
