@@ -1,6 +1,7 @@
 /**
  * Style popover — sub-popover attached to the note popover that
- * exposes basic markup buttons (B / I / U / S / big / small / tn).
+ * exposes markup tag buttons (B / I / U; S / tn / a), color swatches,
+ * and font/size dropdowns.
  *
  * Layer 3 (ui). Built lazily by `showStylePopover` on first toggle,
  * or eagerly by `main.ts` at boot. Stays a sibling of the note
@@ -9,22 +10,33 @@
  * note-popover hide / active-note swap / Esc) is explicit instead
  * of relying on DOM-parent removal.
  *
- * Attach behavior (PLAN D7):
+ * Attach behavior:
  *   - default: right of the note popover, 8 px gap
  *   - viewport overflow → flip to the left
  *   - same `1 / scale` counter as the note popover so pinch-zoom
  *     leaves the visual size constant
  *
- * Click handlers are placeholders in this cycle (PLAN D8) — they
- * `console.log` and return. v4.3+ will implement the actual textarea
- * markup-wrap behavior (cursor / selection-aware insertion of
- * `<tag>…</tag>` around the active note's text).
+ * Tag-button behavior (v4.2):
+ *   - Aa side-stack button enables only when the textarea has a
+ *     non-collapsed selection (the wrap target).
+ *   - Each tag button wraps the selection in `<tag>…</tag>`. The new
+ *     selection is the same text re-selected inside the wrap, so a
+ *     subsequent click nests the next layer inward instead of stacking
+ *     outside the previous one.
+ *   - Active highlights mark every outer layer currently wrapping the
+ *     selection; tapping an active button unwraps that specific layer
+ *     and leaves the inner ones alone. Selection text is preserved.
+ *
+ * Color row + size/font dropdowns are still placeholders — the user
+ * is defining their behavior in a follow-up; click/change handlers
+ * `console.log` for now.
  */
 
 import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
 import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {getPopoverInputElement} from './popover';
 
 // Style popover shares the note popover's width so the attach math
 // reads symmetrically (left/right flip is a simple width subtraction).
@@ -55,14 +67,124 @@ const ROW_2_BUTTONS: StyleTagButton[] = [
 let stylePopoverElement: HTMLElement | null = null;
 let isShown = false;
 
+interface OuterLayer {
+  tag: string;
+  /** Index into `before` where the `<tag>` opening starts. */
+  openStart: number;
+  /** Length of the opening tag string (e.g. `<b>` is 3). */
+  openLen: number;
+  /** Index into `after` where the matching `</tag>` starts. */
+  closeStart: number;
+  /** Length of the closing tag string (e.g. `</b>` is 4). */
+  closeLen: number;
+}
+
 /**
- * Builds the DOM (idempotent). Caller is `main.ts#init` for boot-
- * time front-loading, or `showStylePopover` on lazy first toggle.
+ * Walks outward from the selection (using its `before` / `after`
+ * slices of the textarea value) and returns the matched
+ * `<tag>...</tag>` wrappers in inner-to-outer order. Stops at the
+ * first non-matching layer.
+ *
+ * The opening regex tolerates an optional attribute run (e.g. the
+ * `href="..."` part of an `<a>` typed by hand or sourced from a
+ * server note), so markup the user didn't author via these buttons
+ * still lights up the matching active highlight. `openLen` carries
+ * the precise opening length so a later unwrap removes exactly what
+ * was matched (attributes and all) rather than guessing a 3-char
+ * `<a>` boundary that would slice into the href.
+ *
+ * Close tag is required to be the bare `</tag>` form — that's what
+ * a balanced wrap produces, and matching arbitrary close variants
+ * would let detection drift over malformed input.
  */
+function detectOuterLayers(before: string, after: string): OuterLayer[] {
+  const layers: OuterLayer[] = [];
+  let bLen = before.length;
+  let consumedAfter = 0;
+  while (true) {
+    const slice = before.slice(0, bLen);
+    const openMatch = slice.match(/<([a-zA-Z][a-zA-Z0-9]*)(?:\s+[^<>]*)?>$/);
+    if (!openMatch) {
+      break;
+    }
+    const tag = openMatch[1].toLowerCase();
+    const expectedClose = `</${tag}>`;
+    if (!after.startsWith(expectedClose, consumedAfter)) {
+      break;
+    }
+    const openStart = bLen - openMatch[0].length;
+    layers.push({
+      tag,
+      openStart,
+      openLen: openMatch[0].length,
+      closeStart: consumedAfter,
+      closeLen: expectedClose.length,
+    });
+    bLen = openStart;
+    consumedAfter += expectedClose.length;
+  }
+  return layers;
+}
+
 /**
- * Builds a row container with N tag-buttons. Caller fills the array
- * and gets back the wrapper div. Click handlers stub-log only — the
- * actual textarea wrap logic ships in a follow-up cycle.
+ * Wraps the textarea's current selection in `<tag>…</tag>`, then
+ * re-selects the same text (now offset by the opening tag length) so
+ * a subsequent click on another button nests inside this wrap. Fires
+ * an input event so the note's `current.text` follows.
+ */
+function applyWrap(tag: string): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  if (start === end) return;
+  const open = `<${tag}>`;
+  const close = `</${tag}>`;
+  const before = ta.value.slice(0, start);
+  const selected = ta.value.slice(start, end);
+  const after = ta.value.slice(end);
+  ta.value = before + open + selected + close + after;
+  ta.setSelectionRange(start + open.length, end + open.length);
+  ta.focus();
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  refreshStylePopoverState();
+}
+
+/**
+ * Removes the nearest `<tag>…</tag>` wrap around the selection. The
+ * selection itself is preserved (same text, shifted by the removed
+ * opening tag length). Caller passes the tag identified by the
+ * active-highlight UI, so the active branch is always non-empty.
+ */
+function applyUnwrap(tag: string): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  if (start === end) return;
+  const before = ta.value.slice(0, start);
+  const selected = ta.value.slice(start, end);
+  const after = ta.value.slice(end);
+  const layers = detectOuterLayers(before, after);
+  const found = layers.find(l => l.tag === tag);
+  if (!found) return;
+  const newBefore =
+    before.slice(0, found.openStart) +
+    before.slice(found.openStart + found.openLen);
+  const newAfter =
+    after.slice(0, found.closeStart) +
+    after.slice(found.closeStart + found.closeLen);
+  ta.value = newBefore + selected + newAfter;
+  ta.setSelectionRange(newBefore.length, newBefore.length + selected.length);
+  ta.focus();
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  refreshStylePopoverState();
+}
+
+/**
+ * Builds a row container with N tag-buttons. Each click routes to
+ * wrap or unwrap depending on whether the button is currently in the
+ * active set — keeping the toggle interaction discoverable.
  */
 function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
   const row = document.createElement('div');
@@ -74,10 +196,17 @@ function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
     b.textContent = btn.label;
     b.dataset.tag = btn.tag;
     b.setAttribute('aria-label', `Wrap selection with <${btn.tag}>`);
+    // Keep textarea focus so its selection highlight doesn't fade out
+    // when the user reaches over to the sub-popover.
+    b.addEventListener('mousedown', e => e.preventDefault());
     b.addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
-      console.log(`[MobileNoteAssist] style tag placeholder: ${btn.tag}`);
+      if (b.classList.contains('is-active')) {
+        applyUnwrap(btn.tag);
+      } else {
+        applyWrap(btn.tag);
+      }
     });
     row.appendChild(b);
   }
@@ -101,6 +230,7 @@ function buildColorRow(): HTMLElement {
   textSwatch.style.background = '#000';
   text.appendChild(textLabel);
   text.appendChild(textSwatch);
+  text.addEventListener('mousedown', e => e.preventDefault());
   text.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -119,6 +249,7 @@ function buildColorRow(): HTMLElement {
   bgSwatch.className = 'dmna-style-color-swatch dmna-style-color-transparent';
   bg.appendChild(bgLabel);
   bg.appendChild(bgSwatch);
+  bg.addEventListener('mousedown', e => e.preventDefault());
   bg.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -149,6 +280,10 @@ function buildSelectRow(control: string, placeholder: string): HTMLElement {
   return row;
 }
 
+/**
+ * Builds the DOM (idempotent). Caller is `main.ts#init` for boot-
+ * time front-loading, or `showStylePopover` on lazy first toggle.
+ */
 export function createStylePopover(): void {
   if (stylePopoverElement) {
     return;
@@ -171,6 +306,57 @@ export function createStylePopover(): void {
   root.appendChild(inner);
   document.body.appendChild(root);
   stylePopoverElement = root;
+  refreshStylePopoverState();
+}
+
+/**
+ * Sync the popover's per-button state to the textarea's current
+ * selection: when the selection is collapsed (or no textarea), every
+ * control is disabled and all active highlights drop. Otherwise the
+ * tag buttons enable, and any outer wrap layer around the selection
+ * lights up its corresponding button so the user can spot what's
+ * already applied at a glance.
+ *
+ * Called by `popover.ts`'s selectionchange listener on every cursor
+ * move + by `applyWrap` / `applyUnwrap` post-mutation so the UI stays
+ * in sync with the textarea content.
+ */
+export function refreshStylePopoverState(): void {
+  if (!stylePopoverElement) return;
+  const ta = getPopoverInputElement();
+  const hasSelection =
+    !!ta && ta.selectionStart !== ta.selectionEnd && !ta.disabled;
+
+  stylePopoverElement
+    .querySelectorAll<
+      HTMLButtonElement | HTMLSelectElement
+    >('.dmna-style-btn, .dmna-style-select')
+    .forEach(el => {
+      el.disabled = !hasSelection;
+    });
+
+  if (!hasSelection || !ta) {
+    stylePopoverElement
+      .querySelectorAll('.is-active')
+      .forEach(el => el.classList.remove('is-active'));
+    // Selection went away (user moved the cursor, deleted the
+    // selected text, or moved focus off the textarea) — auto-close
+    // the popover so it doesn't linger as a dead UI panel. Cheap
+    // no-op when the popover wasn't open in the first place.
+    hideStylePopover();
+    return;
+  }
+
+  const before = ta.value.slice(0, ta.selectionStart);
+  const after = ta.value.slice(ta.selectionEnd);
+  const activeTags = new Set(detectOuterLayers(before, after).map(l => l.tag));
+
+  stylePopoverElement
+    .querySelectorAll<HTMLElement>('.dmna-style-btn[data-tag]')
+    .forEach(el => {
+      const tag = el.dataset.tag;
+      el.classList.toggle('is-active', !!tag && activeTags.has(tag));
+    });
 }
 
 export function isStylePopoverShown(): boolean {
@@ -191,6 +377,10 @@ export function showStylePopover(): void {
   // anti-flicker pattern as showPopover.
   isShown = true;
   updateStylePopoverPosition();
+  // Refresh active highlights + per-button disabled state from the
+  // current textarea selection — without this the popover would open
+  // showing stale state from the previous selection.
+  refreshStylePopoverState();
   stylePopoverElement.classList.add('show');
 }
 

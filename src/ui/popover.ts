@@ -54,7 +54,11 @@ import {
   updateActiveHandleScales,
   updateNoteVisuals,
 } from './note-box';
-import {hideStylePopover, toggleStylePopover} from './style-popover';
+import {
+  hideStylePopover,
+  refreshStylePopoverState,
+  toggleStylePopover,
+} from './style-popover';
 import {showToast} from './toast';
 
 // ---------------------------------------------------------------------------
@@ -77,8 +81,33 @@ let popoverInputElement: HTMLTextAreaElement | null = null;
 // before the response lands.
 let popoverPreviewElement: HTMLElement | null = null;
 let popoverModeToggleElement: HTMLButtonElement | null = null;
+let popoverStyleToggleElement: HTMLButtonElement | null = null;
 let isPreviewMode = false;
 let previewRequestId = 0;
+
+/**
+ * Public ref to the textarea so the style sub-popover can read the
+ * current selection / mutate value when applying wrap or unwrap.
+ * Same-layer (ui ↔ ui) sibling access; the pair is small enough that
+ * a hook bag would be ceremony.
+ */
+export function getPopoverInputElement(): HTMLTextAreaElement | null {
+  return popoverInputElement;
+}
+
+/**
+ * Re-evaluate the Aa side-stack button's disabled state and ask the
+ * style sub-popover to refresh its own active highlights. Called on
+ * any textarea selection change.
+ */
+function onTextareaSelectionChanged(): void {
+  if (popoverInputElement && popoverStyleToggleElement) {
+    const collapsed =
+      popoverInputElement.selectionStart === popoverInputElement.selectionEnd;
+    popoverStyleToggleElement.disabled = collapsed;
+  }
+  refreshStylePopoverState();
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -236,20 +265,40 @@ export function createPopover(): void {
   sideStack.appendChild(undoBtn);
 
   // Aa style-popover toggle (Phase 4, v4.2). Opens / closes the
-  // sibling sub-popover next to the note popover; the sub-popover
-  // hosts the markup buttons. Re-tapping this button toggles it.
+  // sibling sub-popover that hosts the markup buttons. Disabled by
+  // default — only enables when the textarea has a non-collapsed
+  // selection, since the wrap behavior needs something to wrap.
   const styleBtn = document.createElement('button');
   styleBtn.type = 'button';
   styleBtn.id = 'dmna-popover-style-toggle';
   styleBtn.className = 'dmna-popover-side-btn';
   styleBtn.textContent = 'Aa';
+  styleBtn.disabled = true;
   styleBtn.setAttribute('aria-label', 'Toggle style markup popover');
+  // Preserve the textarea's visible selection across the toggle:
+  // canceling mousedown's default keeps focus on the textarea instead
+  // of shifting it to this button, so the browser doesn't fade the
+  // selection highlight (and the user doesn't feel like the block
+  // got dropped under them).
+  styleBtn.addEventListener('mousedown', e => e.preventDefault());
   styleBtn.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
     toggleStylePopover();
   });
   sideStack.appendChild(styleBtn);
+  popoverStyleToggleElement = styleBtn;
+
+  // Track textarea selection changes so we can flip the Aa enable
+  // state and refresh the sub-popover's active-tag highlights without
+  // them going stale. `selectionchange` fires for cursor / drag /
+  // keyboard navigation — broader than `select` alone, which only
+  // fires on non-collapsed selections.
+  document.addEventListener('selectionchange', () => {
+    if (document.activeElement === popoverInputElement) {
+      onTextareaSelectionChanged();
+    }
+  });
 
   inputRow.appendChild(sideStack);
   root.appendChild(inputRow);

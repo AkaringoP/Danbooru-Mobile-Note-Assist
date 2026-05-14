@@ -376,24 +376,42 @@ export const STYLES = `
        Matches the textarea's padding/border/font so the swap looks
        like a mode change rather than a layout shift. overflow-wrap
        guards against unbroken markup pushing the popover wider. */
+    /* Inside-preview styling that Danbooru applies via its own
+       notes.scss but that we'd otherwise miss — the sanitizer keeps
+       <tn> as a raw element (NoteSanitizer ALLOWED_ELEMENTS includes
+       "tn") and Danbooru styles it via .tn class. We cover both
+       the bare-element form and the explicit class form because the
+       sanitizer accepts either when the user types markup by hand.
+       Color resolves through --note-tn-color → --muted-text-color →
+       --grey-4 (#9192a7). */
+    #dmna-popover-preview tn,
+    #dmna-popover-preview .tn {
+      font-size: 0.8em;
+      color: #9192a7;
+    }
     #dmna-popover-preview {
       min-width: 0;
-      min-height: calc(1.4em * 3 + 18px);
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: rgba(0, 0, 0, 0.4);
-      color: white;
-      /* Matches #dmna-popover-input — the preview is a same-cell
-         sibling of the textarea, so a font-size mismatch would feel
-         like a layout shift on every toggle. */
-      font-size: 13px;
+      /* Matches Danbooru's div.note-body (notes.scss line 13-15) so
+         the preview reads as a faithful screenshot of how the note
+         will render on the post page: same beige background, black
+         text + border, 14 px / 1.25 line-height, 4 px padding. The
+         Edit textarea keeps the dark popover theme — only Preview
+         crosses over. min-height keeps the cell a roughly textarea-
+         sized rectangle so toggling Edit ↔ Preview doesn't visibly
+         shift the popover height under the user. */
+      min-height: calc(1.25em * 3 + 8px);
+      max-height: 240px;
+      padding: 4px;
+      border: 1px solid #000;
+      border-radius: 0;
+      background: #ffffee;
+      color: #000;
+      font-size: 14px;
       font-family: inherit;
-      line-height: 1.4;
+      line-height: 1.25;
       box-sizing: border-box;
       overflow-wrap: anywhere;
       overflow-y: auto;
-      max-height: 240px;
     }
     #dmna-popover-input:focus { border-color: #0073ff; }
     #dmna-popover-side-stack {
@@ -918,6 +936,25 @@ export const STYLES = `
     }
     .dmna-style-btn:hover { background: rgba(255, 255, 255, 0.20); }
     .dmna-style-btn:active { background: rgba(255, 255, 255, 0.28); }
+    .dmna-style-btn:disabled,
+    .dmna-style-select:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .dmna-style-btn:disabled:hover {
+      background: rgba(255, 255, 255, 0.13);
+    }
+    /* Active highlight = "this tag currently wraps the selection."
+       Tap to unwrap that layer. The blue echoes the Preview-link
+       color so the popover's active affordances read as one family. */
+    .dmna-style-btn.is-active {
+      background: rgba(74, 158, 255, 0.28);
+      border-color: rgba(74, 158, 255, 0.70);
+      box-shadow: inset 0 0 0 1px rgba(74, 158, 255, 0.45);
+    }
+    .dmna-style-btn.is-active:hover {
+      background: rgba(74, 158, 255, 0.36);
+    }
     /* Per-tag preview rendering — each button styles its glyph the
        way the tag would render so the user knows the effect before
        tapping. */
