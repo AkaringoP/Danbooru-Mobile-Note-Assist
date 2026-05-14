@@ -738,6 +738,35 @@ export function refreshStylePopoverState(): void {
       const tag = el.dataset.tag;
       el.classList.toggle('is-active', !!tag && activeTags.has(tag));
     });
+
+  // Reflect the selection's outer-<span> color / background-color on
+  // the Text / BG swatch tiles so the popover always shows what's
+  // currently applied. Works for both swatches the user picked via the
+  // (future) color modal and for raw <span style="…"> markup the user
+  // typed by hand or pulled in from a server note. The Text swatch
+  // falls back to black (the default ink color), BG to a transparent
+  // hatch (no fill).
+  const {spanProps} = getActiveStyleSnapshot();
+  const textSwatch = stylePopoverElement.querySelector<HTMLElement>(
+    '.dmna-style-color-text .dmna-style-color-swatch',
+  );
+  if (textSwatch) {
+    const color = spanProps.get('color');
+    textSwatch.style.background = color ?? '#000';
+  }
+  const bgSwatch = stylePopoverElement.querySelector<HTMLElement>(
+    '.dmna-style-color-bg .dmna-style-color-swatch',
+  );
+  if (bgSwatch) {
+    const bg = spanProps.get('background-color');
+    if (bg) {
+      bgSwatch.style.background = bg;
+      bgSwatch.classList.remove('dmna-style-color-transparent');
+    } else {
+      bgSwatch.style.background = '';
+      bgSwatch.classList.add('dmna-style-color-transparent');
+    }
+  }
 }
 
 export function isStylePopoverShown(): boolean {
