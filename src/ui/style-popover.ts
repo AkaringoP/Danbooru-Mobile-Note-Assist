@@ -307,9 +307,10 @@ function buildColorRow(): HTMLElement {
   return row;
 }
 
-function buildSelectRow(control: string, placeholder: string): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'dmna-style-row dmna-style-row-1';
+function buildSelectControl(
+  control: string,
+  placeholder: string,
+): HTMLSelectElement {
   const select = document.createElement('select');
   select.className = 'dmna-style-select';
   select.dataset.control = control;
@@ -322,7 +323,13 @@ function buildSelectRow(control: string, placeholder: string): HTMLElement {
       `[MobileNoteAssist] style ${control} placeholder: ${select.value}`,
     );
   });
-  row.appendChild(select);
+  return select;
+}
+
+function buildSelectRow(...controls: HTMLSelectElement[]): HTMLElement {
+  const row = document.createElement('div');
+  row.className = `dmna-style-row dmna-style-row-${controls.length}`;
+  controls.forEach(c => row.appendChild(c));
   return row;
 }
 
@@ -346,8 +353,13 @@ export function createStylePopover(): void {
   inner.appendChild(buildTagRow(ROW_1_BUTTONS));
   inner.appendChild(buildTagRow(ROW_2_BUTTONS));
   inner.appendChild(buildColorRow());
-  inner.appendChild(buildSelectRow('size', 'Size'));
-  inner.appendChild(buildSelectRow('font', 'Font'));
+  inner.appendChild(
+    buildSelectRow(
+      buildSelectControl('size', 'Size'),
+      buildSelectControl('align', 'Align'),
+    ),
+  );
+  inner.appendChild(buildSelectRow(buildSelectControl('font', 'Font')));
 
   root.appendChild(inner);
   document.body.appendChild(root);
