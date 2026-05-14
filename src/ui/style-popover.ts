@@ -36,7 +36,7 @@ import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
 import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
-import {parseStyleAttr} from '../utils/style-attr';
+import {parseStyleAttr, serializeStyleAttr} from '../utils/style-attr';
 import {showLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
 
@@ -73,6 +73,13 @@ let isShown = false;
 
 interface OuterLayer {
   tag: string;
+  /**
+   * Raw attribute run (everything between the tag name and the `>`),
+   * preserved verbatim so mutate helpers can rebuild the open tag
+   * with non-style attributes (class, title, href) intact while only
+   * the `style="…"` portion is rewritten.
+   */
+  attrs: string;
   /** Index into `before` where the `<tag>` opening starts. */
   openStart: number;
   /** Length of the opening tag string (e.g. `<b>` is 3). */
@@ -84,9 +91,9 @@ interface OuterLayer {
   /**
    * Parsed `style="..."` attribute as a property → value map.
    * Populated only when the tag carried an inline style attribute
-   * (`<span>` / `<div>` in v4.2 markup); undefined when the tag had
-   * no style attr. Empty Map is possible when the style attr was
-   * present but parsed to nothing (all declarations malformed).
+   * (`<span>` in v4.2 markup); undefined when the tag had no style
+   * attr. Empty Map is possible when the style attr was present but
+   * parsed to nothing (all declarations malformed).
    */
   styleProps?: Map<string, string>;
 }
@@ -128,6 +135,7 @@ function detectOuterLayers(before: string, after: string): OuterLayer[] {
     const openStart = bLen - openMatch[0].length;
     const layer: OuterLayer = {
       tag,
+      attrs,
       openStart,
       openLen: openMatch[0].length,
       closeStart: consumedAfter,
@@ -206,6 +214,132 @@ export function getActiveStyleSnapshot(): {
     }
   }
   return {spanProps, divProps};
+}
+
+/**
+ * Strips any `style="…"` (or single-quoted form) attribute from a
+ * tag's raw attribute string. Used by `buildOpenTag` to peel the
+ * existing style out before rewriting it; non-style attrs (class,
+ * title, href) are left in place verbatim.
+ */
+function stripStyleAttr(attrs: string): string {
+  return attrs
+    .replace(/\s*\bstyle\s*=\s*"[^"]*"/i, '')
+    .replace(/\s*\bstyle\s*=\s*'[^']*'/i, '');
+}
+
+/**
+ * Builds an open tag string from a tag name, the layer's raw attribute
+ * run, and a property → value Map. The existing `style="…"` (if any)
+ * is dropped and replaced by `serializeStyleAttr(styleMap)`. When the
+ * Map is empty the rebuilt tag carries no style attr at all.
+ */
+function buildOpenTag(
+  tag: string,
+  attrs: string,
+  styleMap: Map<string, string>,
+): string {
+  const cleaned = stripStyleAttr(attrs);
+  const styleStr = serializeStyleAttr(styleMap);
+  if (!styleStr) {
+    return `<${tag}${cleaned}>`;
+  }
+  return `<${tag}${cleaned} style="${styleStr}">`;
+}
+
+/**
+ * Applies (or replaces) a single CSS property on the textarea's
+ * current selection using the option-A "unified inline style span"
+ * model: when the nearest outer `<span>` around the selection already
+ * exists, that span's style attribute is mutated in place (other
+ * properties intact); otherwise the selection is wrapped in a fresh
+ * `<span style="prop: value">…</span>`. Caller is responsible for
+ * confirming the selection is non-collapsed beforehand.
+ *
+ * Selection is preserved across the mutation — after the replace, the
+ * highlighted text is the same characters as before, just shifted by
+ * the open tag's length delta.
+ */
+export function applySpanStyle(prop: string, value: string): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  if (start === end) return;
+
+  const before = ta.value.slice(0, start);
+  const after = ta.value.slice(end);
+  const layers = detectOuterLayers(before, after);
+  const innerSpan = layers.find(l => l.tag === 'span');
+
+  if (innerSpan) {
+    const newProps = new Map(innerSpan.styleProps ?? []);
+    newProps.set(prop, value);
+    const newOpen = buildOpenTag('span', innerSpan.attrs, newProps);
+    const openEnd = innerSpan.openStart + innerSpan.openLen;
+    ta.value =
+      ta.value.slice(0, innerSpan.openStart) +
+      newOpen +
+      ta.value.slice(openEnd);
+    const lenDelta = newOpen.length - innerSpan.openLen;
+    ta.setSelectionRange(start + lenDelta, end + lenDelta);
+  } else {
+    const selected = ta.value.slice(start, end);
+    const open = `<span style="${prop}: ${value}">`;
+    const close = '</span>';
+    ta.value = before + open + selected + close + after;
+    ta.setSelectionRange(start + open.length, end + open.length);
+  }
+
+  ta.focus();
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  refreshStylePopoverState();
+}
+
+/**
+ * Removes a single CSS property from the nearest outer `<span>` that
+ * carries it. When that removal empties the span's style attribute
+ * AND the tag had no other attributes (class, title …), the entire
+ * span wrapper is unwrapped so no empty `<span></span>` shell is
+ * left behind. No-op when no outer span carries the property.
+ */
+export function removeSpanStyle(prop: string): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  if (start === end) return;
+
+  const before = ta.value.slice(0, start);
+  const after = ta.value.slice(end);
+  const layers = detectOuterLayers(before, after);
+  const target = layers.find(l => l.tag === 'span' && l.styleProps?.has(prop));
+  if (!target) return;
+
+  const newProps = new Map(target.styleProps);
+  newProps.delete(prop);
+
+  const closeAbsStart = end + target.closeStart;
+  const closeAbsEnd = closeAbsStart + target.closeLen;
+  const openEnd = target.openStart + target.openLen;
+
+  if (newProps.size === 0 && stripStyleAttr(target.attrs).trim() === '') {
+    ta.value =
+      ta.value.slice(0, target.openStart) +
+      ta.value.slice(openEnd, closeAbsStart) +
+      ta.value.slice(closeAbsEnd);
+    ta.setSelectionRange(start - target.openLen, end - target.openLen);
+  } else {
+    const newOpen = buildOpenTag('span', target.attrs, newProps);
+    ta.value =
+      ta.value.slice(0, target.openStart) + newOpen + ta.value.slice(openEnd);
+    const lenDelta = newOpen.length - target.openLen;
+    ta.setSelectionRange(start + lenDelta, end + lenDelta);
+  }
+
+  ta.focus();
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  refreshStylePopoverState();
 }
 
 /**
