@@ -31,6 +31,7 @@ import {hideColorPicker} from './color-picker';
 import {getPopoverInputElement} from './popover';
 import {hideRubyPopover} from './ruby-popover';
 import {hideStrokePicker} from './stroke-picker';
+import {listenDocumentTap} from '../utils/pointer-tap';
 
 let modalElement: HTMLElement | null = null;
 let overlayElement: HTMLElement | null = null;
@@ -195,7 +196,8 @@ export function createLinkPopover(): void {
   modalElement = modal;
   urlInput = input;
 
-  document.addEventListener('pointerdown', onOutsideTap, true);
+  // See color-picker.ts for the listenDocumentTap rationale.
+  listenDocumentTap(onOutsideTap);
   document.addEventListener('click', onOutsideClick, true);
 }
 

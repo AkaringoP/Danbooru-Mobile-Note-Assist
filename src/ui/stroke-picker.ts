@@ -29,6 +29,7 @@ import {hideColorPicker} from './color-picker';
 import {hideLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
 import {hideRubyPopover} from './ruby-popover';
+import {listenDocumentTap} from '../utils/pointer-tap';
 
 const SWATCHES: ReadonlyArray<string> = [
   '#000000',
@@ -412,7 +413,8 @@ export function createStrokePicker(): void {
   setThickness(1);
   setAdvancedOpen(false);
 
-  document.addEventListener('pointerdown', onOutsideTap, true);
+  // See color-picker.ts for the listenDocumentTap rationale.
+  listenDocumentTap(onOutsideTap);
   document.addEventListener('click', onOutsideClick, true);
 }
 
