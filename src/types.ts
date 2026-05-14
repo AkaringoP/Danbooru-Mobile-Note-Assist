@@ -140,12 +140,26 @@ export interface Note {
  *                   `confirmedState`, so resetting would clobber a
  *                   prior ✔; typing after a drag shouldn't be undone
  *                   by a ↶ aimed at the drag.
+ * - `'text'`      — style-popover wrap / unwrap / span-style apply.
+ *                   `prevState` captures the textarea value + cursor
+ *                   range immediately before the mutation; undo
+ *                   restores both so a single style button click is
+ *                   reversed cleanly. Raw keystrokes are intentionally
+ *                   NOT pushed (would inflate the log per character);
+ *                   they remain under the browser's native textarea
+ *                   undo history.
  */
+export interface TextSnapshot {
+  text: string;
+  selectionStart: number;
+  selectionEnd: number;
+}
 export type ActionLogEntry =
   | {noteId: NoteId; type: 'create'; prevState: null}
   | {noteId: NoteId; type: 'edit'; prevState: NoteState}
   | {noteId: NoteId; type: 'delete'; prevState: NoteState}
-  | {noteId: NoteId; type: 'transform'; prevState: NoteState};
+  | {noteId: NoteId; type: 'transform'; prevState: NoteState}
+  | {noteId: NoteId; type: 'text'; prevState: TextSnapshot};
 
 /**
  * High-level interaction mode.

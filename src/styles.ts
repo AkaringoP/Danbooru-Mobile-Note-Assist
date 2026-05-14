@@ -295,25 +295,65 @@ export const STYLES = `
       border-color: transparent transparent rgba(30, 30, 30, 0.96) transparent;
       pointer-events: none;
     }
-    /* Input row layout: 2-column grid where the side stack (👁 + ↶)
-       occupies HALF of one bottom-row button column (= 1/6 of the
-       grid track width), and the textarea takes everything else.
-       v3.1.7 had the side stack take a full button column (1/3),
-       which was clean alignment-wise but ate too much textarea
-       width. Per user request the side-stack column is halved and
-       the textarea grows by the freed space (+ ~47 CSS px). The
-       side-stack is right-aligned with the delete button's right
-       edge — both end at the popover's right padding edge — by
-       design (the 2nd grid column ends at 100% just like the
-       3rd column of the bottom row).
-       The calc((100% - 16px) / 6) width matches half a bottom-row
-       button: bottom is 3 buttons + 2*8px gap = 100%, so each
-       button is (100% - 16px) / 3, and half is (100% - 16px) / 6. */
+    /* Input row layout: 2-column grid — textarea soaks up the slack,
+       sideStack pinned to a fixed width so its buttons stay roughly
+       square (height 36 from .dmna-popover-side-btn min-height).
+       Earlier this was a calc proportional to the popover width;
+       Phase 4 polish widened the popover (POPOVER_WIDTH 260 → 343)
+       to match action-row cell widths to the style sub-popover, and
+       a proportional side stack would have ballooned into a wide
+       rectangle. 40 px is just a hair above the 36 px button square
+       so the buttons read as compact icons rather than stretched
+       chips. */
+    /* Header row (Phase 3, v4.2): hosts the Preview/Edit mode toggle
+       on the left. justify-content keeps room for a future close /
+       help affordance on the right. */
+    #dmna-popover-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    /* Mode toggle + "view help" wiki link styled as inline text-links
+       rather than chips — mirrors Danbooru's own Editing-note header
+       (Preview affordance on the left, "view help" anchor on the
+       right). Danbooru's native links are not underlined at rest;
+       the underline surfaces only on hover, so we match that pattern.
+       The help link is an <a>, not a button, so :disabled handling
+       is mode-toggle-only. */
+    .dmna-popover-mode-toggle,
+    .dmna-popover-help-link {
+      background: transparent;
+      border: none;
+      color: #4a9eff;
+      font-size: 13px;
+      font-family: inherit;
+      padding: 2px 0;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      text-decoration: none;
+    }
+    .dmna-popover-mode-toggle:hover,
+    .dmna-popover-help-link:hover {
+      color: #6bb6ff;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .dmna-popover-mode-toggle:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     #dmna-popover-input-row {
       display: grid;
-      grid-template-columns: 1fr calc((100% - 16px) / 6);
+      grid-template-columns: 1fr 40px;
       gap: 8px;
       align-items: stretch;
+    }
+    #dmna-popover-input,
+    #dmna-popover-preview {
+      grid-column: 1;
+      grid-row: 1;
     }
     #dmna-popover-input {
       min-width: 0;
@@ -322,12 +362,58 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      font-size: 14px;
+      /* Matches Danbooru's note-edit-dialog inner font scale
+         (notes.scss: div.note-edit-dialog { font-size: 0.8em }).
+         13px ≈ 0.8 × 16px body default, putting our textarea in the
+         same visual range as the native dialog's textarea so users
+         coming from the native flow don't perceive a size jump. */
+      font-size: 13px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;
       outline: none;
       resize: none;
+    }
+    /* Preview-mode read-only sibling of the textarea (Phase 3, v4.2).
+       Matches the textarea's padding/border/font so the swap looks
+       like a mode change rather than a layout shift. overflow-wrap
+       guards against unbroken markup pushing the popover wider. */
+    /* Inside-preview styling that Danbooru applies via its own
+       notes.scss but that we'd otherwise miss — the sanitizer keeps
+       <tn> as a raw element (NoteSanitizer ALLOWED_ELEMENTS includes
+       "tn") and Danbooru styles it via .tn class. We cover both
+       the bare-element form and the explicit class form because the
+       sanitizer accepts either when the user types markup by hand.
+       Color resolves through --note-tn-color → --muted-text-color →
+       --grey-4 (#9192a7). */
+    #dmna-popover-preview tn,
+    #dmna-popover-preview .tn {
+      font-size: 0.8em;
+      color: #9192a7;
+    }
+    #dmna-popover-preview {
+      min-width: 0;
+      /* Matches Danbooru's div.note-body (notes.scss line 13-15) so
+         the preview reads as a faithful screenshot of how the note
+         will render on the post page: same beige background, black
+         text + border, 14 px / 1.25 line-height, 4 px padding. The
+         Edit textarea keeps the dark popover theme — only Preview
+         crosses over. min-height keeps the cell a roughly textarea-
+         sized rectangle so toggling Edit ↔ Preview doesn't visibly
+         shift the popover height under the user. */
+      min-height: calc(1.25em * 3 + 8px);
+      max-height: 240px;
+      padding: 4px;
+      border: 1px solid #000;
+      border-radius: 0;
+      background: #ffffee;
+      color: #000;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.25;
+      box-sizing: border-box;
+      overflow-wrap: anywhere;
+      overflow-y: auto;
     }
     #dmna-popover-input:focus { border-color: #0073ff; }
     #dmna-popover-side-stack {
@@ -349,17 +435,37 @@ export const STYLES = `
       align-items: center;
       justify-content: center;
       padding: 0;
-      min-height: 0;
+      /* min-height anchors each side-stack button to its 2-button-era
+         size so adding the 3rd button (Aa, v4.2 Phase 4) grows the
+         input row vertically instead of shrinking the existing
+         buttons. The textarea sits in the same grid row with
+         align-items: stretch, so it follows the side stack's height
+         and the user gets a taller writing area for free. */
+      min-height: 36px;
+    }
+    /* Generic press feedback for side-stack buttons (covers Aa; the
+       eye and undo IDs below override with their own variants).
+       Uses the popover's blue accent rather than a white tint so the
+       white "Aa" / "↶" glyphs stay legible at peak press. */
+    .dmna-popover-side-btn:active {
+      background: rgba(74, 158, 255, 0.26);
+    }
+    /* Hover / press text-color shift for the white-glyph side buttons
+       (Aa / ↶). 👁 is an emoji and ignores color; undo's highlighted
+       state has its own hue rule (specificity wins below). */
+    .dmna-popover-side-btn:hover,
+    .dmna-popover-side-btn:active {
+      color: #1a1a1a;
     }
     /* Eye uses pointer events for press-and-hold, so it overrides
        touch-action to disable scroll/zoom while held. */
     #dmna-popover-eye { touch-action: none; }
     #dmna-popover-eye:active,
     #dmna-popover-eye.is-pressed {
-      background: rgba(255, 255, 255, 0.22);
+      background: rgba(74, 158, 255, 0.30);
     }
     #dmna-popover-undo:active {
-      background: rgba(255, 255, 255, 0.22);
+      background: rgba(74, 158, 255, 0.30);
     }
     /* Disabled state for the popover's interactive controls — used when
        the active note is soft-deleted, leaving only ↶ (highlighted) live. */
@@ -388,7 +494,7 @@ export const STYLES = `
     }
     #dmna-popover-buttons {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
       gap: 8px;
       margin-top: 10px;
     }
@@ -404,7 +510,7 @@ export const STYLES = `
       touch-action: manipulation;
     }
     .dmna-popover-btn:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     /* Light/white character color for ✔ / ✖ (text-glyph presentation
        forced via VS-15 in createPopover). 🗑 ignores this — it renders
@@ -427,6 +533,16 @@ export const STYLES = `
       pointer-events: none;
     }
     .dmna-popover-btn[data-action="delete"] { color: #ff8b8b; }
+    /* Hover / press text-color shift for the all-white glyphs (✔ / ✖)
+       so they stay legible when the background lifts. 🗑 / 📜 are
+       emoji and ignore the color property; delete's red and undo's
+       highlighted orange keep their per-state hues. */
+    .dmna-popover-btn[data-action="confirm"]:hover,
+    .dmna-popover-btn[data-action="confirm"]:active,
+    .dmna-popover-btn[data-action="cancel"]:hover,
+    .dmna-popover-btn[data-action="cancel"]:active {
+      color: #1a1a1a;
+    }
 
     /* Phase 4 (D11): Confirm in-flight UI lock. Pointer events off on
        boxes + popover + floating button so any stray tap/drag is a
@@ -611,7 +727,7 @@ export const STYLES = `
       touch-action: manipulation;
     }
     .dmna-tag-popover-btn:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     /* Primary action (Submit) — Danbooru convention: primary first. */
     .dmna-tag-popover-btn[data-action="submit"] {
@@ -700,7 +816,7 @@ export const STYLES = `
       touch-action: manipulation;
     }
     .dmna-error-modal-btn:active {
-      background: rgba(255, 255, 255, 0.28);
+      background: rgba(74, 158, 255, 0.36);
     }
     .dmna-error-modal-btn[data-action="retry"] {
       border-color: rgba(0, 115, 255, 0.6);
@@ -767,5 +883,706 @@ export const STYLES = `
     }
     .dmna-toast-btn.is-primary:hover, .dmna-toast-btn.is-primary:focus {
       background: rgba(46, 204, 113, 0.75);
+    }
+
+    /* Style popover (Phase 4, v4.2) — sibling of the note popover,
+       attached to its right (or left when overflowing). Same dark
+       chrome / shadow / scale-from-origin as the note popover so the
+       two look like one widget. Width is hard-coded in the TS module
+       (STYLE_POPOVER_WIDTH = 224) to match the 7-column grid;
+       changing one without the other will skew the right-overflow
+       flip math. */
+    /* Style popover (v4.2 Phase 4). Outer is always laid out so the
+       attach math (transform: translate(x,y) scale(invScale)) can run
+       even while the popover is invisible — we fade via opacity, not
+       display. The inner wrapper handles the slide motion separately
+       so it composes cleanly with the outer's pinch-zoom counter-
+       scale (transforms don't fight).
+       Width matches POPOVER_WIDTH in config (260) so flip-left math
+       is a clean width subtraction; STYLE_POPOVER_WIDTH in
+       style-popover.ts imports POPOVER_WIDTH for the same reason. */
+    #dmna-style-popover {
+      position: absolute;
+      left: 0; top: 0;
+      width: 260px;
+      background: rgba(30, 30, 30, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 10px;
+      padding: 10px;
+      z-index: 10996;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      transform-origin: 0 0;
+      will-change: transform, opacity;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+    #dmna-style-popover.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    /* Inner wrapper carries the slide motion. translateX in the
+       closed state nudges it toward the note popover's right edge
+       (the default attach side); the .show flip releases it to its
+       computed position. */
+    #dmna-style-popover-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transform: translateX(-12px);
+      transition: transform 0.18s ease;
+    }
+    #dmna-style-popover.show #dmna-style-popover-inner {
+      transform: translateX(0);
+    }
+    .dmna-style-row {
+      display: grid;
+      gap: 8px;
+    }
+    .dmna-style-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .dmna-style-row-2 { grid-template-columns: 1fr 1fr; }
+    .dmna-style-row-1 { grid-template-columns: 1fr; }
+    /* Buttons share the action-button dimensions (padding/font/border/
+       radius) from .dmna-popover-btn so the visual weight matches
+       what's already on the note popover's bottom row. */
+    .dmna-style-btn {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: white;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    /* Hover / press feedback uses the popover's blue accent rather
+       than a white tint. White text glyphs (B/I/U/S/sub/sup) wash out
+       against a bright white-tint bg; the blue family keeps contrast
+       intact AND ties the press feedback to the same accent color used
+       for .is-active highlights, .dmna-popover-help-link, and the link
+       button. */
+    .dmna-style-btn:hover { background: rgba(74, 158, 255, 0.18); }
+    .dmna-style-btn:active { background: rgba(74, 158, 255, 0.40); }
+    .dmna-style-btn:disabled,
+    .dmna-style-select:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .dmna-style-btn:disabled:hover {
+      background: rgba(255, 255, 255, 0.13);
+    }
+    /* Active highlight = "this tag currently wraps the selection."
+       Tap to unwrap that layer. The blue echoes the Preview-link
+       color so the popover's active affordances read as one family. */
+    .dmna-style-btn.is-active {
+      background: rgba(74, 158, 255, 0.28);
+      border-color: rgba(74, 158, 255, 0.70);
+      box-shadow: inset 0 0 0 1px rgba(74, 158, 255, 0.45);
+    }
+    .dmna-style-btn.is-active:hover {
+      background: rgba(74, 158, 255, 0.36);
+    }
+    /* Hover / press lift the background bright enough that the all-
+       white glyph buttons (B / I / U / S / sub / sup) can wash out.
+       Swap their text to dark on those transient states so the
+       affordance stays legible across hover (PC) and press (mobile +
+       PC). Colored siblings (tn / code / a / ruby) keep their hue
+       because these rules don't touch the color property on them. */
+    .dmna-style-btn-bold:hover,
+    .dmna-style-btn-bold:active,
+    .dmna-style-btn-italic:hover,
+    .dmna-style-btn-italic:active,
+    .dmna-style-btn-underline:hover,
+    .dmna-style-btn-underline:active,
+    .dmna-style-btn-strike:hover,
+    .dmna-style-btn-strike:active,
+    .dmna-style-btn-sub:hover,
+    .dmna-style-btn-sub:active,
+    .dmna-style-btn-sup:hover,
+    .dmna-style-btn-sup:active,
+    .dmna-style-color-text:hover,
+    .dmna-style-color-text:active,
+    .dmna-style-color-stroke:hover,
+    .dmna-style-color-stroke:active,
+    .dmna-style-color-bg:hover,
+    .dmna-style-color-bg:active {
+      color: #1a1a1a;
+    }
+    /* Per-tag preview rendering — each button styles its glyph the
+       way the tag would render so the user knows the effect before
+       tapping. */
+    .dmna-style-btn-bold { font-weight: 700; }
+    .dmna-style-btn-italic { font-style: italic; }
+    .dmna-style-btn-underline { text-decoration: underline; }
+    .dmna-style-btn-strike { text-decoration: line-through; }
+    .dmna-style-btn-tn {
+      font-size: 15px;
+      color: rgba(150, 200, 255, 0.95);
+      letter-spacing: 0.5px;
+    }
+    .dmna-style-btn-link {
+      color: #4a9eff;
+      text-decoration: underline;
+    }
+    /* sub / sup / code / ruby — Phase 5 v4.2 additions. The label
+       itself ("sub", "sup", etc.) carries the meaning; the styling
+       below just adds a subtle visual cue so the buttons don't read
+       as a wall of identical chips. */
+    .dmna-style-btn-sub,
+    .dmna-style-btn-sup {
+      font-size: 14px;
+    }
+    .dmna-style-btn-code {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 16px;
+      color: rgba(255, 200, 130, 0.95);
+    }
+    .dmna-style-btn-ruby {
+      font-size: 14px;
+      color: rgba(180, 220, 180, 0.95);
+    }
+    /* Color row: button is a label + swatch pair in inline-flex.
+       Padding tightens vertically vs tag buttons since two pieces of
+       content share the same row. */
+    .dmna-style-color-text,
+    .dmna-style-color-stroke,
+    .dmna-style-color-bg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      font-size: 13px;
+      gap: 8px;
+    }
+    .dmna-style-color-label {
+      font-weight: 500;
+    }
+    .dmna-style-color-swatch {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      box-sizing: border-box;
+    }
+    /* Transparent swatch = the page's background showing through, with
+       a diagonal slash so the user can tell at a glance it's not just
+       black. */
+    .dmna-style-color-transparent {
+      background:
+        linear-gradient(
+          to top right,
+          transparent 47%,
+          rgba(255, 80, 80, 0.85) 47%,
+          rgba(255, 80, 80, 0.85) 53%,
+          transparent 53%
+        );
+    }
+    /* Native select kept simple — Phase 4 ships dropdown shells with
+       placeholder option only; option list lands in follow-up cycle
+       per user. */
+    .dmna-style-select {
+      width: 100%;
+      padding: 10px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: white;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      box-sizing: border-box;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.7) 50%),
+        linear-gradient(135deg, rgba(255,255,255,0.7) 50%, transparent 50%);
+      background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 10px) 50%;
+      background-size: 6px 6px;
+      background-repeat: no-repeat;
+    }
+    .dmna-style-select:hover { background-color: rgba(255, 255, 255, 0.20); }
+    /* Labeled select row — small inline label on the left ("Size" /
+       "Font") plus the dropdown on the right. The dropdown now
+       reflects the currently applied value rather than a placeholder,
+       so the label is the only persistent cue for what the menu is. */
+    .dmna-style-labeled-select-row {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .dmna-style-select-label {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: 500;
+      user-select: none;
+    }
+
+    /* Link sub-popover (Phase 5, v4.2) — inline modal mounted as a
+       child of #dmna-popover so it inherits the popover's transform/
+       scale automatically. Triggered from the style popover's <a>
+       button to collect a URL for wrapping the textarea selection.
+       The dim overlay covers the note popover area only, not the
+       full viewport — the user's focus stays on the note they were
+       editing rather than the whole page being dimmed for a single
+       link prompt. */
+    #dmna-link-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 1;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-link-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-link-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 10px;
+      z-index: 2;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-link-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-link-modal-input {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-size: 13px;
+      font-family: inherit;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-link-modal-input:focus {
+      border-color: #0073ff;
+    }
+    #dmna-link-modal-confirm {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-link-modal-confirm:active {
+      background: rgba(74, 158, 255, 0.36);
+    }
+
+    /* Color picker (Phase 5, v4.2) — inline modal mounted as a child
+       of #dmna-popover, mirroring the link-popover pattern. 14-swatch
+       grid (7×2) + HEX input row. z-index above the link modal so the
+       two layer cleanly when both are wired (in practice only one is
+       shown at a time — the user picks color OR enters a link, not
+       both in the same gesture). */
+    #dmna-color-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 3;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-color-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-color-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 12px;
+      z-index: 4;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-color-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-color-swatches {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .dmna-color-swatch {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      cursor: pointer;
+      padding: 0;
+      box-sizing: border-box;
+      transition: transform 0.08s ease;
+    }
+    .dmna-color-swatch:hover {
+      transform: scale(1.08);
+      border-color: rgba(255, 255, 255, 0.6);
+    }
+    .dmna-color-swatch:active {
+      transform: scale(0.92);
+    }
+    /* Transparent swatch — diagonal red slash on a transparent ground,
+       matching the style popover's color-row button. Used as the
+       "remove this property" swatch in the BG and Stroke pickers. */
+    .dmna-color-swatch-transparent {
+      background:
+        linear-gradient(
+          to top right,
+          transparent 47%,
+          rgba(255, 80, 80, 0.85) 47%,
+          rgba(255, 80, 80, 0.85) 53%,
+          transparent 53%
+        ) !important;
+    }
+    #dmna-color-input-row {
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+    }
+    #dmna-color-hex {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-color-hex:focus {
+      border-color: #0073ff;
+    }
+    #dmna-color-hex.is-invalid {
+      border-color: #e53935;
+    }
+    #dmna-color-apply {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-color-apply:active {
+      background: rgba(74, 158, 255, 0.36);
+    }
+    #dmna-color-apply:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Stroke picker (Phase 5, v4.2 D19) — same overlay/modal pattern
+       as color-picker plus a collapsible Advanced section for thickness
+       and per-side controls. Swatch tiles reuse .dmna-color-swatch so
+       the two pickers share visual rhythm. */
+    #dmna-stroke-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 3;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-stroke-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-stroke-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 12px;
+      z-index: 4;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+      max-height: calc(100% - 32px);
+      overflow-y: auto;
+    }
+    #dmna-stroke-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-stroke-swatches {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    #dmna-stroke-input-row {
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+      margin-bottom: 8px;
+    }
+    #dmna-stroke-hex {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-stroke-hex:focus {
+      border-color: #0073ff;
+    }
+    #dmna-stroke-hex.is-invalid {
+      border-color: #e53935;
+    }
+    #dmna-stroke-apply {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-stroke-apply:active {
+      background: rgba(74, 158, 255, 0.36);
+    }
+    #dmna-stroke-apply:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    #dmna-stroke-advanced-toggle {
+      background: transparent;
+      border: none;
+      color: #4a9eff;
+      font-size: 13px;
+      font-family: inherit;
+      padding: 4px 0;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      text-decoration: none;
+      width: 100%;
+      text-align: left;
+    }
+    #dmna-stroke-advanced-toggle:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    #dmna-stroke-advanced {
+      display: none;
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    #dmna-stroke-advanced.is-open {
+      display: block;
+    }
+    .dmna-stroke-advanced-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .dmna-stroke-advanced-row:last-child {
+      margin-bottom: 0;
+    }
+    .dmna-stroke-advanced-label {
+      flex: 0 0 70px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .dmna-stroke-thickness-group {
+      display: flex;
+      gap: 4px;
+    }
+    .dmna-stroke-thickness-btn {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .dmna-stroke-thickness-btn.is-active {
+      background: rgba(74, 158, 255, 0.28);
+      border-color: rgba(74, 158, 255, 0.7);
+      color: white;
+    }
+    .dmna-stroke-sides-group {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px 12px;
+      flex: 1;
+    }
+    .dmna-stroke-side-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.85);
+      cursor: pointer;
+      user-select: none;
+    }
+    .dmna-stroke-side-label input[type="checkbox"] {
+      cursor: pointer;
+      margin: 0;
+    }
+
+    /* Ruby modal (Phase 5, v4.2) — inline modal mounted as a child of
+       #dmna-popover, mirroring link-popover layout (single-line input
+       + ✔ Apply button). Collects the reading text (furigana /
+       pronunciation gloss) used inside the <rt> annotation. z-index
+       5/6 places it above stroke (3/4) and color (3/4); pickers are
+       mutually exclusive in practice so the stacking just keeps the
+       ordering unambiguous. */
+    #dmna-ruby-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 5;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-ruby-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-ruby-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 10px;
+      z-index: 6;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-ruby-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-ruby-modal-input {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-size: 13px;
+      font-family: inherit;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-ruby-modal-input:focus {
+      border-color: #0073ff;
+    }
+    #dmna-ruby-modal-confirm {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-ruby-modal-confirm:active {
+      background: rgba(74, 158, 255, 0.36);
     }
   `;

@@ -29,7 +29,7 @@
  *     here too via interactions/keyboard)
  */
 
-import {NoteId} from '../types';
+import {NoteId, TextSnapshot, isServerNoteId} from '../types';
 import {
   POPOVER_OFFSET,
   POPOVER_WIDTH,
@@ -37,8 +37,10 @@ import {
   SCRIPT_VERSION,
 } from '../config';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {apiPreviewNote} from '../api/notes';
 import {getOriginalWidth} from '../state/image-state';
 import {
+  clearTextActionsForNote,
   getActiveNoteId,
   hardDeleteNote,
   notes,
@@ -53,6 +55,12 @@ import {
   updateActiveHandleScales,
   updateNoteVisuals,
 } from './note-box';
+import {
+  hideStylePopover,
+  refreshStylePopoverState,
+  toggleStylePopover,
+} from './style-popover';
+import {showToast} from './toast';
 
 // ---------------------------------------------------------------------------
 // Module-private state
@@ -65,6 +73,66 @@ let popoverInputElement: HTMLTextAreaElement | null = null;
 // (in or out of this module) reads it after — the static CSS-center
 // arrow doesn't need a per-call slide. Phase 1 fidelity loss is
 // nominal; Phase 2 won't miss it.
+
+// Preview-mode state (Phase 3, v4.2). `previewElement` is the read-only
+// div that shows the server-sanitized HTML when isPreviewMode is true;
+// it shares the input row's first grid cell with the textarea, only
+// one of the two is visible at a time. `previewRequestId` invalidates
+// in-flight `apiPreviewNote` calls when the user resets / swaps note
+// before the response lands.
+let popoverPreviewElement: HTMLElement | null = null;
+let popoverModeToggleElement: HTMLButtonElement | null = null;
+let popoverStyleToggleElement: HTMLButtonElement | null = null;
+let isPreviewMode = false;
+
+/**
+ * Whether the popover is currently in Preview mode (sanitized HTML
+ * shown in place of the textarea). Used by `style-popover` to disable
+ * all of its controls while preview is active — style markup edits
+ * make no sense when the user isn't looking at the raw textarea.
+ */
+export function getIsPreviewMode(): boolean {
+  return isPreviewMode;
+}
+let previewRequestId = 0;
+
+/**
+ * Public ref to the textarea so the style sub-popover can read the
+ * current selection / mutate value when applying wrap or unwrap.
+ * Same-layer (ui ↔ ui) sibling access; the pair is small enough that
+ * a hook bag would be ceremony.
+ */
+export function getPopoverInputElement(): HTMLTextAreaElement | null {
+  return popoverInputElement;
+}
+
+/**
+ * Re-evaluate the Aa side-stack button's disabled state and ask the
+ * style sub-popover to refresh its own active highlights. Called on
+ * any textarea selection change.
+ */
+function onTextareaSelectionChanged(): void {
+  if (popoverInputElement && popoverStyleToggleElement) {
+    const collapsed =
+      popoverInputElement.selectionStart === popoverInputElement.selectionEnd;
+    popoverStyleToggleElement.disabled = collapsed;
+  }
+  refreshStylePopoverState();
+}
+
+/**
+ * Document-level selectionchange handler — only kept bound while the
+ * popover is shown (Phase 5-h Task 5.31). v4.2 had this attached at
+ * boot, so every text selection on the surrounding Danbooru page
+ * triggered our callback (cheap but unnecessary). Module-level
+ * reference (rather than re-creating per show/hide) so add/remove
+ * stay symmetric.
+ */
+function selectionChangeHandler(): void {
+  if (document.activeElement === popoverInputElement) {
+    onTextareaSelectionChanged();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -88,12 +156,49 @@ export function createPopover(): void {
   arrow.id = 'dmna-popover-arrow';
   root.appendChild(arrow);
 
+  // Header row (Phase 3, v4.2) — hosts the Preview/Edit mode toggle
+  // on the left and a "view help" wiki link on the right, mirroring
+  // Danbooru's own Editing-note dialog header.
+  const header = document.createElement('div');
+  header.id = 'dmna-popover-header';
+  const modeToggle = document.createElement('button');
+  modeToggle.type = 'button';
+  modeToggle.id = 'dmna-popover-mode-toggle';
+  modeToggle.className = 'dmna-popover-mode-toggle';
+  // Icon + label like Danbooru's Edit-Comment header (👁 Preview).
+  // textContent flips through handleModeToggle / enterEditMode as
+  // the user moves between modes — initial state is Edit, so the
+  // visible affordance is "go to Preview."
+  modeToggle.textContent = '👁 Preview';
+  modeToggle.setAttribute('aria-label', 'Toggle Preview / Edit');
+  modeToggle.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    void handleModeToggle();
+  });
+  header.appendChild(modeToggle);
+
+  const helpLink = document.createElement('a');
+  helpLink.id = 'dmna-popover-help-link';
+  helpLink.className = 'dmna-popover-help-link';
+  helpLink.href = 'https://danbooru.donmai.us/wiki_pages/help:notes';
+  helpLink.target = '_blank';
+  helpLink.rel = 'noopener noreferrer';
+  helpLink.textContent = 'view help';
+  header.appendChild(helpLink);
+
+  root.appendChild(header);
+  popoverModeToggleElement = modeToggle;
+
   const inputRow = document.createElement('div');
   inputRow.id = 'dmna-popover-input-row';
 
   const input = document.createElement('textarea');
   input.id = 'dmna-popover-input';
-  input.rows = 3;
+  // 4 rows matches the side-stack's 3-button layout (eye / undo /
+  // style) — keeping textarea ≥ side-stack lets grid `align-items:
+  // stretch` resolve cleanly (Phase 4 v4.2, D10).
+  input.rows = 4;
   input.placeholder = 'Note...';
   input.autocomplete = 'off';
   input.spellcheck = false;
@@ -112,13 +217,33 @@ export function createPopover(): void {
   // a newline. Esc is handled at document level
   // (interactions/keyboard) so it works whether or not the textarea
   // has focus.
+  //
+  // IME composition guard (`!e.isComposing` + Safari's `keyCode !==
+  // 229` fallback): on Korean / Japanese / Chinese IMEs the user
+  // sometimes hits Ctrl+Enter to commit the in-progress conversion.
+  // Without this guard the shortcut routes to ✔ with the half-typed
+  // composition still in the textarea, committing partial Hangul /
+  // Kana / Pinyin to the server (Phase 5-h Task 5.23).
   input.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (e.isComposing || e.keyCode === 229) {
+        return;
+      }
       e.preventDefault();
       handlePopoverAction('confirm');
     }
   });
   inputRow.appendChild(input);
+
+  // Preview-mode read-only sibling of the textarea (Phase 3, v4.2).
+  // Lives in the same grid cell — only one of the two is `display`d
+  // at a time. `innerHTML` is set from Danbooru's `sanitized_body`,
+  // so XSS is the server's responsibility (D5).
+  const preview = document.createElement('div');
+  preview.id = 'dmna-popover-preview';
+  preview.style.display = 'none';
+  inputRow.appendChild(preview);
+  popoverPreviewElement = preview;
 
   // Right-side button stack: 👁 (top, hold-to-show debug zones) +
   // ↶ (bottom, per-note undo). Two narrow stacked buttons share the
@@ -183,6 +308,39 @@ export function createPopover(): void {
   });
   sideStack.appendChild(undoBtn);
 
+  // Aa style-popover toggle (Phase 4, v4.2). Opens / closes the
+  // sibling sub-popover that hosts the markup buttons. Disabled by
+  // default — only enables when the textarea has a non-collapsed
+  // selection, since the wrap behavior needs something to wrap.
+  const styleBtn = document.createElement('button');
+  styleBtn.type = 'button';
+  styleBtn.id = 'dmna-popover-style-toggle';
+  styleBtn.className = 'dmna-popover-side-btn';
+  styleBtn.textContent = 'Aa';
+  styleBtn.disabled = true;
+  styleBtn.setAttribute('aria-label', 'Toggle style markup popover');
+  // Preserve the textarea's visible selection across the toggle:
+  // canceling mousedown's default keeps focus on the textarea instead
+  // of shifting it to this button, so the browser doesn't fade the
+  // selection highlight (and the user doesn't feel like the block
+  // got dropped under them).
+  styleBtn.addEventListener('mousedown', e => e.preventDefault());
+  styleBtn.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleStylePopover();
+  });
+  sideStack.appendChild(styleBtn);
+  popoverStyleToggleElement = styleBtn;
+
+  // Track textarea selection changes so we can flip the Aa enable
+  // state and refresh the sub-popover's active-tag highlights without
+  // them going stale. `selectionchange` fires for cursor / drag /
+  // keyboard navigation — broader than `select` alone, which only
+  // fires on non-collapsed selections. Bound/unbound by show/hide
+  // (Phase 5-h Task 5.31) so the page-wide listener doesn't run
+  // while the popover is closed.
+
   inputRow.appendChild(sideStack);
   root.appendChild(inputRow);
 
@@ -196,13 +354,14 @@ export function createPopover(): void {
   // as a system emoji — its CSS color is a visual hint that may be
   // ignored.
   const actions: Array<{
-    action: 'confirm' | 'cancel' | 'delete';
+    action: 'confirm' | 'cancel' | 'delete' | 'history';
     icon: string;
     label: string;
   }> = [
     {action: 'confirm', icon: '✔︎', label: 'Confirm'},
     {action: 'cancel', icon: '✖︎', label: 'Cancel'},
     {action: 'delete', icon: '🗑', label: 'Delete'},
+    {action: 'history', icon: '📜', label: 'History'},
   ];
   actions.forEach(({action, icon, label}) => {
     const b = document.createElement('button');
@@ -249,6 +408,12 @@ export function showPopover(noteId: NoteId): void {
   if (popoverInputElement.dataset.boundNoteId !== noteId) {
     popoverInputElement.value = note.current.text || '';
     popoverInputElement.dataset.boundNoteId = noteId;
+    // Note swap (or first show) drops any leftover Preview mode from
+    // the previous note. v4.2 Phase 3.
+    resetPreviewMode();
+    // Same swap also closes the style sub-popover (v4.2 Phase 4
+    // D9) — its position math is keyed to the previous active note.
+    hideStylePopover();
   }
   updatePopoverForActiveNote();
   // Pre-position BEFORE reveal. If we add `.show` first the popover
@@ -264,6 +429,7 @@ export function showPopover(noteId: NoteId): void {
   // tapped open and trigger ✓ Confirm prematurely. CSS in STYLES
   // does the actual hide.
   document.body.classList.add('dmna-note-popover-open');
+  document.addEventListener('selectionchange', selectionChangeHandler);
 }
 
 /** Hides the popover without destroying it. */
@@ -275,15 +441,26 @@ export function hidePopover(): void {
     delete popoverInputElement.dataset.boundNoteId;
   }
   document.body.classList.remove('dmna-note-popover-open');
+  document.removeEventListener('selectionchange', selectionChangeHandler);
+  // Preview mode is per-session-of-this-popover; close drops it so a
+  // future open starts in Edit mode (v4.2 Phase 3).
+  resetPreviewMode();
+  // Style sub-popover follows the note popover's lifecycle — it has
+  // no meaning without a note popover to attach to (v4.2 Phase 4 D9).
+  hideStylePopover();
 }
 
 /**
- * Reflects the active note's `isDeleted` state onto the popover's
- * controls. When the note is soft-deleted the popover enters a
- * "view + undo only" mode: textarea + ✔ / ✖ / 🗑 / 👁 are all
- * disabled and ↶ is highlighted as the only live action. Re-enabled
- * when popoverUndo restores the note (`isDeleted` flips back to
- * false).
+ * Reflects the active note's `isDeleted` and `isServerNote` state
+ * onto the popover's controls.
+ *
+ * - Soft-deleted note: textarea + ✔ / ✖ / 🗑 / 👁 disabled. ↶ is
+ *   highlighted as the only live action. Re-enabled when popoverUndo
+ *   restores the note (`isDeleted` flips back to false).
+ * - History 📜 (Phase 2, v4.2): disable mirrors `!isServerNote`, not
+ *   `isDeleted` — viewing the version history of a server note still
+ *   makes sense after deletion (Q to user 2026-05-13), and a temp
+ *   note has no server-side history to point at.
  */
 export function updatePopoverForActiveNote(): void {
   if (!popoverElement || !popoverInputElement) {
@@ -300,7 +477,9 @@ export function updatePopoverForActiveNote(): void {
   const isDeleted = !!note.isDeleted;
   popoverInputElement.disabled = isDeleted;
   popoverElement.querySelectorAll('.dmna-popover-btn').forEach(b => {
-    (b as HTMLButtonElement).disabled = isDeleted;
+    const btn = b as HTMLButtonElement;
+    btn.disabled =
+      btn.dataset.action === 'history' ? !note.isServerNote : isDeleted;
   });
   const eyeBtn = popoverElement.querySelector('#dmna-popover-eye');
   if (eyeBtn instanceof HTMLButtonElement) {
@@ -428,6 +607,32 @@ export function isPopoverInput(el: Element | null): boolean {
 }
 
 /**
+ * Restore the popover textarea's value + selection from a `TextSnapshot`
+ * captured before a style-popover mutation. Called by main.ts's
+ * `onTextUndo` hook subscriber when `popoverUndo` pops a `'text'`
+ * entry. No-op when the textarea isn't currently bound to this note
+ * (the user moved active selection away before pressing ↶) — the
+ * snapshot still pops off the stack in notes-store, which is the
+ * deliberate trade-off: the snapshot is per-note, but the textarea
+ * only renders the active one, so cross-note text undo would be a
+ * confusing UI.
+ */
+export function applyTextUndoSnapshot(
+  noteId: NoteId,
+  snapshot: TextSnapshot,
+): void {
+  if (!popoverInputElement) return;
+  if (popoverInputElement.dataset.boundNoteId !== noteId) return;
+  popoverInputElement.value = snapshot.text;
+  popoverInputElement.focus();
+  popoverInputElement.setSelectionRange(
+    snapshot.selectionStart,
+    snapshot.selectionEnd,
+  );
+  popoverInputElement.dispatchEvent(new Event('input', {bubbles: true}));
+}
+
+/**
  * Toggles the popover's drag-in-progress dim. Called by
  * `interactions/drag-resize` from onInteractionMove's first-movement
  * branch (set to true) and from onInteractionEnd (set to false).
@@ -488,6 +693,10 @@ export function dismissActivePopover(): void {
     hardDeleteNote(activeId);
   } else {
     note.current = {...note.confirmedState};
+    // Same revert semantics as popoverCancel — strip 'text' snapshots
+    // so a later ↶ doesn't resurrect the canceled markup (Phase 5-h
+    // Task 5.22).
+    clearTextActionsForNote(activeId);
     renderNoteBox(activeId);
     setActiveNote(null);
   }
@@ -502,7 +711,98 @@ export function dismissActivePopover(): void {
  * Ctrl/Cmd+Enter shortcut) to their handlers. Internal — only the
  * createPopover wiring invokes it.
  */
-function handlePopoverAction(action: 'confirm' | 'cancel' | 'delete'): void {
+/**
+ * Toggles the popover between Edit (textarea) and Preview (sanitized
+ * HTML) modes. Edit → Preview is async — awaits `apiPreviewNote` and
+ * shows a brief "…" loading affordance on the toggle button; failure
+ * surfaces a toast and leaves the popover in Edit mode untouched.
+ * Preview → Edit is synchronous (no server round-trip needed).
+ *
+ * `previewRequestId` is the cancel token: a `resetPreviewMode` call
+ * (note swap, popover close) bumps it so a late-arriving response
+ * doesn't slam stale HTML into a now-Edit-mode preview slot.
+ */
+async function handleModeToggle(): Promise<void> {
+  if (
+    !popoverPreviewElement ||
+    !popoverInputElement ||
+    !popoverModeToggleElement
+  ) {
+    return;
+  }
+  if (isPreviewMode) {
+    enterEditMode();
+    return;
+  }
+  const myReq = ++previewRequestId;
+  popoverModeToggleElement.disabled = true;
+  popoverModeToggleElement.textContent = '…';
+  try {
+    const res = await apiPreviewNote(popoverInputElement.value);
+    if (myReq !== previewRequestId) {
+      return;
+    }
+    // Defensive sink-side gate even though apiPreviewNote already
+    // throws on a malformed response — Preview HTML is the only
+    // `innerHTML` write in the codebase, so any future regression
+    // that bypasses the api-layer check still fails closed here
+    // (Phase 5-h Task 5.25).
+    if (typeof res.sanitized_body !== 'string') {
+      throw new Error('Malformed preview response');
+    }
+    popoverPreviewElement.innerHTML = res.sanitized_body;
+    popoverInputElement.style.display = 'none';
+    popoverPreviewElement.style.display = 'block';
+    isPreviewMode = true;
+    popoverModeToggleElement.textContent = '✎ Edit';
+    // Disable every control in the style sub-popover — markup edits
+    // are meaningless while the user is viewing the rendered preview.
+    refreshStylePopoverState();
+  } catch (err) {
+    if (myReq === previewRequestId) {
+      showToast('⚠️ Preview failed', 'error', err);
+      popoverModeToggleElement.textContent = '👁 Preview';
+    }
+  } finally {
+    if (myReq === previewRequestId) {
+      popoverModeToggleElement.disabled = false;
+    }
+  }
+}
+
+function enterEditMode(): void {
+  if (
+    !popoverPreviewElement ||
+    !popoverInputElement ||
+    !popoverModeToggleElement
+  ) {
+    return;
+  }
+  popoverPreviewElement.style.display = 'none';
+  popoverInputElement.style.display = '';
+  popoverPreviewElement.innerHTML = '';
+  popoverModeToggleElement.textContent = '👁 Preview';
+  popoverModeToggleElement.disabled = false;
+  isPreviewMode = false;
+  // Re-enable the style sub-popover's controls now that we're back
+  // on the editable textarea.
+  refreshStylePopoverState();
+}
+
+/**
+ * Resets the popover to Edit mode and invalidates any in-flight
+ * `apiPreviewNote` call. Used by `hidePopover` and by `showPopover`
+ * on note swap so a fresh popover entry never inherits the previous
+ * note's preview state.
+ */
+function resetPreviewMode(): void {
+  previewRequestId++;
+  enterEditMode();
+}
+
+function handlePopoverAction(
+  action: 'confirm' | 'cancel' | 'delete' | 'history',
+): void {
   const activeId = getActiveNoteId();
   if (!activeId) {
     return;
@@ -513,5 +813,16 @@ function handlePopoverAction(action: 'confirm' | 'cancel' | 'delete'): void {
     popoverCancel(activeId);
   } else if (action === 'delete') {
     popoverDelete(activeId);
+  } else if (action === 'history') {
+    // The button is disabled for temp notes (see
+    // `updatePopoverForActiveNote`); the guard here is defensive in
+    // case the click somehow lands. ServerNoteId is the same string
+    // as the numeric note id Danbooru's URL expects.
+    if (isServerNoteId(activeId)) {
+      window.open(
+        `https://danbooru.donmai.us/note_versions?search[note_id]=${activeId}`,
+        '_blank',
+      );
+    }
   }
 }

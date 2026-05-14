@@ -38,8 +38,32 @@
 
 import {ARC_CONFIRM_THETA, ARC_RADIUS, BTN_SIZE} from '../config';
 import {toggleEditMode} from '../state/notes-store';
-import {runConfirmFlow} from '../confirm/batch';
 import {getButtonMargins} from './floating-button';
+
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+/**
+ * Cross-layer wires injected by main.ts. arc-menu is at layer 3 (ui)
+ * and can't import confirm/batch directly — confirm and ui are layer-3
+ * siblings, and the Z5 rule forbids sideways imports between them.
+ */
+export interface ArcMenuHooks {
+  /**
+   * Fires when the Confirm (✅) menu item is tapped. Subscriber:
+   * confirm/batch.runConfirmFlow. The arc-menu doesn't await — the
+   * confirm flow self-manages its own re-entrancy guard.
+   */
+  onConfirm: () => void;
+}
+
+let hooks: ArcMenuHooks | null = null;
+
+/** Wire side-effect hooks; main.ts calls this once at boot. */
+export function initArcMenu(h: ArcMenuHooks): void {
+  hooks = h;
+}
 
 // ---------------------------------------------------------------------------
 // Module-private state
@@ -234,9 +258,10 @@ function handleMenuAction(action: 'edit' | 'confirm'): void {
       toggleEditMode();
       break;
     case 'confirm':
-      // Fire-and-forget — runConfirmFlow is async but the menu click
-      // handler doesn't need to wait. Re-entrancy guarded inside.
-      void runConfirmFlow();
+      // Fire-and-forget — runConfirmFlow (subscribed via hook) is async
+      // but the menu click handler doesn't need to wait. Re-entrancy
+      // guarded inside the confirm flow itself.
+      hooks!.onConfirm();
       break;
   }
 }

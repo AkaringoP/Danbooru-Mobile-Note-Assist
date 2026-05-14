@@ -26,11 +26,13 @@ import {
   Note,
   NoteId,
   NoteState,
+  TextSnapshot,
   ToastLevel,
 } from '../types';
 import {fetchPostMeta} from '../api/posts';
 import {fetchServerNotes, ServerNoteDescriptor} from '../api/notes';
 import {DraftSnapshot, SerializedNote} from './draft';
+import {getIsNativeActive} from './native-conflict';
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -105,6 +107,15 @@ export interface NotesStoreHooks {
    *   - confirm/classify: `hasPendingChanges()`.
    */
   hasPendingChanges: () => boolean;
+
+  /**
+   * popoverUndo popped a `'text'` action — restore the textarea value
+   * and selection from the snapshot. The state layer can't poke the
+   * DOM directly (Z5 layer 2 → layer 3 would invert), so the
+   * concrete restore lives in ui/popover via this hook. Subscribers:
+   *   - ui/popover: `applyTextUndoSnapshot(noteId, snapshot)`.
+   */
+  onTextUndo: (noteId: NoteId, snapshot: TextSnapshot) => void;
 }
 
 let hooks: NotesStoreHooks | null = null;
@@ -202,12 +213,21 @@ export function isDirty(note: Note): boolean {
 
 /**
  * Pushes an action onto this note's per-note undo stack. Lazily
- * creates the stack on first push.
- *
- * The cast on the constructed entry is Phase 1's compromise — Phase 2
- * will replace this with overloads so the discriminated union narrows
- * correctly per `type`.
+ * creates the stack on first push. Overloaded so `'create'` requires
+ * `prevState: null` and the geometry-bearing types require a non-null
+ * `NoteState` — replaces the v4.1 `as ActionLogEntry` cast (Phase 5-h
+ * Task 5.30) with type-safe dispatch.
  */
+export function pushAction(
+  noteId: NoteId,
+  type: 'create',
+  prevState: null,
+): void;
+export function pushAction(
+  noteId: NoteId,
+  type: 'edit' | 'delete' | 'transform',
+  prevState: NoteState,
+): void;
 export function pushAction(
   noteId: NoteId,
   type: 'create' | 'edit' | 'delete' | 'transform',
@@ -218,7 +238,51 @@ export function pushAction(
     stack = [];
     actionLog.set(noteId, stack);
   }
-  stack.push({noteId, type, prevState} as ActionLogEntry);
+  if (type === 'create') {
+    stack.push({noteId, type, prevState: null});
+  } else if (prevState !== null) {
+    stack.push({noteId, type, prevState});
+  }
+}
+
+/**
+ * Pushes a `'text'` action — separate from `pushAction` because the
+ * payload shape is `TextSnapshot`, not `NoteState`, and TypeScript
+ * narrows the discriminated union by `type`. Callers are the style-
+ * popover mutate helpers (applyWrap / applyUnwrap / applySpanStyle /
+ * removeSpanStyle / applyLinkWrap / applyRubyWrap / applyRubyUnwrap),
+ * each capturing the textarea value + selection just before they
+ * rewrite the textarea.
+ */
+export function pushTextAction(noteId: NoteId, prevState: TextSnapshot): void {
+  let stack = actionLog.get(noteId);
+  if (!stack) {
+    stack = [];
+    actionLog.set(noteId, stack);
+  }
+  stack.push({noteId, type: 'text', prevState});
+}
+
+/**
+ * Strips every `'text'` snapshot from this note's stack while leaving
+ * geometry-bearing entries (`create` / `edit` / `delete` / `transform`)
+ * intact. Called from the cancel/dismiss revert paths (popoverCancel +
+ * ui/popover.dismissActivePopover): both revert `current` back to
+ * `confirmedState`, which makes the in-progress style-mutation
+ * snapshots unreachable — leaving them on the stack would let a later
+ * ↶ resurrect a markup the user just canceled (Phase 5-h Task 5.22).
+ */
+export function clearTextActionsForNote(noteId: NoteId): void {
+  const stack = actionLog.get(noteId);
+  if (!stack) {
+    return;
+  }
+  const filtered = stack.filter(e => e.type !== 'text');
+  if (filtered.length === 0) {
+    actionLog.delete(noteId);
+  } else {
+    actionLog.set(noteId, filtered);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +306,13 @@ export function discardAll(): void {
 /**
  * Switches the high-level mode. Idempotent on same-mode input.
  *
+ * Native conflict gate (Phase 1, v4.2): an 'active' entry is dropped
+ * when Danbooru's own translation mode or edit dialog is open — see
+ * `state/native-conflict`. A toast tells the user to close native
+ * first. Idle entries (deactivation) are never gated. The check sits
+ * here, not in `toggleEditMode`, so all three Edit-toggle paths plus
+ * `applyDraftSnapshot`'s restore-time setMode are gated by one rule.
+ *
  * Side effects:
  *   - 'active': fires `onModeChanged` (the floating-button hook
  *     swaps the icon to ✏️), toggles the `dmna-mode-active` body
@@ -255,6 +326,13 @@ export function discardAll(): void {
  */
 export function setMode(newMode: Mode): void {
   if (mode === newMode) {
+    return;
+  }
+  if (newMode === 'active' && getIsNativeActive()) {
+    hooks!.onToast(
+      "Danbooru's native note UI is active — close it first",
+      'info',
+    );
     return;
   }
   mode = newMode;
@@ -342,7 +420,9 @@ export function toggleEditMode(): void {
     }
   } else {
     setMode('active');
-    hooks!.onToast('Edit mode on', 'info');
+    if (getMode() === 'active') {
+      hooks!.onToast('Edit mode on', 'info');
+    }
   }
 }
 
@@ -460,6 +540,13 @@ export function popoverUndo(noteId: NoteId): void {
     note.current.w = entry.prevState.w;
     note.current.h = entry.prevState.h;
     hooks!.onNoteRenderRequested(noteId);
+  } else if (entry.type === 'text') {
+    // Sync the in-memory `current.text` so the next ✔ commits the
+    // restored value (and any draft snapshot captured before the user
+    // re-types). The textarea's own value + caret is restored by the
+    // ui-side hook below.
+    note.current.text = entry.prevState.text;
+    hooks!.onTextUndo(noteId, entry.prevState);
   }
 }
 
@@ -512,6 +599,11 @@ export function popoverCancel(noteId: NoteId): void {
     return;
   }
   note.current = {...note.confirmedState};
+  // Drop accumulated 'text' snapshots — current text just rolled back
+  // to confirmedState, so any in-progress style-mutation history is
+  // now unreachable and would otherwise let a later ↶ resurrect a
+  // markup the user just canceled (Phase 5-h Task 5.22).
+  clearTextActionsForNote(noteId);
   hooks!.onNoteRenderRequested(noteId);
   setActiveNote(null);
 }
@@ -633,19 +725,38 @@ export function createTempNote(state: NoteState): NoteId {
 // ---------------------------------------------------------------------------
 
 /**
- * Whether the current state is worth persisting as a draft. PLAN D4
- * gate: active mode with at least one note. An empty active mode
- * round-trips to the same state on next entry via setMode('active')
- * alone, so lifecycle handlers skip those.
+ * Whether the current state is worth persisting as a draft.
  *
- * Server-only notes (no edits, no temps) also pass this gate — they
- * cost ~200 bytes per note to persist and the next `addServerNote`
- * during enterActiveMode would no-op duplicates anyway. Erring on
- * the side of "save more" trades a tiny localStorage footprint for
- * a cleaner mental model ("if I was editing, my draft will be there").
+ * v4.1.0 used `mode === 'active' && notes.size > 0`, which surfaced
+ * a misleading Restore prompt for two no-work cases:
+ *   - all boxes are server-side with no local edits (round-trips via
+ *     `fetchServerNotes` on the next entry anyway)
+ *   - the user opened a fresh-new temp box but never typed into it
+ *     (just exercising the popover) — saving it would restore an
+ *     empty rectangle nobody asked for
+ *
+ * v4.1.1 tightens the gate: save iff there's actually user work to
+ * preserve. "User work" = anything `hasPendingChanges` covers (the
+ * Confirm-flush-bound bucket: dirty server edits, soft-deletes,
+ * committed temps), plus a fresh-new temp with non-empty text (typed
+ * input that hasn't been ✔'d yet — Confirm would silently drop it
+ * but losing the user's typing to a force-quit is the wrong default).
  */
 export function hasContentToSave(): boolean {
-  return mode === 'active' && notes.size > 0;
+  if (mode !== 'active') return false;
+  if (notes.size === 0) return false;
+  if (hooks!.hasPendingChanges()) return true;
+  for (const note of notes.values()) {
+    if (
+      !note.isServerNote &&
+      !note.everConfirmed &&
+      !note.isDeleted &&
+      note.current.text.trim()
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -700,19 +811,25 @@ export function serializeForDraft(): DraftSnapshot {
  * render proceed.
  *
  * Order:
- *   1. Tear down current state (clear Map / log / active). Fires
- *      `onNoteRemoved` per existing box for DOM cleanup, then a
- *      single `onActiveChanged(prev, null)` if needed.
+ *   1. Tear down current state.
  *   2. Populate Map + actionLog from snapshot.
- *   3. setMode(snapshot.mode). For 'active' from 'idle' (the
- *      restore-at-boot case), this fires enterActiveMode's async
- *      fetch — fetchServerNotes → addServerNote, which no-ops for
- *      ids already in the Map. Net effect: draft wins for shared
- *      ids, server-side additions since the save get picked up.
- *   4. Render every restored box, then re-establish active
- *      selection if the snapshot had one (and the note survived).
+ *   3. Await `fetchPostMeta` before rendering. v4.1.1 fix: at first
+ *      page entry `originalWidth` is 0 until `enterActiveMode`'s
+ *      async meta fetch lands, but v4.1.0 rendered immediately after
+ *      setMode — so boxes plotted with a zero denominator in the
+ *      coord transform, producing wildly off geometry and overlap
+ *      that looked like some boxes had been dropped. Pre-fetching
+ *      here guarantees a valid denominator at render time.
+ *   4. setMode(snapshot.mode). enterActiveMode dedupes the in-flight
+ *      meta fetch via `getPostMetaPromise`, then fetches server
+ *      notes — `addServerNote` no-ops for ids already in the Map,
+ *      so draft wins for shared ids and server-side additions since
+ *      the save get picked up.
+ *   5. Render every restored box, then re-establish active selection.
  */
-export function applyDraftSnapshot(snapshot: DraftSnapshot): void {
+export async function applyDraftSnapshot(
+  snapshot: DraftSnapshot,
+): Promise<void> {
   // 1. Tear down
   for (const id of [...notes.keys()]) {
     hooks!.onNoteRemoved(id);
@@ -741,17 +858,44 @@ export function applyDraftSnapshot(snapshot: DraftSnapshot): void {
   }
   for (const [rawId, entries] of snapshot.actionLog) {
     const noteId = rebrandNoteId(rawId);
-    // Each entry carries its own noteId field too — rebrand both
-    // the Map key and the inner reference for consistency.
-    const rebranded = entries.map(e => ({...e, noteId}) as ActionLogEntry);
+    // Each entry carries its own noteId field too — rebrand both the
+    // Map key and the inner reference for consistency. Switch on
+    // `type` so TypeScript narrows the discriminated union per arm
+    // (Phase 5-h Task 5.30) instead of needing the prior
+    // `as ActionLogEntry` cast on a spread.
+    const rebranded: ActionLogEntry[] = entries.map(e => {
+      switch (e.type) {
+        case 'create':
+          return {noteId, type: 'create', prevState: null};
+        case 'edit':
+          return {noteId, type: 'edit', prevState: e.prevState};
+        case 'delete':
+          return {noteId, type: 'delete', prevState: e.prevState};
+        case 'transform':
+          return {noteId, type: 'transform', prevState: e.prevState};
+        case 'text':
+          return {noteId, type: 'text', prevState: e.prevState};
+      }
+    });
     actionLog.set(noteId, rebranded);
   }
 
-  // 3. Mode transition. setMode handles body class / activeModeGen /
+  // 3. Pre-fetch post meta when restoring into active mode, so the
+  //    image-space → display-space transform has a non-zero
+  //    denominator at render time (v4.1.1).
+  if (snapshot.mode === 'active') {
+    try {
+      await fetchPostMeta();
+    } catch (err) {
+      hooks!.onToast('⚠️ Failed to load image info', 'error', err);
+    }
+  }
+
+  // 4. Mode transition. setMode handles body class / activeModeGen /
   //    onModeChanged hook itself.
   setMode(snapshot.mode);
 
-  // 4. Render restored boxes + re-establish active selection.
+  // 5. Render restored boxes + re-establish active selection.
   for (const id of notes.keys()) {
     hooks!.onNoteRenderRequested(id);
   }

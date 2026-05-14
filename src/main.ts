@@ -36,23 +36,34 @@ import {
   type NotesStoreHooks,
 } from './state/notes-store';
 
+import {
+  getIsNativeActive,
+  initNativeConflictWatch,
+  onNativeStateChanged,
+} from './state/native-conflict';
+
 import {hasPendingChanges} from './confirm/classify';
 import {
+  getIsInConfirmPipeline,
   getIsSending,
   initConfirmFlow,
+  runConfirmFlow,
   type ConfirmFlowHooks,
 } from './confirm/batch';
 
 import {
   closeMenu,
   createArcMenu,
+  initArcMenu,
   openMenu,
   updateArcMenuPosition,
+  type ArcMenuHooks,
 } from './ui/arc-menu';
 import {
   createFloatingButton,
   setFloatingButtonIcon,
   setFloatingButtonIconForMode,
+  setNativeActiveHide,
   updateFloatingButtonPosition,
 } from './ui/floating-button';
 import {
@@ -64,13 +75,22 @@ import {
   updateNoteVisuals,
   type NoteBoxHooks,
 } from './ui/note-box';
+import {createColorPicker} from './ui/color-picker';
+import {createLinkPopover} from './ui/link-popover';
+import {createRubyPopover} from './ui/ruby-popover';
+import {createStrokePicker} from './ui/stroke-picker';
 import {
+  applyTextUndoSnapshot,
   createPopover,
   hidePopover,
   refreshActivePopover,
   showPopover,
   updatePopoverPosition,
 } from './ui/popover';
+import {
+  createStylePopover,
+  updateStylePopoverPosition,
+} from './ui/style-popover';
 import {showTagPopover, updateTagPopoverPosition} from './ui/tag-popover';
 import {showToast, showToastWithActions, updateToastPosition} from './ui/toast';
 
@@ -81,6 +101,7 @@ import {
 } from './interactions/drag-resize';
 import {bindImageHandlers} from './interactions/image-pointer';
 import {bindGlobalHotkeys} from './interactions/keyboard';
+import {bindNativeBlockers} from './interactions/native-block';
 
 import {scheduleVisualViewportUpdate} from './utils/visual-viewport';
 
@@ -123,6 +144,7 @@ const notesStoreHooks: NotesStoreHooks = {
   onToast: (msg, level, err) => showToast(msg, level, err),
   onReopenMenuRequested: () => openMenu(),
   hasPendingChanges: () => hasPendingChanges(),
+  onTextUndo: (id, snapshot) => applyTextUndoSnapshot(id, snapshot),
 };
 
 const confirmFlowHooks: ConfirmFlowHooks = {
@@ -146,6 +168,10 @@ const noteBoxHooks: NoteBoxHooks = {
   attachHandle: (el, corner, noteId) =>
     attachHandleListeners(el, corner, noteId),
   consumeBoxClickSuppression: () => consumeBoxClickSuppression(),
+};
+
+const arcMenuHooks: ArcMenuHooks = {
+  onConfirm: () => void runConfirmFlow(),
 };
 
 // ---------------------------------------------------------------------------
@@ -173,6 +199,7 @@ function runViewportUpdate(): void {
   updateArcMenuPosition();
   updateToastPosition();
   updatePopoverPosition();
+  updateStylePopoverPosition();
   updateActiveHandleScales();
   updateTagPopoverPosition();
 }
@@ -187,13 +214,22 @@ function scheduleViewportUpdate(): void {
 
 /**
  * Persists the current collection as a draft if there's something
- * worth saving and a send isn't in flight. The `isSending` gate is
- * critical: during runConfirmFlow's PUT/POST/DELETE sequence, a
- * partial-server-commit snapshot would mix local and server truth
- * in confusing ways. The Confirm flow itself clears the draft on
- * entry and on success (confirm/batch.ts), so a force-quit mid-send
- * falls back to fetchServerNotes on next page entry rather than to
- * the draft (PLAN D6).
+ * worth saving and a Confirm pipeline isn't running. Two gates:
+ *   - `getIsSending()` — narrow lock around the actual HTTP requests
+ *     (sendBatch's try/finally). A snapshot here would catch the
+ *     partial-server-commit state mid-write.
+ *   - `getIsInConfirmPipeline()` — broader guard added in v4.2 Phase
+ *     5-h Task 5.21. Stays latched across `applyServerStateToLocal`
+ *     and the error-modal Retry/Cancel wait, where local state
+ *     already mirrors partial server commits but the user might
+ *     still tap Retry. Without this guard, a force-quit while the
+ *     error modal was up could persist a half-applied snapshot that
+ *     double-sends the already-PUT items on the next page entry.
+ *
+ * The Confirm flow itself clears the draft on entry and on success
+ * (confirm/batch.ts), so a force-quit mid-pipeline falls back to
+ * fetchServerNotes on next page entry rather than to the draft
+ * (PLAN D6).
  *
  * Called from three lifecycle handlers — beforeunload (PC),
  * pagehide (mobile-friendly), and visibilitychange→hidden (most
@@ -202,7 +238,7 @@ function scheduleViewportUpdate(): void {
  * key.
  */
 function saveDraftIfNeeded(): void {
-  if (getIsSending()) {
+  if (getIsSending() || getIsInConfirmPipeline()) {
     return;
   }
   if (!hasContentToSave()) {
@@ -210,6 +246,17 @@ function saveDraftIfNeeded(): void {
   }
   saveDraft(serializeForDraft());
 }
+
+/**
+ * Latched in `beforeunload` when our discard prompt fires, consumed
+ * in `pagehide`. v4.1.1: the user answering "Leave" on that prompt
+ * is an explicit discard signal, so the leaving snapshot is dropped
+ * rather than saved. v4.1.0 saved unconditionally in beforeunload,
+ * which left a misleading Restore toast on the next entry. Force-
+ * quit / OS-kill skips beforeunload entirely (no JS prompt fires
+ * on kill), so this flag stays false and the normal save runs.
+ */
+let promptedDiscardOnLeave = false;
 
 /**
  * Boot-time check for a persisted draft (Phase 3, v4.1). When a
@@ -244,7 +291,9 @@ function checkAndPromptRestore(): void {
     {
       label: 'Restore',
       primary: true,
-      onClick: () => applyDraftSnapshot(draft),
+      onClick: () => {
+        void applyDraftSnapshot(draft);
+      },
     },
     {
       label: 'Discard',
@@ -278,24 +327,44 @@ function init(): void {
   createFloatingButton();
   createArcMenu();
   createPopover();
+  createStylePopover();
+  createLinkPopover();
+  createColorPicker();
+  createStrokePicker();
+  createRubyPopover();
 
-  // 3. Wire the three Hook bags. Must happen before any state mutation
+  // 3. Wire the four Hook bags. Must happen before any state mutation
   //    or send-flow trigger — the `hooks!` non-null asserts inside
-  //    notes-store / confirm-batch / note-box rely on this ordering.
+  //    notes-store / confirm-batch / note-box / arc-menu rely on this
+  //    ordering.
   initNotesStore(notesStoreHooks);
   initConfirmFlow(confirmFlowHooks);
   initNoteBox(noteBoxHooks);
+  initArcMenu(arcMenuHooks);
 
   // 4. Bind document-level interactions. `bindImageHandlers` self-
   //    retries on a 1 s timer if the post image isn't in the DOM yet.
+  //    `bindNativeBlockers` installs capture-phase blockers for the
+  //    `#translate` link + bare-N keydown so they can't fire while
+  //    our active mode is on.
   bindImageHandlers();
   bindGlobalHotkeys();
+  bindNativeBlockers();
 
-  // 5. Initial position pass — pins the floating button / menu to
+  // 5. Danbooru native conflict watch (Phase 1, v4.2). Subscribes the
+  //    floating-button auto-hide branch to body.mode-translation and
+  //    .ui-dialog.note-edit-dialog signals; the MutationObserver only
+  //    fires on edge changes, so a final manual fanout propagates the
+  //    initial state captured inside `initNativeConflictWatch`.
+  initNativeConflictWatch();
+  onNativeStateChanged(setNativeActiveHide);
+  setNativeActiveHide(getIsNativeActive());
+
+  // 6. Initial position pass — pins the floating button / menu to
   //    their persisted edges before the first frame paints.
   runViewportUpdate();
 
-  // 6. visualViewport pinch-zoom / scroll. RAF-batched so multiple
+  // 7. visualViewport pinch-zoom / scroll. RAF-batched so multiple
   //    events in one frame coalesce into one DOM-write pass.
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', scheduleViewportUpdate);
@@ -303,37 +372,49 @@ function init(): void {
     window.addEventListener('scroll', scheduleViewportUpdate);
   }
 
-  // 7. Re-project note boxes whenever document layout could shift (the
+  // 8. Re-project note boxes whenever document layout could shift (the
   //    rendered image's page-coord rect changes). Pinch-zoom is NOT in
   //    this pair — see `runViewportUpdate` doc.
   window.addEventListener('resize', updateAllNoteBoxPositions);
   window.addEventListener('orientationchange', updateAllNoteBoxPositions);
 
-  // 8. Reload / navigate-away guard + draft persist. Three handlers
+  // 9. Reload / navigate-away guard + draft persist. Three handlers
   //    cover the union of "page is going away":
-  //      - beforeunload: PC refresh / tab close. Also triggers the
+  //      - beforeunload: PC refresh / tab close. Triggers the
   //        browser's generic "Leave site?" prompt when there are
-  //        pending changes (browsers ignore custom messages, so
-  //        empty-string assignment is the documented opt-in).
-  //        `tryDeactivate`'s `window.confirm` covers in-script
-  //        off-paths (Z11); this handler covers the out-of-band
-  //        ones (refresh button, tab close, Cmd+R, etc).
-  //      - pagehide: mobile-friendly counterpart. iOS Safari is
-  //        unreliable about firing beforeunload before kill — pagehide
-  //        is the documented mobile equivalent.
+  //        pending changes (empty-string returnValue is the
+  //        documented opt-in). When the prompt fires we latch
+  //        `promptedDiscardOnLeave` and defer the save decision to
+  //        pagehide so the user's "Leave" answer can map to a
+  //        discard. When no prompt fires (nothing pending) we save
+  //        immediately — that path mirrors the legacy v4.1.0
+  //        behavior for the cases where the user wasn't asked.
+  //      - pagehide: mobile-friendly counterpart, and the consumer
+  //        of the latched-leave flag. If the user answered "Leave"
+  //        on the prompt, we treat it as explicit discard and clear
+  //        the draft; otherwise the normal save runs (force-quit /
+  //        tab kill skip beforeunload entirely, so the flag is
+  //        false there).
   //      - visibilitychange → hidden: most reliable mobile signal
   //        that the OS is about to suspend or kill us (Android home
-  //        button, iOS app switcher, tab backgrounding).
-  //    All three call saveDraftIfNeeded; only beforeunload gets the
-  //    extra prompt branch (the prompt itself doesn't work on mobile).
+  //        button, iOS app switcher, tab backgrounding). This is NOT
+  //        an explicit-leave path — it's a background/foreground
+  //        transition, so the flag is ignored and we just save.
   window.addEventListener('beforeunload', e => {
-    saveDraftIfNeeded();
+    promptedDiscardOnLeave = false;
     if (getMode() === 'active' && hasPendingChanges()) {
+      promptedDiscardOnLeave = true;
       e.preventDefault();
       e.returnValue = '';
+      return;
     }
+    saveDraftIfNeeded();
   });
   window.addEventListener('pagehide', () => {
+    if (promptedDiscardOnLeave) {
+      clearDraft();
+      return;
+    }
     saveDraftIfNeeded();
   });
   document.addEventListener('visibilitychange', () => {
@@ -342,7 +423,7 @@ function init(): void {
     }
   });
 
-  // 9. Force-quit recovery prompt. Surfaces the restore toast when
+  // 10. Force-quit recovery prompt. Surfaces the restore toast when
   //    a valid draft is found for the current post (Phase 3 entry
   //    point). Runs last in init so any earlier failure short-
   //    circuits before the user sees a misleading prompt.
