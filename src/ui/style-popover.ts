@@ -36,6 +36,7 @@ import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
 import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {showLinkPopover} from './link-popover';
 import {getPopoverInputElement} from './popover';
 
 // Style popover has its own width independent of POPOVER_WIDTH —
@@ -184,9 +185,50 @@ function applyUnwrap(tag: string): void {
 }
 
 /**
+ * Captures the current textarea selection, then opens the link modal.
+ * The captured `(start, end)` is closed over by the Confirm callback
+ * so the wrap still targets the right slice even though the textarea
+ * lost focus to the modal's URL input in between.
+ */
+function handleLinkClick(): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  if (start === end) return;
+  showLinkPopover(url => applyLinkWrap(start, end, url));
+}
+
+/**
+ * Wraps the textarea slice between `start` and `end` in
+ * `<a href="…">…</a>` using the URL from the link modal. Mirrors
+ * `applyWrap` but inserts the attribute-carrying opening tag; the
+ * selection ends up positioned on the link text inside the wrap so
+ * a follow-up tag button nests inward.
+ */
+function applyLinkWrap(start: number, end: number, url: string): void {
+  const ta = getPopoverInputElement();
+  if (!ta) return;
+  const open = `<a href="${url}">`;
+  const close = '</a>';
+  const before = ta.value.slice(0, start);
+  const selected = ta.value.slice(start, end);
+  const after = ta.value.slice(end);
+  ta.value = before + open + selected + close + after;
+  ta.setSelectionRange(start + open.length, end + open.length);
+  ta.focus();
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  refreshStylePopoverState();
+}
+
+/**
  * Builds a row container with N tag-buttons. Each click routes to
  * wrap or unwrap depending on whether the button is currently in the
- * active set — keeping the toggle interaction discoverable.
+ * active set — keeping the toggle interaction discoverable. `<a>` is
+ * a special case: when inactive it opens the link modal to collect a
+ * URL before wrapping; the unwrap branch still goes through the
+ * standard `applyUnwrap` since `detectOuterLayers` matches the
+ * attribute-bearing opening tag.
  */
 function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
   const row = document.createElement('div');
@@ -206,6 +248,8 @@ function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
       e.stopPropagation();
       if (b.classList.contains('is-active')) {
         applyUnwrap(btn.tag);
+      } else if (btn.tag === 'a') {
+        handleLinkClick();
       } else {
         applyWrap(btn.tag);
       }

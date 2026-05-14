@@ -71,6 +71,7 @@ import {
   updateNoteVisuals,
   type NoteBoxHooks,
 } from './ui/note-box';
+import {createLinkPopover} from './ui/link-popover';
 import {
   createPopover,
   hidePopover,
@@ -305,6 +306,7 @@ function init(): void {
   createArcMenu();
   createPopover();
   createStylePopover();
+  createLinkPopover();
 
   // 3. Wire the three Hook bags. Must happen before any state mutation
   //    or send-flow trigger — the `hooks!` non-null asserts inside

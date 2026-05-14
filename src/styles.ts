@@ -1029,4 +1029,85 @@ export const STYLES = `
       background-repeat: no-repeat;
     }
     .dmna-style-select:hover { background-color: rgba(255, 255, 255, 0.20); }
+
+    /* Link sub-popover (Phase 5, v4.2) — inline modal mounted as a
+       child of #dmna-popover so it inherits the popover's transform/
+       scale automatically. Triggered from the style popover's <a>
+       button to collect a URL for wrapping the textarea selection.
+       The dim overlay covers the note popover area only, not the
+       full viewport — the user's focus stays on the note they were
+       editing rather than the whole page being dimmed for a single
+       link prompt. */
+    #dmna-link-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9px;
+      z-index: 1;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-link-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-link-modal {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: stretch;
+      background: rgba(40, 40, 40, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      padding: 10px;
+      z-index: 2;
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease;
+    }
+    #dmna-link-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #dmna-link-modal-input {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+      font-size: 13px;
+      font-family: inherit;
+      line-height: 1.4;
+      box-sizing: border-box;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+    #dmna-link-modal-input:focus {
+      border-color: #0073ff;
+    }
+    #dmna-link-modal-confirm {
+      padding: 10px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.13);
+      color: #f0f0f0;
+      font-size: 20px;
+      font-family: inherit;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      min-height: 36px;
+      box-sizing: border-box;
+    }
+    #dmna-link-modal-confirm:active {
+      background: rgba(255, 255, 255, 0.28);
+    }
   `;
