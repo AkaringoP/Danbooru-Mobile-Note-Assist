@@ -166,11 +166,10 @@ export function createPopover(): void {
   modeToggle.type = 'button';
   modeToggle.id = 'dmna-popover-mode-toggle';
   modeToggle.className = 'dmna-popover-mode-toggle';
-  // Icon + label like Danbooru's Edit-Comment header (👁 Preview).
   // textContent flips through handleModeToggle / enterEditMode as
   // the user moves between modes — initial state is Edit, so the
   // visible affordance is "go to Preview."
-  modeToggle.textContent = '👁 Preview';
+  modeToggle.textContent = 'Preview';
   modeToggle.setAttribute('aria-label', 'Toggle Preview / Edit');
   modeToggle.addEventListener('click', e => {
     e.preventDefault();
@@ -759,14 +758,14 @@ async function handleModeToggle(): Promise<void> {
     popoverInputElement.style.display = 'none';
     popoverPreviewElement.style.display = 'block';
     isPreviewMode = true;
-    popoverModeToggleElement.textContent = '✎ Edit';
+    popoverModeToggleElement.textContent = 'Edit';
     // Disable every control in the style sub-popover — markup edits
     // are meaningless while the user is viewing the rendered preview.
     refreshStylePopoverState();
   } catch (err) {
     if (myReq === previewRequestId) {
       showToast('⚠️ Preview failed', 'error', err);
-      popoverModeToggleElement.textContent = '👁 Preview';
+      popoverModeToggleElement.textContent = 'Preview';
     }
   } finally {
     if (myReq === previewRequestId) {
@@ -786,7 +785,7 @@ function enterEditMode(): void {
   popoverPreviewElement.style.display = 'none';
   popoverInputElement.style.display = '';
   popoverPreviewElement.innerHTML = '';
-  popoverModeToggleElement.textContent = '👁 Preview';
+  popoverModeToggleElement.textContent = 'Preview';
   popoverModeToggleElement.disabled = false;
   isPreviewMode = false;
   // Re-enable the style sub-popover's controls now that we're back

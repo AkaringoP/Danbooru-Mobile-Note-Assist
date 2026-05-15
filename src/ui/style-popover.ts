@@ -144,9 +144,10 @@ const SIZE_OPTIONS: ReadonlyArray<SelectOption> = [
 // fallback, which is exactly how their note will look on devices
 // missing the font.
 const FONT_OPTIONS: ReadonlyArray<SelectOption> = [
-  // Leading empty option — acts as the "no font-family" choice and
-  // doubles as the default selected state for plain text.
-  {label: ' ', value: ''},
+  // Leading empty-value option — acts as the "no font-family" choice and
+  // doubles as the default selected state for plain text. Label mirrors
+  // Size's 'Default' entry for consistency.
+  {label: 'Default', value: ''},
   {label: 'comic', value: 'comic', preview: 'comic'},
   {label: 'narrow', value: 'narrow', preview: 'narrow'},
   {label: 'mono', value: 'mono', preview: 'mono'},
