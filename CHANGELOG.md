@@ -5,6 +5,19 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.3] - 2026-05-15
+
+Patch release for popover header cascade and mode-toggle appearance regressions surfaced post-v5.0.2.
+
+### Fixed
+- **Help link color overridden by Danbooru's cascade.** The bare `.dmna-popover-help-link` rule (specificity 0,1,0) lost to Danbooru selectors like `#wrapper a` (0,1,1), keeping the help link blue at rest regardless of the intended muted-gray color. Both `.dmna-popover-mode-toggle` and `.dmna-popover-help-link` are now scoped under `#dmna-popover-header` (raising specificity to 1,1,0) to win that cascade race.
+- **UA focus-ring painted a white pill behind the mode toggle after click.** `background: transparent` and `outline: none` on `:hover` / `:focus` / `:active` states suppress the browser's default button focus-fill; the color-flip + underline on hover/focus remain as the accessible focus indicator.
+
+### Changed
+- **Mode-toggle and help link rest color** shifted from `#4a9eff` (the same blue as the hover accent) to `rgba(255,255,255,0.55)` — recessive at rest, lit on hover/focus, matching Danbooru's own icon-at-rest toolbar pattern.
+- **`:focus` and `:active` states added** to both header controls for keyboard and touch parity with the existing `:hover`.
+- **Mode-toggle label glyphs**: `Preview` → `👁 Preview`, `Edit` → `✎ Edit` for visual affordance at rest.
+
 ## [5.0.2] - 2026-05-14
 
 Patch release for one mobile-only UX bug surfaced during post-v5.0.1 testing.
@@ -263,6 +276,10 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.0.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
+[5.0.2]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
+[5.0.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
+[5.0.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [4.1.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [4.0.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [3.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
