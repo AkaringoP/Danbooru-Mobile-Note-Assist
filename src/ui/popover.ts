@@ -171,6 +171,7 @@ export function createPopover(): void {
   // visible affordance is "go to Preview."
   modeToggle.textContent = 'Preview';
   modeToggle.setAttribute('aria-label', 'Toggle Preview / Edit');
+  modeToggle.title = 'Toggle preview / edit';
   modeToggle.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -262,6 +263,7 @@ export function createPopover(): void {
   eyeBtn.className = 'dmna-popover-side-btn';
   eyeBtn.textContent = '👁';
   eyeBtn.setAttribute('aria-label', 'Show touch zones (press and hold)');
+  eyeBtn.title = 'Show touch zones (hold)';
   eyeBtn.addEventListener('pointerdown', e => {
     if (eyeBtn.disabled) {
       return;
@@ -298,6 +300,7 @@ export function createPopover(): void {
   undoBtn.className = 'dmna-popover-side-btn';
   undoBtn.textContent = '↶';
   undoBtn.setAttribute('aria-label', 'Undo last change to this note');
+  undoBtn.title = 'Undo last change';
   undoBtn.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -319,6 +322,7 @@ export function createPopover(): void {
   styleBtn.textContent = 'Aa';
   styleBtn.disabled = true;
   styleBtn.setAttribute('aria-label', 'Toggle style markup popover');
+  styleBtn.title = 'Markup styles';
   // Preserve the textarea's visible selection across the toggle:
   // canceling mousedown's default keeps focus on the textarea instead
   // of shifting it to this button, so the browser doesn't fade the
@@ -369,6 +373,7 @@ export function createPopover(): void {
     b.className = 'dmna-popover-btn';
     b.dataset.action = action;
     b.setAttribute('aria-label', label);
+    b.title = label;
     b.textContent = icon;
     b.addEventListener('click', e => {
       e.preventDefault();
