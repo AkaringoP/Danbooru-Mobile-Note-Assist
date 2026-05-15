@@ -317,15 +317,27 @@ export const STYLES = `
     /* Mode toggle + "view help" wiki link styled as inline text-links
        rather than chips — mirrors Danbooru's own Editing-note header
        (Preview affordance on the left, "view help" anchor on the
-       right). Danbooru's native links are not underlined at rest;
-       the underline surfaces only on hover, so we match that pattern.
-       The help link is an <a>, not a button, so :disabled handling
-       is mode-toggle-only. */
-    .dmna-popover-mode-toggle,
-    .dmna-popover-help-link {
+       right). Rest is a muted gray; hover/focus surfaces the blue
+       accent + underline, matching Danbooru's native toolbar (icons
+       read as recessive at rest, light up on intent).
+
+       Scoped under #dmna-popover-header so the help <a>'s color isn't
+       recoloured by Danbooru's own 'a { color: ... }' cascade — a bare
+       .dmna-popover-help-link rule (0,1,0) loses to selectors like
+       '#wrapper a' (0,1,1). Explicit transparent background +
+       'outline: none' on the interactive states silence the UA button
+       focus-fill / focus-ring that otherwise paints a white pill
+       behind "Preview" once it's been clicked. The hover underline +
+       color flip stays as the accessible focus indicator.
+
+       The help link is an <a>, not a button, so :disabled handling is
+       mode-toggle-only. */
+    #dmna-popover-header .dmna-popover-mode-toggle,
+    #dmna-popover-header .dmna-popover-help-link {
       background: transparent;
       border: none;
-      color: #4a9eff;
+      outline: none;
+      color: rgba(255, 255, 255, 0.55);
       font-size: 13px;
       font-family: inherit;
       padding: 2px 0;
@@ -334,13 +346,19 @@ export const STYLES = `
       touch-action: manipulation;
       text-decoration: none;
     }
-    .dmna-popover-mode-toggle:hover,
-    .dmna-popover-help-link:hover {
+    #dmna-popover-header .dmna-popover-mode-toggle:hover,
+    #dmna-popover-header .dmna-popover-mode-toggle:focus,
+    #dmna-popover-header .dmna-popover-mode-toggle:active,
+    #dmna-popover-header .dmna-popover-help-link:hover,
+    #dmna-popover-header .dmna-popover-help-link:focus,
+    #dmna-popover-header .dmna-popover-help-link:active {
+      background: transparent;
+      outline: none;
       color: #6bb6ff;
       text-decoration: underline;
       text-underline-offset: 2px;
     }
-    .dmna-popover-mode-toggle:disabled {
+    #dmna-popover-header .dmna-popover-mode-toggle:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
