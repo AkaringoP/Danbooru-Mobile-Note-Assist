@@ -1035,30 +1035,35 @@ export const STYLES = `
     .dmna-style-btn-italic { font-style: italic; }
     .dmna-style-btn-underline { text-decoration: underline; }
     .dmna-style-btn-strike { text-decoration: line-through; }
+    /* tn / link / code / ruby — semantic-tag labels share a single
+       16px size so the four colored chips read as one weight class,
+       with hue / underline / monospace doing the per-tag distinction. */
     .dmna-style-btn-tn {
-      font-size: 15px;
+      font-size: 16px;
       color: rgba(150, 200, 255, 0.95);
-      letter-spacing: 0.5px;
     }
     .dmna-style-btn-link {
+      font-size: 16px;
       color: #4a9eff;
       text-decoration: underline;
     }
-    /* sub / sup / code / ruby — Phase 5 v4.2 additions. The label
-       itself ("sub", "sup", etc.) carries the meaning; the styling
-       below just adds a subtle visual cue so the buttons don't read
-       as a wall of identical chips. */
+    /* sub / sup — Phase 5 v4.2 additions. The label text itself
+       ("sub" / "sup") is shrunk and shifted via asymmetric padding so
+       it lands low (sub) or high (sup) inside the same-row S button
+       as the centered reference, mirroring the tag's actual rendering. */
     .dmna-style-btn-sub,
     .dmna-style-btn-sup {
-      font-size: 14px;
+      font-size: 11px;
     }
+    .dmna-style-btn-sub { padding: 16px 0 4px; }
+    .dmna-style-btn-sup { padding: 4px 0 16px; }
     .dmna-style-btn-code {
       font-family: ui-monospace, Menlo, Consolas, monospace;
       font-size: 16px;
       color: rgba(255, 200, 130, 0.95);
     }
     .dmna-style-btn-ruby {
-      font-size: 14px;
+      font-size: 16px;
       color: rgba(180, 220, 180, 0.95);
     }
     /* Color row: button is a label + swatch pair in inline-flex.

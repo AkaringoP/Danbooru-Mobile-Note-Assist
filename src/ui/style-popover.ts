@@ -101,13 +101,13 @@ const ROW_2_BUTTONS: StyleTagButton[] = [
 
 // Row 3: tn / code — semantic, simple wrap
 const ROW_3_BUTTONS: StyleTagButton[] = [
-  {tag: 'tn', label: 'tn', className: 'dmna-style-btn-tn'},
+  {tag: 'tn', label: 'TL note', className: 'dmna-style-btn-tn'},
   {tag: 'code', label: 'code', className: 'dmna-style-btn-code'},
 ];
 
 // Row 4: a / ruby — semantic, modal-triggering
 const ROW_4_BUTTONS: StyleTagButton[] = [
-  {tag: 'a', label: 'a', className: 'dmna-style-btn-link'},
+  {tag: 'a', label: 'link', className: 'dmna-style-btn-link'},
   {tag: 'ruby', label: 'ruby', className: 'dmna-style-btn-ruby'},
 ];
 
