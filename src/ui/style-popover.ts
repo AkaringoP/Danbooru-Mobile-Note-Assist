@@ -83,32 +83,68 @@ interface StyleTagButton {
   tag: string;
   label: string;
   className: string;
+  tooltip: string;
 }
 
 // Row 1: B / I / U
 const ROW_1_BUTTONS: StyleTagButton[] = [
-  {tag: 'b', label: 'B', className: 'dmna-style-btn-bold'},
-  {tag: 'i', label: 'I', className: 'dmna-style-btn-italic'},
-  {tag: 'u', label: 'U', className: 'dmna-style-btn-underline'},
+  {tag: 'b', label: 'B', className: 'dmna-style-btn-bold', tooltip: 'Bold'},
+  {tag: 'i', label: 'I', className: 'dmna-style-btn-italic', tooltip: 'Italic'},
+  {
+    tag: 'u',
+    label: 'U',
+    className: 'dmna-style-btn-underline',
+    tooltip: 'Underline',
+  },
 ];
 
 // Row 2: S / sub / sup — visual variant (strike, subscript, superscript)
 const ROW_2_BUTTONS: StyleTagButton[] = [
-  {tag: 's', label: 'S', className: 'dmna-style-btn-strike'},
-  {tag: 'sub', label: 'sub', className: 'dmna-style-btn-sub'},
-  {tag: 'sup', label: 'sup', className: 'dmna-style-btn-sup'},
+  {
+    tag: 's',
+    label: 'S',
+    className: 'dmna-style-btn-strike',
+    tooltip: 'Strikethrough',
+  },
+  {
+    tag: 'sub',
+    label: 'sub',
+    className: 'dmna-style-btn-sub',
+    tooltip: 'Subscript',
+  },
+  {
+    tag: 'sup',
+    label: 'sup',
+    className: 'dmna-style-btn-sup',
+    tooltip: 'Superscript',
+  },
 ];
 
 // Row 3: tn / code — semantic, simple wrap
 const ROW_3_BUTTONS: StyleTagButton[] = [
-  {tag: 'tn', label: 'tn', className: 'dmna-style-btn-tn'},
-  {tag: 'code', label: 'code', className: 'dmna-style-btn-code'},
+  {
+    tag: 'tn',
+    label: 'TL note',
+    className: 'dmna-style-btn-tn',
+    tooltip: 'Translator note',
+  },
+  {
+    tag: 'code',
+    label: 'code',
+    className: 'dmna-style-btn-code',
+    tooltip: 'Code',
+  },
 ];
 
 // Row 4: a / ruby — semantic, modal-triggering
 const ROW_4_BUTTONS: StyleTagButton[] = [
-  {tag: 'a', label: 'a', className: 'dmna-style-btn-link'},
-  {tag: 'ruby', label: 'ruby', className: 'dmna-style-btn-ruby'},
+  {tag: 'a', label: 'link', className: 'dmna-style-btn-link', tooltip: 'Link'},
+  {
+    tag: 'ruby',
+    label: 'ruby',
+    className: 'dmna-style-btn-ruby',
+    tooltip: 'Ruby (furigana)',
+  },
 ];
 
 interface SelectOption {
@@ -144,9 +180,10 @@ const SIZE_OPTIONS: ReadonlyArray<SelectOption> = [
 // fallback, which is exactly how their note will look on devices
 // missing the font.
 const FONT_OPTIONS: ReadonlyArray<SelectOption> = [
-  // Leading empty option — acts as the "no font-family" choice and
-  // doubles as the default selected state for plain text.
-  {label: ' ', value: ''},
+  // Leading empty-value option — acts as the "no font-family" choice and
+  // doubles as the default selected state for plain text. Label mirrors
+  // Size's 'Default' entry for consistency.
+  {label: 'Default', value: ''},
   {label: 'comic', value: 'comic', preview: 'comic'},
   {label: 'narrow', value: 'narrow', preview: 'narrow'},
   {label: 'mono', value: 'mono', preview: 'mono'},
@@ -665,6 +702,7 @@ function buildTagRow(buttons: StyleTagButton[]): HTMLElement {
     b.textContent = btn.label;
     b.dataset.tag = btn.tag;
     b.setAttribute('aria-label', `Wrap selection with <${btn.tag}>`);
+    b.title = btn.tooltip;
     // Keep textarea focus so its selection highlight doesn't fade out
     // when the user reaches over to the sub-popover.
     b.addEventListener('mousedown', e => e.preventDefault());
@@ -712,6 +750,7 @@ function buildColorRow(): HTMLElement {
   text.className = 'dmna-style-btn dmna-style-color-text';
   text.dataset.control = 'color-text';
   text.setAttribute('aria-label', 'Pick text color');
+  text.title = 'Text color';
   const textLabel = document.createElement('span');
   textLabel.className = 'dmna-style-color-label';
   textLabel.textContent = 'Text';
@@ -744,6 +783,7 @@ function buildColorRow(): HTMLElement {
   stroke.className = 'dmna-style-btn dmna-style-color-stroke';
   stroke.dataset.control = 'color-stroke';
   stroke.setAttribute('aria-label', 'Pick stroke (outline) color');
+  stroke.title = 'Stroke color';
   const strokeLabel = document.createElement('span');
   strokeLabel.className = 'dmna-style-color-label';
   // Abbreviated to fit alongside the swatch in the 3-col row — the
@@ -778,6 +818,7 @@ function buildColorRow(): HTMLElement {
   bg.className = 'dmna-style-btn dmna-style-color-bg';
   bg.dataset.control = 'color-bg';
   bg.setAttribute('aria-label', 'Pick background color');
+  bg.title = 'Background color';
   const bgLabel = document.createElement('span');
   bgLabel.className = 'dmna-style-color-label';
   bgLabel.textContent = 'BG';

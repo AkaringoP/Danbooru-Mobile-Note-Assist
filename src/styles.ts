@@ -317,15 +317,27 @@ export const STYLES = `
     /* Mode toggle + "view help" wiki link styled as inline text-links
        rather than chips — mirrors Danbooru's own Editing-note header
        (Preview affordance on the left, "view help" anchor on the
-       right). Danbooru's native links are not underlined at rest;
-       the underline surfaces only on hover, so we match that pattern.
-       The help link is an <a>, not a button, so :disabled handling
-       is mode-toggle-only. */
-    .dmna-popover-mode-toggle,
-    .dmna-popover-help-link {
+       right). Rest is a muted gray; hover/focus surfaces the blue
+       accent + underline, matching Danbooru's native toolbar (icons
+       read as recessive at rest, light up on intent).
+
+       Scoped under #dmna-popover-header so the help <a>'s color isn't
+       recoloured by Danbooru's own 'a { color: ... }' cascade — a bare
+       .dmna-popover-help-link rule (0,1,0) loses to selectors like
+       '#wrapper a' (0,1,1). Explicit transparent background +
+       'outline: none' on the interactive states silence the UA button
+       focus-fill / focus-ring that otherwise paints a white pill
+       behind "Preview" once it's been clicked. The hover underline +
+       color flip stays as the accessible focus indicator.
+
+       The help link is an <a>, not a button, so :disabled handling is
+       mode-toggle-only. */
+    #dmna-popover-header .dmna-popover-mode-toggle,
+    #dmna-popover-header .dmna-popover-help-link {
       background: transparent;
       border: none;
-      color: #4a9eff;
+      outline: none;
+      color: rgba(255, 255, 255, 0.55);
       font-size: 13px;
       font-family: inherit;
       padding: 2px 0;
@@ -334,13 +346,19 @@ export const STYLES = `
       touch-action: manipulation;
       text-decoration: none;
     }
-    .dmna-popover-mode-toggle:hover,
-    .dmna-popover-help-link:hover {
+    #dmna-popover-header .dmna-popover-mode-toggle:hover,
+    #dmna-popover-header .dmna-popover-mode-toggle:focus,
+    #dmna-popover-header .dmna-popover-mode-toggle:active,
+    #dmna-popover-header .dmna-popover-help-link:hover,
+    #dmna-popover-header .dmna-popover-help-link:focus,
+    #dmna-popover-header .dmna-popover-help-link:active {
+      background: transparent;
+      outline: none;
       color: #6bb6ff;
       text-decoration: underline;
       text-underline-offset: 2px;
     }
-    .dmna-popover-mode-toggle:disabled {
+    #dmna-popover-header .dmna-popover-mode-toggle:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
@@ -1035,30 +1053,35 @@ export const STYLES = `
     .dmna-style-btn-italic { font-style: italic; }
     .dmna-style-btn-underline { text-decoration: underline; }
     .dmna-style-btn-strike { text-decoration: line-through; }
+    /* tn / link / code / ruby — semantic-tag labels share a single
+       16px size so the four colored chips read as one weight class,
+       with hue / underline / monospace doing the per-tag distinction. */
     .dmna-style-btn-tn {
-      font-size: 15px;
+      font-size: 16px;
       color: rgba(150, 200, 255, 0.95);
-      letter-spacing: 0.5px;
     }
     .dmna-style-btn-link {
+      font-size: 16px;
       color: #4a9eff;
       text-decoration: underline;
     }
-    /* sub / sup / code / ruby — Phase 5 v4.2 additions. The label
-       itself ("sub", "sup", etc.) carries the meaning; the styling
-       below just adds a subtle visual cue so the buttons don't read
-       as a wall of identical chips. */
+    /* sub / sup — Phase 5 v4.2 additions. The label text itself
+       ("sub" / "sup") is shrunk and shifted via asymmetric padding so
+       it lands low (sub) or high (sup) inside the same-row S button
+       as the centered reference, mirroring the tag's actual rendering. */
     .dmna-style-btn-sub,
     .dmna-style-btn-sup {
-      font-size: 14px;
+      font-size: 11px;
     }
+    .dmna-style-btn-sub { padding: 16px 0 4px; }
+    .dmna-style-btn-sup { padding: 4px 0 16px; }
     .dmna-style-btn-code {
       font-family: ui-monospace, Menlo, Consolas, monospace;
       font-size: 16px;
       color: rgba(255, 200, 130, 0.95);
     }
     .dmna-style-btn-ruby {
-      font-size: 14px;
+      font-size: 16px;
       color: rgba(180, 220, 180, 0.95);
     }
     /* Color row: button is a label + swatch pair in inline-flex.
