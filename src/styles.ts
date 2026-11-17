@@ -1,4 +1,9 @@
-import {POPOVER_ARROW_HALF, POPOVER_WIDTH, TAG_POPOVER_WIDTH} from './config';
+import {
+  POPOVER_ARROW_HALF,
+  POPOVER_CORNER_RADIUS,
+  POPOVER_WIDTH,
+  TAG_POPOVER_WIDTH,
+} from './config';
 
 /**
  * Inlined CSS for all MobileNoteAssist UI surfaces. Injected into a
@@ -274,7 +279,7 @@ export const STYLES = `
       width: ${POPOVER_WIDTH}px;
       background: rgba(30, 30, 30, 0.96);
       border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 10px;
+      border-radius: ${POPOVER_CORNER_RADIUS}px;
       padding: 10px;
       z-index: 10995;
       box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);

@@ -144,6 +144,13 @@ export const POPOVER_VIEWPORT_PADDING = 10;
 export const POPOVER_ARROW_HALF = 8;
 
 /**
+ * Corner radius (px) of the note popover. The arrow slides along the
+ * top edge to point at the box but stops this far from either side so
+ * it never overhangs a rounded corner.
+ */
+export const POPOVER_CORNER_RADIUS = 10;
+
+/**
  * Arc menu radius (px). Shared by createArcMenu and
  * the tag popover positioning so the popover anchors correctly to
  * whatever spot the Confirm item occupies.

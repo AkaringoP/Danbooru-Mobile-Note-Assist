@@ -17,9 +17,12 @@ async function overflowCase(width, zoom, side) {
       if (zoom !== 1) {
         const cdp = await page.context().newCDPSession(page);
         await cdp.send('Emulation.setPageScaleFactor', {pageScaleFactor: zoom});
-        await page.evaluate(
-          s => window.scrollTo(s === 'left' ? 0 : 99999, window.scrollY),
-          side,
+        // Pan the visual viewport so the box is on screen, as a user who
+        // pinched in on it would see it.
+        await page.evaluate(() =>
+          document
+            .querySelector('.dmna-note-box.is-active')
+            .scrollIntoView({block: 'center', inline: 'nearest'}),
         );
         await page.waitForTimeout(300);
       }
@@ -37,6 +40,7 @@ async function overflowCase(width, zoom, side) {
         const vw = vv.width * vv.scale;
         const arrowX = toVis(arrow.left + arrow.width / 2);
         return {
+          boxOnScreen: toVis(box.left) >= -1 && toVis(box.right) <= vw + 1,
           cutLeft: Math.max(0, Math.round(-toVis(pop.left))),
           cutRight: Math.max(0, Math.round(toVis(pop.right) - vw)),
           arrowOnBox:
@@ -103,7 +107,7 @@ export default [
         for (const zoom of [1, 1.5]) {
           for (const side of ['left', 'right']) {
             const r = await overflowCase(width, zoom, side);
-            if (r.cutLeft || r.cutRight || !r.arrowOnBox) {
+            if (!r.boxOnScreen || r.cutLeft || r.cutRight || !r.arrowOnBox) {
               failures.push(`${width}px zoom ${zoom} ${side}: ${JSON.stringify(r)}`);
             }
           }

@@ -30,14 +30,9 @@
  */
 
 import {NoteId, TextSnapshot, isServerNoteId} from '../types';
-import {
-  POPOVER_OFFSET,
-  POPOVER_VIEWPORT_PADDING,
-  POPOVER_WIDTH,
-  SCRIPT_NAME,
-  SCRIPT_VERSION,
-} from '../config';
+import {POPOVER_OFFSET, SCRIPT_NAME, SCRIPT_VERSION} from '../config';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {computePopoverPlacement} from '../utils/popover-placement';
 import {apiPreviewNote} from '../api/notes';
 import {getOriginalWidth} from '../state/image-state';
 import {
@@ -69,11 +64,9 @@ import {showToast} from './toast';
 
 let popoverElement: HTMLElement | null = null;
 let popoverInputElement: HTMLTextAreaElement | null = null;
-// `popoverArrowElement` from v3.1.1's closure inventory is dropped:
-// the arrow div is appended once during createPopover but no caller
-// (in or out of this module) reads it after — the static CSS-center
-// arrow doesn't need a per-call slide. Phase 1 fidelity loss is
-// nominal; Phase 2 won't miss it.
+// Slides along the top edge so it keeps pointing at the box when the
+// popover is clamped against a viewport edge (v5.1).
+let popoverArrowElement: HTMLElement | null = null;
 
 // Preview-mode state (Phase 3, v4.2). `previewElement` is the read-only
 // div that shows the server-sanitized HTML when isPreviewMode is true;
@@ -156,6 +149,7 @@ export function createPopover(): void {
   const arrow = document.createElement('div');
   arrow.id = 'dmna-popover-arrow';
   root.appendChild(arrow);
+  popoverArrowElement = arrow;
 
   // Header row (Phase 3, v4.2) — hosts the Preview/Edit mode toggle
   // on the left and a "view help" wiki link on the right, mirroring
@@ -500,7 +494,9 @@ export function updatePopoverForActiveNote(): void {
  * Re-projects the active box's image-space rect to display space and
  * pins the popover under it. Counter-scales the popover so its
  * visual size stays constant under pinch zoom — the same trick the
- * floating button uses, but with anchoring math.
+ * floating button uses, but with anchoring math. Horizontal clamp,
+ * narrow-screen shrink and the arrow slide come from
+ * `computePopoverPlacement`.
  *
  * No `.show` check: showPopover deliberately calls this BEFORE
  * adding the show class so the transform is in place when the
@@ -537,40 +533,29 @@ export function updatePopoverPosition(): void {
 
   const vv = window.visualViewport;
   const scale = vv ? vv.scale : 1;
-  const invScale = 1 / scale;
   const vvPageLeft = vv ? vv.pageLeft : window.pageXOffset;
   const vvPageTop = vv ? vv.pageTop : window.pageYOffset;
-  const vvWidth = vv ? vv.width : window.innerWidth;
+  const visW = (vv ? vv.width : window.innerWidth) * scale;
 
-  // Box's visual rect in viewport-CSS-pixels.
+  // Box's visual rect in screen px.
   const boxVisualLeft = (boxRectPage.left - vvPageLeft) * scale;
   const boxVisualTop = (boxRectPage.top - vvPageTop) * scale;
-  const boxVisualWidth = boxRectPage.width * scale;
-  const boxVisualHeight = boxRectPage.height * scale;
-  const boxCenterVisualX = boxVisualLeft + boxVisualWidth / 2;
-  const boxBottomVisualY = boxVisualTop + boxVisualHeight;
+  const boxCenterVisualX = boxVisualLeft + (boxRectPage.width * scale) / 2;
+  const boxBottomVisualY = boxVisualTop + boxRectPage.height * scale;
 
-  // Popover visual position: centered on the box, then clamped
-  // horizontally to keep it inside the visual viewport WHEN it fits.
-  // At extreme pinch-zoom the popover is wider than the visual
-  // viewport (e.g., vvWidth=300, popover=343), where any clamp would
-  // pin it to the viewport edge and break the "anchored to box"
-  // illusion — in that case we skip the clamp and let it overflow
-  // (pinch out / pan to see the rest). The arrow stays at the
-  // popover's CSS-center (set statically in createPopover); no
-  // per-call slide needed.
-  let popVisualLeft = boxCenterVisualX - POPOVER_WIDTH / 2;
+  const {left, fit, arrowLeft} = computePopoverPlacement({
+    boxCenterX: boxCenterVisualX,
+    visW,
+  });
   const popVisualTop = boxBottomVisualY + POPOVER_OFFSET;
-  if (POPOVER_WIDTH + POPOVER_VIEWPORT_PADDING * 2 <= vvWidth) {
-    const minLeft = POPOVER_VIEWPORT_PADDING;
-    const maxLeft = vvWidth - POPOVER_WIDTH - POPOVER_VIEWPORT_PADDING;
-    popVisualLeft = Math.max(minLeft, Math.min(popVisualLeft, maxLeft));
-  }
 
   // Convert visual coords back to document coords for the transform.
-  const tx = vvPageLeft + popVisualLeft / scale;
+  const tx = vvPageLeft + left / scale;
   const ty = vvPageTop + popVisualTop / scale;
-  popoverElement.style.transform = `translate(${tx}px, ${ty}px) scale(${invScale})`;
+  popoverElement.style.transform = `translate(${tx}px, ${ty}px) scale(${fit / scale})`;
+  if (popoverArrowElement) {
+    popoverArrowElement.style.left = `${arrowLeft}px`;
+  }
 }
 
 /**
