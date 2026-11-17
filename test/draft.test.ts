@@ -488,3 +488,91 @@ describe('per-post key isolation', () => {
     expect(localStorage.getItem(draftKey('100'))).not.toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Note id validation (v5.1 Task 2.2)
+// ---------------------------------------------------------------------------
+
+describe('loadDraft — note id validation', () => {
+  const ST = {x: 1, y: 2, w: 30, h: 40, text: 't'};
+  const UUID_TEMP = 'temp-0f8fad5b-d9cb-469f-a165-70867728950e';
+
+  function entry(isServerNote: boolean) {
+    return {
+      current: ST,
+      initialState: ST,
+      confirmedState: ST,
+      isDeleted: false,
+      isServerNote,
+      everConfirmed: true,
+    };
+  }
+
+  function store(overrides: Record<string, unknown>): void {
+    localStorage.setItem(
+      draftKey('123'),
+      JSON.stringify({
+        schemaVersion: DRAFT_SCHEMA_VERSION,
+        savedAt: Date.now(),
+        mode: 'active',
+        activeNoteId: null,
+        notes: [],
+        actionLog: [],
+        ...overrides,
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    setPathname('/posts/123');
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    setPathname('/');
+  });
+
+  it('accepts uuid temp ids and numeric server ids', () => {
+    store({
+      activeNoteId: UUID_TEMP,
+      notes: [
+        [UUID_TEMP, entry(false)],
+        ['4535572', entry(true)],
+      ],
+      actionLog: [
+        [UUID_TEMP, [{noteId: UUID_TEMP, type: 'create', prevState: null}]],
+        ['4535572', [{noteId: '4535572', type: 'edit', prevState: ST}]],
+      ],
+    });
+    expect(loadDraft()).not.toBeNull();
+  });
+
+  it.each([
+    ['a path-like note key', {notes: [['../favorites/5', entry(true)]]}],
+    ['a numeric key flagged as temp', {notes: [['42', entry(false)]]}],
+    ['a temp key flagged as server', {notes: [['temp-abc', entry(true)]]}],
+    ['an empty temp suffix', {notes: [['temp-', entry(false)]]}],
+    [
+      'a bad actionLog key',
+      {
+        actionLog: [
+          ['5/../6', [{noteId: '5', type: 'create', prevState: null}]],
+        ],
+      },
+    ],
+    [
+      'a bad noteId inside an actionLog entry',
+      {
+        actionLog: [
+          ['5', [{noteId: '5?x=1', type: 'create', prevState: null}]],
+        ],
+      },
+    ],
+    ['a bad activeNoteId', {activeNoteId: '5.json'}],
+  ])('rejects %s and drops the key', (_label, overrides) => {
+    store(overrides);
+    expect(loadDraft()).toBeNull();
+    expect(localStorage.getItem(draftKey('123'))).toBeNull();
+  });
+});

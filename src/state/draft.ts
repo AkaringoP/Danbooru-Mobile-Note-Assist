@@ -52,6 +52,18 @@ export const DRAFT_SCHEMA_VERSION = 1;
 const DRAFT_KEY_PREFIX = 'dmna_draft_';
 
 /**
+ * Shapes `genNoteId` and the server can produce. Ids end up in request
+ * paths (`/notes/{id}.json`), so a tampered draft must not smuggle in
+ * `../` or query characters (v5.1 Task 2.2).
+ */
+const NOTE_ID_RE = /^(?:\d+|temp-[A-Za-z0-9-]+)$/;
+const SERVER_NOTE_ID_RE = /^\d+$/;
+
+function isNoteIdString(v: unknown): v is string {
+  return typeof v === 'string' && NOTE_ID_RE.test(v);
+}
+
+/**
  * Note minus `domElement` — DOM refs don't survive a page reload
  * (HTMLElement isn't JSON-serializable in any useful way) and the
  * first post-restore render produces them fresh anyway. Exported
@@ -249,7 +261,7 @@ function isPersistedDraftV1(v: unknown): v is PersistedDraftV1 {
   if (o.mode !== 'idle' && o.mode !== 'active') {
     return false;
   }
-  if (o.activeNoteId !== null && typeof o.activeNoteId !== 'string') {
+  if (o.activeNoteId !== null && !isNoteIdString(o.activeNoteId)) {
     return false;
   }
   if (!Array.isArray(o.notes) || !Array.isArray(o.actionLog)) {
@@ -301,7 +313,13 @@ function isNotesEntry(v: unknown): boolean {
   if (!Array.isArray(v) || v.length !== 2) {
     return false;
   }
-  return typeof v[0] === 'string' && isSerializedNote(v[1]);
+  const [id, note] = v;
+  return (
+    isNoteIdString(id) &&
+    isSerializedNote(note) &&
+    (note as {isServerNote: boolean}).isServerNote ===
+      SERVER_NOTE_ID_RE.test(id)
+  );
 }
 
 function isTextSnapshot(v: unknown): boolean {
@@ -321,7 +339,7 @@ function isActionLogEntry(v: unknown): boolean {
     return false;
   }
   const o = v as Record<string, unknown>;
-  if (typeof o.noteId !== 'string') {
+  if (!isNoteIdString(o.noteId)) {
     return false;
   }
   switch (o.type) {
@@ -342,7 +360,7 @@ function isActionLogStackEntry(v: unknown): boolean {
   if (!Array.isArray(v) || v.length !== 2) {
     return false;
   }
-  if (typeof v[0] !== 'string' || !Array.isArray(v[1])) {
+  if (!isNoteIdString(v[0]) || !Array.isArray(v[1])) {
     return false;
   }
   return v[1].every(isActionLogEntry);

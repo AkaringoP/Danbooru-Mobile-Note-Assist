@@ -102,11 +102,24 @@ export async function apiPostNote(
   return apiCall<ServerNoteResponse>('POST', '/notes.json', payload);
 }
 
+/**
+ * The id lands in the request path; anything but digits (e.g. from a
+ * tampered draft) would address some other endpoint.
+ */
+function assertServerNoteId(serverId: string): void {
+  if (!/^\d+$/.test(serverId)) {
+    throw new Error(
+      `Refusing request: invalid server note id ${JSON.stringify(serverId)}`,
+    );
+  }
+}
+
 /** PUT `/notes/{id}.json` — updates an existing server note. */
 export async function apiPutNote(
   serverId: string,
   state: NoteState,
 ): Promise<unknown> {
+  assertServerNoteId(serverId);
   const payload = {
     note: {
       x: Math.round(state.x),
@@ -121,6 +134,7 @@ export async function apiPutNote(
 
 /** DELETE `/notes/{id}.json` — soft-deletes server-side. */
 export async function apiDeleteNote(serverId: string): Promise<unknown> {
+  assertServerNoteId(serverId);
   return apiCall('DELETE', `/notes/${serverId}.json`, null);
 }
 
