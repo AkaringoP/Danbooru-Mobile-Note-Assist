@@ -35,7 +35,7 @@ import {
   MIN_BOX_SIZE_IMG,
 } from '../config';
 import {NoteId, NoteState} from '../types';
-import {getImageDisplayRect} from '../utils/coords';
+import {DisplayRect, getImageDisplayRect} from '../utils/coords';
 import {getImageElement} from '../utils/dom';
 import {getOriginalHeight, getOriginalWidth} from '../state/image-state';
 import {
@@ -61,6 +61,12 @@ interface DragState {
   startState: NoteState;
   captureTarget: HTMLElement;
   moved: boolean;
+  /**
+   * Image page-coord rect, read once at gesture start and reused by
+   * every move, render and popover update — reading it per frame
+   * interleaved layout reads with style writes (v5.1 Task 3.2).
+   */
+  imageRect: DisplayRect;
 }
 
 let dragState: DragState | null = null;
@@ -116,6 +122,14 @@ export function attachHandleListeners(
  * Wires the box body's pointerdown for body-drag (move). Stops at
  * the body — handles have their own pointerdown that stopPropagation
  * before reaching here.
+ *
+ * Touch and pen only drag the box that is already selected (v5.1 Task
+ * 2.5, pen included). On any other box the gesture is left to the
+ * browser, so a swipe that happens to start on someone's note scrolls
+ * the page instead of moving the note; a plain tap still selects it
+ * via the box's click handler. Only a mouse keeps activate-and-drag in
+ * one gesture — unselected boxes are `touch-action: manipulation`, so
+ * a pen drag there would be taken over by panning mid-gesture.
  */
 export function attachBodyDragListener(
   bodyEl: HTMLElement,
@@ -123,6 +137,9 @@ export function attachBodyDragListener(
 ): void {
   bodyEl.addEventListener('pointerdown', e => {
     if (getMode() !== 'active') {
+      return;
+    }
+    if (e.pointerType !== 'mouse' && getActiveNoteId() !== noteId) {
       return;
     }
     const note = notes.get(noteId);
@@ -135,8 +152,7 @@ export function attachBodyDragListener(
       }
       return;
     }
-    // Activate-on-touch so a single tap-and-drag works on inactive
-    // boxes without requiring two gestures.
+    // Mouse: activate and drag in one gesture.
     if (getActiveNoteId() !== noteId) {
       setActiveNote(noteId);
     }
@@ -178,6 +194,11 @@ function startInteraction(
   if (!note) {
     return;
   }
+  const img = getImageElement();
+  const imageRect = img ? getImageDisplayRect(img) : null;
+  if (!imageRect) {
+    return;
+  }
 
   dragState = {
     kind,
@@ -188,6 +209,7 @@ function startInteraction(
     startState: {...note.current},
     captureTarget,
     moved: false,
+    imageRect,
   };
 
   try {
@@ -239,14 +261,10 @@ function onInteractionMove(e: PointerEvent): void {
   }
 
   // Convert display-space delta to image-space.
-  const img = getImageElement();
-  if (!img) {
-    return;
-  }
-  const rect = getImageDisplayRect(img);
+  const rect = dragState.imageRect;
   const originalWidth = getOriginalWidth();
   const originalHeight = getOriginalHeight();
-  if (!rect || !originalWidth) {
+  if (!originalWidth) {
     return;
   }
   const scale = rect.width / originalWidth;
@@ -306,8 +324,8 @@ function onInteractionMove(e: PointerEvent): void {
   ny = Math.max(0, Math.min(originalHeight - nh, ny));
 
   note.current = {x: nx, y: ny, w: nw, h: nh, text: note.current.text};
-  renderNoteBox(dragState.noteId);
-  updatePopoverPosition();
+  renderNoteBox(dragState.noteId, rect);
+  updatePopoverPosition(rect);
 }
 
 /**
@@ -331,13 +349,25 @@ function onInteractionEnd(e: PointerEvent): void {
   target.removeEventListener('pointercancel', onInteractionEnd);
 
   if (dragState.moved) {
-    // Record the gesture as a 'transform' entry so the popover ↶ can
-    // roll the box back to its pre-gesture geometry. Captured at
-    // gesture end (rather than on the first frame past the threshold)
-    // so a single push covers the whole drag — chained ↶ presses
-    // then step back through individual gestures, not individual
-    // frames.
-    pushAction(dragState.noteId, 'transform', {...dragState.startState});
+    const moved = notes.get(dragState.noteId);
+    if (e.type === 'pointercancel') {
+      // The browser or OS took the pointer (a pan, a system gesture):
+      // put the box back instead of committing a partial move (v5.1).
+      if (moved) {
+        const {x, y, w, h} = dragState.startState;
+        moved.current = {...moved.current, x, y, w, h};
+        renderNoteBox(dragState.noteId, dragState.imageRect);
+        updatePopoverPosition(dragState.imageRect);
+      }
+    } else {
+      // Record the gesture as a 'transform' entry so the popover ↶ can
+      // roll the box back to its pre-gesture geometry. Captured at
+      // gesture end (rather than on the first frame past the
+      // threshold) so a single push covers the whole drag — chained ↶
+      // presses then step back through individual gestures, not
+      // individual frames.
+      pushAction(dragState.noteId, 'transform', {...dragState.startState});
+    }
 
     // Only reset opacity if we actually dimmed (matches the
     // movement-gated dim in onInteractionMove). Pure-tap gestures
@@ -345,9 +375,8 @@ function onInteractionEnd(e: PointerEvent): void {
     setPopoverInteracting(false);
     // Restore the SE corner triangle (set in onInteractionMove's
     // first-movement branch).
-    const note = notes.get(dragState.noteId);
-    if (note && note.domElement) {
-      note.domElement.classList.remove('is-interacting');
+    if (moved && moved.domElement) {
+      moved.domElement.classList.remove('is-interacting');
     }
     suppressNextBoxClick = true;
     // Auto-release after the click event window so a swallowed click

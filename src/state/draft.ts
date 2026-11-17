@@ -22,8 +22,9 @@
  *   - saveDraft(snapshot)    — write under the current post's key
  *   - loadDraft()            — read + validate + TTL gate, or null
  *   - clearDraft()           — remove the current post's draft
- *   - safeSetItem/safeGetItem — shared localStorage guards (F5,
- *                               used by ui/floating-button in Task 1.4)
+ *   - sweepExpiredDrafts()   — remove stale drafts of every post
+ *   - safeSetItem/safeGetItem/safeRemoveItem — shared localStorage
+ *                               guards (F5, used by ui/floating-button)
  *
  * Per-post key scheme: `dmna_draft_{postId}`. Non-post pages are
  * no-ops for all operations (getPostId returns null).
@@ -50,6 +51,18 @@ export const MAX_DRAFT_AGE_MS = 24 * 60 * 60 * 1000;
 export const DRAFT_SCHEMA_VERSION = 1;
 
 const DRAFT_KEY_PREFIX = 'dmna_draft_';
+
+/**
+ * Shapes `genNoteId` and the server can produce. Ids end up in request
+ * paths (`/notes/{id}.json`), so a tampered draft must not smuggle in
+ * `../` or query characters (v5.1 Task 2.2).
+ */
+const NOTE_ID_RE = /^(?:\d+|temp-[A-Za-z0-9-]+)$/;
+const SERVER_NOTE_ID_RE = /^\d+$/;
+
+function isNoteIdString(v: unknown): v is string {
+  return typeof v === 'string' && NOTE_ID_RE.test(v);
+}
 
 /**
  * Note minus `domElement` — DOM refs don't survive a page reload
@@ -137,7 +150,8 @@ export function safeGetItem(key: string): string | null {
   }
 }
 
-function safeRemoveItem(key: string): void {
+/** localStorage.removeItem with the same guard. */
+export function safeRemoveItem(key: string): void {
   try {
     localStorage.removeItem(key);
   } catch (err) {
@@ -220,6 +234,41 @@ export function loadDraft(): DraftSnapshot | null {
   };
 }
 
+/**
+ * Deletes every `dmna_draft_*` entry that is expired, unparseable or
+ * fails validation (other schema, tampered ids), for any post. The
+ * TTL in `loadDraft` only covers the post being opened, so drafts of
+ * posts never revisited used to stay forever (v5.1 Task 3.3). Returns
+ * the number removed; never throws.
+ */
+export function sweepExpiredDrafts(now: number = Date.now()): number {
+  try {
+    const keys = Array.from({length: localStorage.length}, (_, i) =>
+      localStorage.key(i),
+    ).filter((k): k is string => !!k && k.startsWith(DRAFT_KEY_PREFIX));
+    const stale = keys.filter(k => !isLiveDraft(localStorage.getItem(k), now));
+    stale.forEach(k => localStorage.removeItem(k));
+    return stale.length;
+  } catch (err) {
+    console.warn('[MobileNoteAssist] draft sweep skipped', err);
+    return 0;
+  }
+}
+
+function isLiveDraft(raw: string | null, now: number): boolean {
+  if (!raw) {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return (
+      isPersistedDraftV1(parsed) && now - parsed.savedAt <= MAX_DRAFT_AGE_MS
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Removes the draft for the current post id. Idempotent — no-op
  *  on non-post pages and on missing key. */
 export function clearDraft(): void {
@@ -249,7 +298,7 @@ function isPersistedDraftV1(v: unknown): v is PersistedDraftV1 {
   if (o.mode !== 'idle' && o.mode !== 'active') {
     return false;
   }
-  if (o.activeNoteId !== null && typeof o.activeNoteId !== 'string') {
+  if (o.activeNoteId !== null && !isNoteIdString(o.activeNoteId)) {
     return false;
   }
   if (!Array.isArray(o.notes) || !Array.isArray(o.actionLog)) {
@@ -293,7 +342,9 @@ function isSerializedNote(v: unknown): boolean {
     isNoteState(o.confirmedState) &&
     typeof o.isDeleted === 'boolean' &&
     typeof o.isServerNote === 'boolean' &&
-    typeof o.everConfirmed === 'boolean'
+    typeof o.everConfirmed === 'boolean' &&
+    (o.uncertainPosts === undefined ||
+      (Array.isArray(o.uncertainPosts) && o.uncertainPosts.every(isNoteState)))
   );
 }
 
@@ -301,7 +352,13 @@ function isNotesEntry(v: unknown): boolean {
   if (!Array.isArray(v) || v.length !== 2) {
     return false;
   }
-  return typeof v[0] === 'string' && isSerializedNote(v[1]);
+  const [id, note] = v;
+  return (
+    isNoteIdString(id) &&
+    isSerializedNote(note) &&
+    (note as {isServerNote: boolean}).isServerNote ===
+      SERVER_NOTE_ID_RE.test(id)
+  );
 }
 
 function isTextSnapshot(v: unknown): boolean {
@@ -321,7 +378,7 @@ function isActionLogEntry(v: unknown): boolean {
     return false;
   }
   const o = v as Record<string, unknown>;
-  if (typeof o.noteId !== 'string') {
+  if (!isNoteIdString(o.noteId)) {
     return false;
   }
   switch (o.type) {
@@ -342,7 +399,7 @@ function isActionLogStackEntry(v: unknown): boolean {
   if (!Array.isArray(v) || v.length !== 2) {
     return false;
   }
-  if (typeof v[0] !== 'string' || !Array.isArray(v[1])) {
+  if (!isNoteIdString(v[0]) || !Array.isArray(v[1])) {
     return false;
   }
   return v[1].every(isActionLogEntry);

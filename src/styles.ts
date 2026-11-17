@@ -1,4 +1,9 @@
-import {POPOVER_ARROW_HALF, POPOVER_WIDTH, TAG_POPOVER_WIDTH} from './config';
+import {
+  POPOVER_ARROW_HALF,
+  POPOVER_CORNER_RADIUS,
+  POPOVER_WIDTH,
+  TAG_POPOVER_WIDTH,
+} from './config';
 
 /**
  * Inlined CSS for all MobileNoteAssist UI surfaces. Injected into a
@@ -25,6 +30,31 @@ export const STYLES = `
       box-shadow: 0 0 12px rgba(0, 115, 255, 0.6);
     }
     #dmna-float-btn.dragging { background: #ff9800 !important; border-color: #ffe0b2 !important; transform: scale(1.2); }
+    /* Unsent changes (v5.1): green outline, same green as a dirty box.
+       Menu-open (blue), reposition (orange) and sending (⏳) win. */
+    body.dmna-has-pending:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
+      border-color: #43a047;
+      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.55), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    /* Count of requests Confirm would send. */
+    body:not(.dmna-sending) #dmna-float-btn[data-pending-count]:not(.dragging)::after {
+      content: attr(data-pending-count);
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 4px;
+      border-radius: 9px;
+      box-sizing: border-box;
+      background: #43a047;
+      color: white;
+      font-size: 11px;
+      font-weight: bold;
+      line-height: 18px;
+      text-align: center;
+      pointer-events: none;
+    }
 
     /* Arc Menu */
     #dmna-menu {
@@ -61,6 +91,10 @@ export const STYLES = `
       transform: translate(var(--tx), var(--ty)) scale(1);
       pointer-events: auto;
     }
+    body.dmna-has-pending .dmna-menu-item[data-action="confirm"] {
+      border-color: #43a047;
+      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.55), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
     #dmna-menu.open .dmna-menu-item:active {
       transform: translate(var(--tx), var(--ty)) scale(0.88);
       background: rgba(0, 115, 255, 0.85);
@@ -74,7 +108,8 @@ export const STYLES = `
       position: absolute;
       border: 1.2px solid #0073ff;
       background-color: rgba(0, 115, 255, 0.15);
-      z-index: 9990;
+      /* Per-box, set by renderNoteBox: smaller boxes stack higher. */
+      z-index: var(--dmna-box-z, 9990);
       box-sizing: border-box;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
       pointer-events: none;
@@ -91,6 +126,7 @@ export const STYLES = `
       background-color: rgba(229, 57, 53, 0.10);
     }
     .dmna-note-box.is-active {
+      z-index: 10495;
       border-style: solid;
       border-color: #ff9800;
       background-color: rgba(255, 152, 0, 0.15);
@@ -109,13 +145,17 @@ export const STYLES = `
 
     /* In active mode boxes accept their own click (to swap active selection)
        and stop propagation, so the underlying image handler doesn't also
-       fire and spawn a duplicate note over the existing box. The
-       touch-action: none is necessary for the body's pointerdown drag —
-       without it the browser hijacks short drags as pan/scroll on mobile
-       and our pointermove never fires. */
+       fire and spawn a duplicate note over the existing box.
+       touch-action: only the selected box takes touch drags (none —
+       otherwise the browser turns them into pan/scroll and pointermove
+       never fires); on every other box a swipe scrolls the page and a
+       tap selects it (v5.1). */
     body.dmna-mode-active .dmna-note-box {
       pointer-events: auto;
       cursor: pointer;
+      touch-action: manipulation;
+    }
+    body.dmna-mode-active .dmna-note-box.is-active {
       touch-action: none;
     }
 
@@ -234,7 +274,7 @@ export const STYLES = `
       opacity: 0;
     }
 
-    /* Touch-zone debug overlay: while the user holds the popover's 👁
+    /* Touch-zone debug overlay: while the user holds the popover's zone
        button, paint each (otherwise invisible) corner handle in red so
        they can see exactly where the touch zones extend past the visible
        border. Only renders for the active box's handles since those are
@@ -274,7 +314,7 @@ export const STYLES = `
       width: ${POPOVER_WIDTH}px;
       background: rgba(30, 30, 30, 0.96);
       border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 10px;
+      border-radius: ${POPOVER_CORNER_RADIUS}px;
       padding: 10px;
       z-index: 10995;
       box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
@@ -312,7 +352,20 @@ export const STYLES = `
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       margin-bottom: 8px;
+    }
+    /* Body length vs Danbooru's 5000 limit, left of "view help". */
+    #dmna-popover-header .dmna-popover-count {
+      margin-left: auto;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      user-select: none;
+    }
+    #dmna-popover-header .dmna-popover-count.is-over {
+      color: #ff8b8b;
     }
     /* Mode toggle + "view help" wiki link styled as inline text-links
        rather than chips — mirrors Danbooru's own Editing-note header
@@ -380,12 +433,9 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      /* Matches Danbooru's note-edit-dialog inner font scale
-         (notes.scss: div.note-edit-dialog { font-size: 0.8em }).
-         13px ≈ 0.8 × 16px body default, putting our textarea in the
-         same visual range as the native dialog's textarea so users
-         coming from the native flow don't perceive a size jump. */
-      font-size: 13px;
+      /* 16px: iOS Safari zooms the page when a focused field is
+         smaller. Applies to every text field and select (v5.1). */
+      font-size: 16px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;
@@ -410,6 +460,13 @@ export const STYLES = `
       color: #9192a7;
     }
     #dmna-popover-preview {
+      /* Containment: note markup may carry position / inset / z-index
+         (NoteSanitizer allows them). Without a positioned, paint-
+         contained box a previewed note could cover the popover's own
+         buttons (v5.1). */
+      position: relative;
+      isolation: isolate;
+      contain: paint;
       min-width: 0;
       /* Matches Danbooru's div.note-body (notes.scss line 13-15) so
          the preview reads as a faithful screenshot of how the note
@@ -433,6 +490,9 @@ export const STYLES = `
       overflow-wrap: anywhere;
       overflow-y: auto;
     }
+    /* Preview is display-only: a tap on a rendered link must not
+       navigate away from unsaved work. */
+    #dmna-popover-preview a { pointer-events: none; }
     #dmna-popover-input:focus { border-color: #0073ff; }
     #dmna-popover-side-stack {
       display: flex;
@@ -464,12 +524,12 @@ export const STYLES = `
     /* Generic press feedback for side-stack buttons (covers Aa; the
        eye and undo IDs below override with their own variants).
        Uses the popover's blue accent rather than a white tint so the
-       white "Aa" / "↶" glyphs stay legible at peak press. */
+       white "Aa" / undo icons stay legible at peak press. */
     .dmna-popover-side-btn:active {
       background: rgba(74, 158, 255, 0.26);
     }
     /* Hover / press text-color shift for the white-glyph side buttons
-       (Aa / ↶). 👁 is an emoji and ignores color; undo's highlighted
+       (Aa / undo / touch zones). Undo's highlighted
        state has its own hue rule (specificity wins below). */
     .dmna-popover-side-btn:hover,
     .dmna-popover-side-btn:active {
@@ -478,6 +538,12 @@ export const STYLES = `
     /* Eye uses pointer events for press-and-hold, so it overrides
        touch-action to disable scroll/zoom while held. */
     #dmna-popover-eye { touch-action: none; }
+    #dmna-popover-eye .dmna-zone-icon,
+    #dmna-popover-undo .dmna-undo-icon {
+      display: block;
+      margin: 0 auto;
+      pointer-events: none;
+    }
     #dmna-popover-eye:active,
     #dmna-popover-eye.is-pressed {
       background: rgba(74, 158, 255, 0.30);
@@ -486,21 +552,29 @@ export const STYLES = `
       background: rgba(74, 158, 255, 0.30);
     }
     /* Disabled state for the popover's interactive controls — used when
-       the active note is soft-deleted, leaving only ↶ (highlighted) live. */
+       the active note is soft-deleted, leaving only undo (highlighted) live. */
     #dmna-popover-input:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .dmna-popover-side-btn:disabled,
-    .dmna-popover-btn:disabled {
+    .dmna-popover-side-btn:disabled {
       opacity: 0.4;
       cursor: not-allowed;
     }
-    .dmna-popover-side-btn:disabled:active,
-    .dmna-popover-btn:disabled:active {
+    .dmna-popover-side-btn:disabled:active {
       background: rgba(255, 255, 255, 0.06);
     }
-    /* Highlighted ↶ on a soft-deleted note — accents the only live
+    /* Overrides Danbooru's global button:disabled (cursor: wait + hover
+       background), which would read as "busy" rather than "unavailable". */
+    .dmna-popover-btn:disabled,
+    .dmna-popover-btn:disabled:active {
+      background: var(--form-button-background, #e8e8ec);
+      color: var(--form-button-disabled-text-color, #777892);
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    /* Highlighted undo on a soft-deleted note — accents the only live
        action so the user knows their next move is "undo to restore." */
     #dmna-popover-undo.is-highlighted {
       border-color: #ff9800;
@@ -516,25 +590,27 @@ export const STYLES = `
       gap: 8px;
       margin-top: 10px;
     }
+    /* Text buttons in Danbooru's form-button colors (follow the site
+       theme; fallbacks are the light-theme values) so the popover reads
+       like the native note dialog. Height stays a touch target — the
+       native 24 px buttons are too small for thumbs (v5.1). */
     .dmna-popover-btn {
-      padding: 10px 0;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.32);
-      background: rgba(255, 255, 255, 0.13);
-      color: white;
-      font-size: 20px;
+      min-height: 36px;
+      padding: 0;
+      border-radius: 3px;
+      border: 1px solid var(--form-button-border-color, #d1d1da);
+      background: var(--form-button-background, #e8e8ec);
+      color: var(--form-button-text-color, #1e1e2c);
+      font-size: 13px;
+      font-family: inherit;
+      white-space: nowrap;
       cursor: pointer;
       user-select: none;
       touch-action: manipulation;
     }
     .dmna-popover-btn:active {
-      background: rgba(74, 158, 255, 0.36);
+      background: var(--form-button-active-background, #d1d1da);
     }
-    /* Light/white character color for ✔ / ✖ (text-glyph presentation
-       forced via VS-15 in createPopover). 🗑 ignores this — it renders
-       as a system emoji with its own colors. */
-    .dmna-popover-btn[data-action="confirm"],
-    .dmna-popover-btn[data-action="cancel"] { color: #f0f0f0; }
 
     /* Footer credit line — script identity at popover bottom. 10px is
        intentionally below typical body-text minimums; this is glance-
@@ -550,16 +626,10 @@ export const STYLES = `
       user-select: none;
       pointer-events: none;
     }
-    .dmna-popover-btn[data-action="delete"] { color: #ff8b8b; }
-    /* Hover / press text-color shift for the all-white glyphs (✔ / ✖)
-       so they stay legible when the background lifts. 🗑 / 📜 are
-       emoji and ignore the color property; delete's red and undo's
-       highlighted orange keep their per-state hues. */
-    .dmna-popover-btn[data-action="confirm"]:hover,
-    .dmna-popover-btn[data-action="confirm"]:active,
-    .dmna-popover-btn[data-action="cancel"]:hover,
-    .dmna-popover-btn[data-action="cancel"]:active {
-      color: #1a1a1a;
+    /* Delete sits next to Cancel; a dark red label (≥ 4.5:1 on both
+       theme button greys) marks the destructive one. */
+    .dmna-popover-btn[data-action="delete"]:not(:disabled) {
+      color: #b71c1c;
     }
 
     /* Phase 4 (D11): Confirm in-flight UI lock. Pointer events off on
@@ -623,6 +693,17 @@ export const STYLES = `
       border-width: 8px 0 8px 8px;
       border-color: transparent transparent transparent rgba(30, 30, 30, 0.96);
       pointer-events: none;
+    }
+
+    /* Send summary (v5.1): what Confirm is about to do, above the tags. */
+    .dmna-tag-popover-summary {
+      font-size: 13px;
+      color: #dddddd;
+      margin-bottom: 10px;
+    }
+    .dmna-tag-popover-summary-deleted {
+      color: #ff8b8b;
+      font-weight: bold;
     }
 
     .dmna-tag-popover-header {
@@ -1131,7 +1212,10 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.32);
       background: rgba(255, 255, 255, 0.13);
       color: white;
-      font-size: 14px;
+      font-size: 16px;
+      /* Height pinned so the 16px text (iOS zoom fix) doesn't grow
+         the style popover. */
+      height: 38px;
       font-family: inherit;
       cursor: pointer;
       box-sizing: border-box;
@@ -1216,7 +1300,7 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      font-size: 13px;
+      font-size: 16px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;
@@ -1334,7 +1418,7 @@ export const STYLES = `
       background: rgba(0, 0, 0, 0.4);
       color: white;
       font-family: ui-monospace, Menlo, Consolas, monospace;
-      font-size: 13px;
+      font-size: 16px;
       line-height: 1.4;
       box-sizing: border-box;
       outline: none;
@@ -1429,7 +1513,7 @@ export const STYLES = `
       background: rgba(0, 0, 0, 0.4);
       color: white;
       font-family: ui-monospace, Menlo, Consolas, monospace;
-      font-size: 13px;
+      font-size: 16px;
       line-height: 1.4;
       box-sizing: border-box;
       outline: none;
@@ -1595,7 +1679,7 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      font-size: 13px;
+      font-size: 16px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;

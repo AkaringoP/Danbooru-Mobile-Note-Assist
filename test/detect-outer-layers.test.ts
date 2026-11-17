@@ -127,3 +127,28 @@ describe('detectOuterLayers', () => {
     expect(layers[0].styleProps?.get('color')).toBe('red');
   });
 });
+
+describe('detectOuterLayers — adversarial input (Task 2.7)', () => {
+  // `<a` + 2499 spaces + 2499 letters: a 5000-char note body (the
+  // server's limit) that made the old `\s+[^<>]*` pattern backtrack
+  // quadratically (~8 ms per call, two calls per selection change).
+  const HOSTILE = '<a' + ' '.repeat(2499) + 'x'.repeat(2499);
+
+  it('stays linear on a long unterminated open tag', () => {
+    const started = performance.now();
+    for (let i = 0; i < 50; i++) {
+      detectOuterLayers(HOSTILE, '</a>');
+    }
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
+  it('still matches tags with attributes after the change', () => {
+    const layers = detectOuterLayers('<a href="/posts/1">', '</a>');
+    expect(layers.map(l => [l.tag, l.attrs])).toEqual([
+      ['a', ' href="/posts/1"'],
+    ]);
+    expect(
+      detectOuterLayers('<span\n  style="color: red">', '</span>'),
+    ).toHaveLength(1);
+  });
+});

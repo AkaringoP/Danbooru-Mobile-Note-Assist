@@ -1,15 +1,86 @@
 /**
- * CSRF token reader + generic mutating-fetch wrapper.
+ * CSRF token reader + request wrappers for every Danbooru call.
  *
- * Layer 2 (api). All mutating Danbooru calls (POST/PUT/DELETE) go
- * through `apiCall`, which reads the token at request time so a stale
- * token surfaces as a fresh-fetch 422 rather than baking the value at
- * module load.
+ * Layer 2 (api). Mutating calls (POST/PUT/DELETE) go through `apiCall`,
+ * which reads the token at request time so a stale token surfaces as a
+ * fresh-fetch 422 rather than baking the value at module load. GETs go
+ * through `getJson` (Danbooru doesn't require CSRF on idempotent reads).
  *
- * GET-only endpoints (`fetchPostMeta`, `fetchPostTagString`,
- * `fetchServerNotes`) skip this wrapper because Danbooru doesn't
- * require CSRF on idempotent reads — they go through bare `fetch`.
+ * Both run under one `REQUEST_TIMEOUT_MS` deadline that covers the
+ * response and the body read, and reject with `ApiError` so callers can
+ * tell an HTTP status from a network failure or a timeout.
  */
+
+import {REQUEST_TIMEOUT_MS} from '../config';
+
+export type ApiErrorKind = 'http' | 'network' | 'timeout';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly kind: ApiErrorKind,
+    readonly status: number | null,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/**
+ * `fetch` + `read(response)` under one deadline. The timer is cleared
+ * only after `read` settles, so a body that stalls mid-stream times out
+ * too. AbortController + setTimeout rather than `AbortSignal.timeout`,
+ * which iOS Safari < 16 lacks.
+ */
+async function timedFetch<T>(
+  url: string,
+  init: RequestInit,
+  read: (r: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timedOut = () =>
+    new ApiError(
+      `Request timed out after ${REQUEST_TIMEOUT_MS / 1000} s`,
+      'timeout',
+      null,
+    );
+  try {
+    let r: Response;
+    try {
+      r = await fetch(url, {...init, signal: controller.signal});
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw timedOut();
+      }
+      // fetch() itself rejects with TypeError on a network failure.
+      if (err instanceof TypeError) {
+        throw new ApiError(err.message || 'Network error', 'network', null);
+      }
+      throw err;
+    }
+    try {
+      return await read(r);
+    } catch (err) {
+      if (!(err instanceof ApiError) && controller.signal.aborted) {
+        throw timedOut();
+      }
+      throw err;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** GET a same-origin JSON endpoint. Non-2xx → `ApiError` kind `http`. */
+export function getJson<T>(url: string): Promise<T> {
+  return timedFetch(url, {credentials: 'same-origin'}, r => {
+    if (!r.ok) {
+      throw new ApiError(`HTTP ${r.status}`, 'http', r.status);
+    }
+    return r.json() as Promise<T>;
+  });
+}
 
 /**
  * Reads Danbooru's CSRF token from the page <meta>. Returns `''`
@@ -54,32 +125,37 @@ export async function apiCall<T = unknown>(
     headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const r = await fetch(url, opts);
-  if (!r.ok) {
-    let detail = '';
-    try {
-      const errText = await r.text();
-      if (errText) {
-        try {
-          const errJson = JSON.parse(errText);
-          detail =
-            errJson.message ||
-            errJson.error ||
-            (errJson.errors ? JSON.stringify(errJson.errors) : '') ||
-            errText;
-        } catch (_parseErr) {
-          detail = errText;
+  return timedFetch(url, opts, async r => {
+    if (!r.ok) {
+      let detail = '';
+      try {
+        const errText = await r.text();
+        if (errText) {
+          try {
+            const errJson = JSON.parse(errText);
+            detail =
+              errJson.message ||
+              errJson.error ||
+              (errJson.errors ? JSON.stringify(errJson.errors) : '') ||
+              errText;
+          } catch (_parseErr) {
+            detail = errText;
+          }
         }
+      } catch (_readErr) {
+        // r.text() can throw on aborted/network errors — leave detail empty.
       }
-    } catch (_readErr) {
-      // r.text() can throw on aborted/network errors — leave detail empty.
+      const head = `HTTP ${r.status} ${r.statusText}`.trim();
+      const truncated =
+        detail.length > 200 ? detail.slice(0, 197) + '...' : detail;
+      throw new ApiError(
+        truncated ? `${head} — ${truncated}` : head,
+        'http',
+        r.status,
+      );
     }
-    const head = `HTTP ${r.status} ${r.statusText}`.trim();
-    const truncated =
-      detail.length > 200 ? detail.slice(0, 197) + '...' : detail;
-    throw new Error(truncated ? `${head} — ${truncated}` : head);
-  }
-  // Empty / 204 responses are fine; only parse when there's a body.
-  const text = await r.text();
-  return text ? (JSON.parse(text) as T) : null;
+    // Empty / 204 responses are fine; only parse when there's a body.
+    const text = await r.text();
+    return text ? (JSON.parse(text) as T) : null;
+  });
 }

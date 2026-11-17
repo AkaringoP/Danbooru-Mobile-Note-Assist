@@ -15,7 +15,7 @@
 
 import {NoteState} from '../types';
 import {getPostId} from '../utils/coords';
-import {apiCall} from './csrf';
+import {apiCall, getJson} from './csrf';
 
 /**
  * Server-note descriptor as returned by GET `/notes.json?post_id=…`.
@@ -46,13 +46,20 @@ export interface ServerNoteResponse {
   body?: string;
 }
 
+/** Danbooru's page-size cap for /notes.json. */
+const NOTES_PAGE_SIZE = 1000;
+/** Posts allow up to 1200 active notes (`Note::MAX_NOTES_PER_POST`). */
+const NOTES_MAX_PAGES = 5;
+
 /**
  * Fetches the active (non-deleted) notes for the current post.
  *
  * Danbooru exposes notes via the global `/notes.json` endpoint with a
  * search filter — there is no `/posts/{id}/notes.json` route (404).
- * `is_active=true` skips server-side soft-deleted notes; `limit=1000`
- * is well above any sane post's note count.
+ * `is_active=true` skips server-side soft-deleted notes. A post can
+ * hold up to 1200 notes but a page holds 1000, so a full page is
+ * followed by the next one (`page=b<lowest id>`, stable while notes
+ * change) — v5.1 Task 3.5.
  *
  * In-flight dedupe (Phase 5-h Task 5.32): a fast active-mode toggle
  * could otherwise fire two overlapping `enterActiveMode` runs and
@@ -71,21 +78,28 @@ export function fetchServerNotes(): Promise<ServerNoteDescriptor[]> {
   if (!id) {
     return Promise.reject(new Error('No post id in URL'));
   }
-  const url =
-    `/notes.json?search%5Bpost_id%5D=${id}` +
-    '&search%5Bis_active%5D=true&limit=1000';
-  const p = fetch(url, {credentials: 'same-origin'})
-    .then(r => {
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}`);
-      }
-      return r.json() as Promise<ServerNoteDescriptor[]>;
-    })
-    .finally(() => {
-      serverNotesInFlight = null;
-    });
+  const p = fetchAllPages(id).finally(() => {
+    serverNotesInFlight = null;
+  });
   serverNotesInFlight = p;
   return p;
+}
+
+async function fetchAllPages(postId: string): Promise<ServerNoteDescriptor[]> {
+  const base =
+    `/notes.json?search%5Bpost_id%5D=${postId}` +
+    `&search%5Bis_active%5D=true&limit=${NOTES_PAGE_SIZE}`;
+  let all: ServerNoteDescriptor[] = [];
+  let cursor = '';
+  for (let i = 0; i < NOTES_MAX_PAGES; i++) {
+    const page = await getJson<ServerNoteDescriptor[]>(base + cursor);
+    all = all.concat(page);
+    if (page.length < NOTES_PAGE_SIZE) {
+      break;
+    }
+    cursor = `&page=b${Math.min(...page.map(n => n.id))}`;
+  }
+  return all;
 }
 
 /**
@@ -109,11 +123,24 @@ export async function apiPostNote(
   return apiCall<ServerNoteResponse>('POST', '/notes.json', payload);
 }
 
+/**
+ * The id lands in the request path; anything but digits (e.g. from a
+ * tampered draft) would address some other endpoint.
+ */
+function assertServerNoteId(serverId: string): void {
+  if (!/^\d+$/.test(serverId)) {
+    throw new Error(
+      `Refusing request: invalid server note id ${JSON.stringify(serverId)}`,
+    );
+  }
+}
+
 /** PUT `/notes/{id}.json` — updates an existing server note. */
 export async function apiPutNote(
   serverId: string,
   state: NoteState,
 ): Promise<unknown> {
+  assertServerNoteId(serverId);
   const payload = {
     note: {
       x: Math.round(state.x),
@@ -128,6 +155,7 @@ export async function apiPutNote(
 
 /** DELETE `/notes/{id}.json` — soft-deletes server-side. */
 export async function apiDeleteNote(serverId: string): Promise<unknown> {
+  assertServerNoteId(serverId);
   return apiCall('DELETE', `/notes/${serverId}.json`, null);
 }
 

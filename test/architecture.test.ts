@@ -244,6 +244,7 @@ const NOTES_STORE_HOOK_KEYS = [
   'onReopenMenuRequested',
   'hasPendingChanges',
   'onTextUndo',
+  'onNotesAdded',
 ] as const;
 
 const CONFIRM_FLOW_HOOK_KEYS = [
@@ -259,6 +260,7 @@ const NOTE_BOX_HOOK_KEYS = [
   'attachBodyDrag',
   'attachHandle',
   'consumeBoxClickSuppression',
+  'onVisualsUpdated',
 ] as const;
 
 const ARC_MENU_HOOK_KEYS = ['onConfirm'] as const;
@@ -270,7 +272,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(MAIN).toBeDefined();
   });
 
-  it('main.ts wires all 9 NotesStoreHooks callbacks', () => {
+  it('main.ts wires all 10 NotesStoreHooks callbacks', () => {
     const missing = NOTES_STORE_HOOK_KEYS.filter(
       k => !new RegExp(`\\b${k}\\b`).test(MAIN!),
     );
@@ -284,7 +286,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(missing).toEqual([]);
   });
 
-  it('main.ts wires all 3 NoteBoxHooks callbacks', () => {
+  it('main.ts wires all 4 NoteBoxHooks callbacks', () => {
     const missing = NOTE_BOX_HOOK_KEYS.filter(
       k => !new RegExp(`\\b${k}\\b`).test(MAIN!),
     );
@@ -305,7 +307,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(MAIN).toMatch(/\binitArcMenu\s*\(/);
   });
 
-  it('NotesStoreHooks interface in state/notes-store.ts exposes exactly the 9 keys main.ts wires', () => {
+  it('NotesStoreHooks interface in state/notes-store.ts exposes exactly the 10 keys main.ts wires', () => {
     const src = FILE_CONTENTS.get('state/notes-store.ts')!;
     const ifaceMatch = src.match(
       /export interface NotesStoreHooks\s*{([\s\S]*?)\n}/,
@@ -329,7 +331,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     }
   });
 
-  it('NoteBoxHooks interface in ui/note-box.ts exposes exactly the 3 keys', () => {
+  it('NoteBoxHooks interface in ui/note-box.ts exposes exactly the 4 keys', () => {
     const src = FILE_CONTENTS.get('ui/note-box.ts')!;
     const ifaceMatch = src.match(
       /export interface NoteBoxHooks\s*{([\s\S]*?)\n}/,

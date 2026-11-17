@@ -18,6 +18,17 @@
 # orphan-style branch carrying just the latest bundled artifact, with
 # no source history. Past artifacts are recoverable from the source
 # branch at the SHA recorded in the commit message.
+#
+# Supply-chain hardening (v5.1): the `build` job installs and runs the
+# dependency tree with a read-only token, no npm install scripts and no
+# persisted git credentials; only the `publish` job — which installs
+# nothing and runs no repo code — gets `contents: write`. Third-party
+# actions are pinned to commit SHAs (version in the trailing comment).
+# This protects the write token, not the bundle: dependency code still
+# runs in `build` and produces the published file. And any pushed
+# branch matching the triggers runs its own copy of this workflow, so
+# protecting `main` alone doesn't stop a branch from writing `build` —
+# restrict `build` with a ruleset or a protected environment.
 name: Publish build branch
 
 on:
@@ -32,33 +43,41 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      branch: ${{ steps.target.outputs.branch }}
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (no install scripts)
+        run: npm ci --ignore-scripts
 
       - name: Determine publish target
         id: target
+        env:
+          REF: ${{ github.ref }}
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [ "$REF" = "refs/heads/main" ]; then
             echo "branch=build" >> "$GITHUB_OUTPUT"
             echo "mode=production" >> "$GITHUB_OUTPUT"
           else
@@ -69,10 +88,31 @@ jobs:
       - name: Build (test + tsc + vite)
         run: npm run build -- --mode ${{ steps.target.outputs.mode }}
 
-      - name: Push artifact to ${{ steps.target.outputs.branch }} branch
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: userscript
+          path: dist/MobileNoteAssist.user.js
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: userscript
+          path: dist
+
+      - name: Push artifact to ${{ needs.build.outputs.branch }} branch
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PUBLISH_BRANCH: ${{ steps.target.outputs.branch }}
+          PUBLISH_BRANCH: ${{ needs.build.outputs.branch }}
         run: |
           set -e
           cd dist

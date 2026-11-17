@@ -14,9 +14,9 @@
  *     function — null when no popover is open
  *
  * Public surface:
- *   - `showTagPopover()` — Promise wrapper. Fetches the post's
- *     current tag_string, opens the popover with toggles pre-set
- *     per existing tags, waits for the user. Wired into
+ *   - `showTagPopover(summary, withTags)` — Promise wrapper. Shows the
+ *     send summary and, with `withTags`, the toggles pre-set per the
+ *     post's current tag_string; waits for the user. Wired into
  *     `confirm/batch.ConfirmFlowHooks.showTagPopover` by main.ts.
  *   - `updateTagPopoverPosition()` — re-pin to the LEFT of the
  *     floating button (anchored to its position via
@@ -40,7 +40,7 @@ import {
   TAG_POPOVER_WIDTH,
   BTN_SIZE,
 } from '../config';
-import {TagDelta} from '../types';
+import {ChangeSummary, TagDelta} from '../types';
 import {fetchPostTagString} from '../api/posts';
 import {getButtonMargins} from './floating-button';
 import {showToast} from './toast';
@@ -50,7 +50,10 @@ import {showToast} from './toast';
 // ---------------------------------------------------------------------------
 
 let tagPopoverElement: HTMLElement | null = null;
+let tagPopoverSummaryElement: HTMLElement | null = null;
+let tagPopoverTagsSection: HTMLElement[] = [];
 let tagPopoverInitialTags: Set<string> | null = null;
+let tagPopoverBaseTagString = '';
 let tagPopoverState: Record<string, boolean> | null = null;
 let pendingTagPopoverResolver: ((result: TagDelta | null) => void) | null =
   null;
@@ -60,10 +63,12 @@ let pendingTagPopoverResolver: ((result: TagDelta | null) => void) | null =
 // ---------------------------------------------------------------------------
 
 /**
- * Phase 4 D9 entry point: fetches the post's current `tag_string`,
- * opens the popover with toggles pre-set per existing tags, waits
- * for the user. Resolves with the add/remove delta on Submit or
- * `null` on Cancel.
+ * Confirm popover entry point. Always shows the send summary (v5.1
+ * Task 2.4). With `withTags` (Phase 4 D9) it first fetches the post's
+ * current `tag_string` and shows the toggles pre-set per existing
+ * tags; without it (a move-only batch) there is no fetch and no
+ * toggles. Resolves with the add/remove delta on Submit (empty without
+ * tags) or `null` on Cancel.
  *
  * Tag-string fetch failure → resolves to `null` after a toast.
  * `runConfirmFlow` treats `null` as user-cancel and aborts the entire
@@ -73,13 +78,18 @@ let pendingTagPopoverResolver: ((result: TagDelta | null) => void) | null =
  * downstream PATCH would also fail. Abort + toast + stay in active
  * mode is cleaner.
  */
-export async function showTagPopover(): Promise<TagDelta | null> {
-  let tagString: string;
-  try {
-    tagString = await fetchPostTagString();
-  } catch (err) {
-    showToast('⚠️ Failed to load post tags', 'error', err);
-    return null;
+export async function showTagPopover(
+  summary: ChangeSummary,
+  withTags: boolean,
+): Promise<TagDelta | null> {
+  let tagString = '';
+  if (withTags) {
+    try {
+      tagString = await fetchPostTagString();
+    } catch (err) {
+      showToast('⚠️ Failed to load post tags', 'error', err);
+      return null;
+    }
   }
   const initialTags = new Set(
     tagString.split(/\s+/).filter(t => TAG_OPTIONS.includes(t)),
@@ -93,7 +103,8 @@ export async function showTagPopover(): Promise<TagDelta | null> {
       stale(null);
     }
     pendingTagPopoverResolver = resolve;
-    openTagPopover(initialTags);
+    tagPopoverBaseTagString = tagString;
+    openTagPopover(initialTags, summary, withTags);
   });
 }
 
@@ -269,6 +280,11 @@ function createTagPopover(): void {
   arrow.id = 'dmna-tag-popover-arrow';
   root.appendChild(arrow);
 
+  const summary = document.createElement('div');
+  summary.className = 'dmna-tag-popover-summary';
+  root.appendChild(summary);
+  tagPopoverSummaryElement = summary;
+
   const header = document.createElement('div');
   header.className = 'dmna-tag-popover-header';
   header.textContent = 'Translation tags';
@@ -312,6 +328,7 @@ function createTagPopover(): void {
     list.appendChild(row);
   });
   root.appendChild(list);
+  tagPopoverTagsSection = [header, list];
 
   const buttons = document.createElement('div');
   buttons.id = 'dmna-tag-popover-buttons';
@@ -345,10 +362,18 @@ function createTagPopover(): void {
  * one-frame flash at the popover's stale transform (same trick the
  * active-note popover uses on first show).
  */
-function openTagPopover(initialTags: Set<string>): void {
+function openTagPopover(
+  initialTags: Set<string>,
+  summary: ChangeSummary,
+  withTags: boolean,
+): void {
   createTagPopover();
   if (!tagPopoverElement) {
     return;
+  }
+  renderSummary(summary);
+  for (const el of tagPopoverTagsSection) {
+    el.style.display = withTags ? '' : 'none';
   }
   tagPopoverInitialTags = initialTags;
   const initState: Record<string, boolean> = {};
@@ -375,6 +400,37 @@ function openTagPopover(initialTags: Set<string>): void {
 }
 
 /**
+ * Fills the summary line: `New 3 · Edited 2 · Moved 1 · Deleted 4`,
+ * zero buckets left out, deletions highlighted.
+ */
+function renderSummary(summary: ChangeSummary): void {
+  const el = tagPopoverSummaryElement;
+  if (!el) {
+    return;
+  }
+  const parts: Array<[string, number, boolean]> = [
+    ['New', summary.created, false],
+    ['Edited', summary.textEdited, false],
+    ['Moved', summary.movedOnly, false],
+    ['Deleted', summary.deleted, true],
+  ];
+  el.textContent = '';
+  parts
+    .filter(([, n]) => n > 0)
+    .forEach(([label, n, isDelete], i) => {
+      if (i > 0) {
+        el.append(' · ');
+      }
+      const span = document.createElement('span');
+      span.textContent = `${label} ${n}`;
+      if (isDelete) {
+        span.className = 'dmna-tag-popover-summary-deleted';
+      }
+      el.append(span);
+    });
+}
+
+/**
  * Hides the tag popover without destroying it. Keeps the singleton
  * for the next Confirm.
  */
@@ -391,7 +447,7 @@ function closeTagPopover(): void {
 /**
  * Resolves the in-flight `showTagPopover()` promise:
  *   - canceled=true  → null (caller aborts the Confirm flow)
- *   - canceled=false → {tagsToAdd, tagsToRemove} delta.
+ *   - canceled=false → {tagsToAdd, tagsToRemove, baseTagString} delta.
  */
 function submitTagPopover(canceled: boolean): void {
   const resolver = pendingTagPopoverResolver;
@@ -419,7 +475,7 @@ function submitTagPopover(canceled: boolean): void {
   });
   pendingTagPopoverResolver = null;
   closeTagPopover();
-  resolver({tagsToAdd, tagsToRemove});
+  resolver({tagsToAdd, tagsToRemove, baseTagString: tagPopoverBaseTagString});
 }
 
 /**

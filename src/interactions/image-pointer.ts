@@ -125,7 +125,12 @@ export function bindImageHandlers(): void {
     e.stopPropagation();
   };
   img.addEventListener('mousedown', blockNativeIfActive, true);
-  img.addEventListener('touchstart', blockNativeIfActive, true);
+  // Passive: the blocker only stops propagation, so the browser need not
+  // wait for it before scrolling a swipe that starts on the image (v5.1).
+  img.addEventListener('touchstart', blockNativeIfActive, {
+    capture: true,
+    passive: true,
+  });
 
   imageHandlersBound = true;
 }

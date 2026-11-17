@@ -26,13 +26,10 @@
 import {APP_VERSION} from './version';
 import {STYLES} from './styles';
 
-import {clearDraft, loadDraft, saveDraft} from './state/draft';
+import {clearDraft, loadDraft, sweepExpiredDrafts} from './state/draft';
 import {
   applyDraftSnapshot,
-  getMode,
-  hasContentToSave,
   initNotesStore,
-  serializeForDraft,
   type NotesStoreHooks,
 } from './state/notes-store';
 
@@ -44,8 +41,6 @@ import {
 
 import {hasPendingChanges} from './confirm/classify';
 import {
-  getIsInConfirmPipeline,
-  getIsSending,
   initConfirmFlow,
   runConfirmFlow,
   type ConfirmFlowHooks,
@@ -100,6 +95,8 @@ import {
   consumeBoxClickSuppression,
 } from './interactions/drag-resize';
 import {bindImageHandlers} from './interactions/image-pointer';
+import {bindLifecycleSave} from './interactions/lifecycle';
+import {schedulePendingRefresh} from './interactions/pending-indicator';
 import {bindGlobalHotkeys} from './interactions/keyboard';
 import {bindNativeBlockers} from './interactions/native-block';
 
@@ -130,9 +127,13 @@ const notesStoreHooks: NotesStoreHooks = {
     refreshActivePopover();
   },
   onNoteVisualsChanged: id => updateNoteVisuals(id),
-  onNoteRemoved: id => removeNoteBoxDOM(id),
+  onNoteRemoved: id => {
+    removeNoteBoxDOM(id);
+    schedulePendingRefresh();
+  },
   onModeChanged: mode => {
     setFloatingButtonIconForMode();
+    schedulePendingRefresh();
     // Entering idle is the user's explicit "I'm done with this
     // session" signal — discard the persisted draft so a future
     // page entry doesn't surface a misleading restore prompt
@@ -145,6 +146,10 @@ const notesStoreHooks: NotesStoreHooks = {
   onReopenMenuRequested: () => openMenu(),
   hasPendingChanges: () => hasPendingChanges(),
   onTextUndo: (id, snapshot) => applyTextUndoSnapshot(id, snapshot),
+  onNotesAdded: () => {
+    updateAllNoteBoxPositions();
+    refreshActivePopover();
+  },
 };
 
 const confirmFlowHooks: ConfirmFlowHooks = {
@@ -156,11 +161,14 @@ const confirmFlowHooks: ConfirmFlowHooks = {
     // boot site without touching the ui module.
     setFloatingButtonIcon('⏳');
   },
-  onSendEnd: () => setFloatingButtonIconForMode(),
+  onSendEnd: () => {
+    setFloatingButtonIconForMode();
+    schedulePendingRefresh();
+  },
   onNoteRenderRequested: id => renderNoteBox(id),
   onNoteVisualsChanged: id => updateNoteVisuals(id),
   onToast: (msg, level, err) => showToast(msg, level, err),
-  showTagPopover: () => showTagPopover(),
+  showTagPopover: (summary, withTags) => showTagPopover(summary, withTags),
 };
 
 const noteBoxHooks: NoteBoxHooks = {
@@ -168,6 +176,7 @@ const noteBoxHooks: NoteBoxHooks = {
   attachHandle: (el, corner, noteId) =>
     attachHandleListeners(el, corner, noteId),
   consumeBoxClickSuppression: () => consumeBoxClickSuppression(),
+  onVisualsUpdated: () => schedulePendingRefresh(),
 };
 
 const arcMenuHooks: ArcMenuHooks = {
@@ -209,54 +218,8 @@ function scheduleViewportUpdate(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Lifecycle save (Phase 2, v4.1 force-quit guard)
+// Draft restore prompt (Phase 3, v4.1)
 // ---------------------------------------------------------------------------
-
-/**
- * Persists the current collection as a draft if there's something
- * worth saving and a Confirm pipeline isn't running. Two gates:
- *   - `getIsSending()` — narrow lock around the actual HTTP requests
- *     (sendBatch's try/finally). A snapshot here would catch the
- *     partial-server-commit state mid-write.
- *   - `getIsInConfirmPipeline()` — broader guard added in v4.2 Phase
- *     5-h Task 5.21. Stays latched across `applyServerStateToLocal`
- *     and the error-modal Retry/Cancel wait, where local state
- *     already mirrors partial server commits but the user might
- *     still tap Retry. Without this guard, a force-quit while the
- *     error modal was up could persist a half-applied snapshot that
- *     double-sends the already-PUT items on the next page entry.
- *
- * The Confirm flow itself clears the draft on entry and on success
- * (confirm/batch.ts), so a force-quit mid-pipeline falls back to
- * fetchServerNotes on next page entry rather than to the draft
- * (PLAN D6).
- *
- * Called from three lifecycle handlers — beforeunload (PC),
- * pagehide (mobile-friendly), and visibilitychange→hidden (most
- * reliable on iOS/Android background-into). Idempotent under
- * double-fire: the same snapshot is just re-written under the same
- * key.
- */
-function saveDraftIfNeeded(): void {
-  if (getIsSending() || getIsInConfirmPipeline()) {
-    return;
-  }
-  if (!hasContentToSave()) {
-    return;
-  }
-  saveDraft(serializeForDraft());
-}
-
-/**
- * Latched in `beforeunload` when our discard prompt fires, consumed
- * in `pagehide`. v4.1.1: the user answering "Leave" on that prompt
- * is an explicit discard signal, so the leaving snapshot is dropped
- * rather than saved. v4.1.0 saved unconditionally in beforeunload,
- * which left a misleading Restore toast on the next entry. Force-
- * quit / OS-kill skips beforeunload entirely (no JS prompt fires
- * on kill), so this flag stays false and the normal save runs.
- */
-let promptedDiscardOnLeave = false;
 
 /**
  * Boot-time check for a persisted draft (Phase 3, v4.1). When a
@@ -378,56 +341,22 @@ function init(): void {
   window.addEventListener('resize', updateAllNoteBoxPositions);
   window.addEventListener('orientationchange', updateAllNoteBoxPositions);
 
-  // 9. Reload / navigate-away guard + draft persist. Three handlers
-  //    cover the union of "page is going away":
-  //      - beforeunload: PC refresh / tab close. Triggers the
-  //        browser's generic "Leave site?" prompt when there are
-  //        pending changes (empty-string returnValue is the
-  //        documented opt-in). When the prompt fires we latch
-  //        `promptedDiscardOnLeave` and defer the save decision to
-  //        pagehide so the user's "Leave" answer can map to a
-  //        discard. When no prompt fires (nothing pending) we save
-  //        immediately — that path mirrors the legacy v4.1.0
-  //        behavior for the cases where the user wasn't asked.
-  //      - pagehide: mobile-friendly counterpart, and the consumer
-  //        of the latched-leave flag. If the user answered "Leave"
-  //        on the prompt, we treat it as explicit discard and clear
-  //        the draft; otherwise the normal save runs (force-quit /
-  //        tab kill skip beforeunload entirely, so the flag is
-  //        false there).
-  //      - visibilitychange → hidden: most reliable mobile signal
-  //        that the OS is about to suspend or kill us (Android home
-  //        button, iOS app switcher, tab backgrounding). This is NOT
-  //        an explicit-leave path — it's a background/foreground
-  //        transition, so the flag is ignored and we just save.
-  window.addEventListener('beforeunload', e => {
-    promptedDiscardOnLeave = false;
-    if (getMode() === 'active' && hasPendingChanges()) {
-      promptedDiscardOnLeave = true;
-      e.preventDefault();
-      e.returnValue = '';
-      return;
-    }
-    saveDraftIfNeeded();
-  });
-  window.addEventListener('pagehide', () => {
-    if (promptedDiscardOnLeave) {
-      clearDraft();
-      return;
-    }
-    saveDraftIfNeeded();
-  });
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      saveDraftIfNeeded();
-    }
-  });
+  // 9. Reload / navigate-away guard + draft persist on the page
+  //    lifecycle events (see interactions/lifecycle).
+  bindLifecycleSave();
 
   // 10. Force-quit recovery prompt. Surfaces the restore toast when
   //    a valid draft is found for the current post (Phase 3 entry
   //    point). Runs last in init so any earlier failure short-
   //    circuits before the user sees a misleading prompt.
   checkAndPromptRestore();
+
+  // 11. Drop expired drafts of other posts once the page is idle.
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => sweepExpiredDrafts());
+  } else {
+    setTimeout(() => sweepExpiredDrafts(), 2000);
+  }
 }
 
 console.log(`[MobileNoteAssist v${APP_VERSION}] loaded`);
