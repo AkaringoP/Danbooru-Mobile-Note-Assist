@@ -33,6 +33,8 @@ import {fetchPostMeta} from '../api/posts';
 import {fetchServerNotes, ServerNoteDescriptor} from '../api/notes';
 import {DraftSnapshot, SerializedNote} from './draft';
 import {getIsNativeActive} from './native-conflict';
+import {NOTE_BODY_MAX_LENGTH} from '../config';
+import {serverNoteBodyLength} from '../utils/note-body';
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -484,17 +486,38 @@ function tryDeactivate(): void {
  * without its popover — Confirm would silently drop it (v5.1 Task
  * 1.6). Clearing the selection (`null`) is left to the callers, which
  * already route fresh new boxes (✔ / ✖ / 🗑 / outside tap / Esc).
+ *
+ * A note over the server's length limit keeps the selection: switching
+ * would auto-commit a fresh box, or leave an edited note's text for
+ * Confirm to send, and Danbooru rejects it whole. Commit (after
+ * shortening), Cancel, Delete, outside tap and Esc still close it.
  */
 export function setActiveNote(noteId: NoteId | null): void {
   if (activeNoteId === noteId) {
     return;
   }
   if (activeNoteId !== null && noteId !== null) {
+    if (isOverLengthLimit(activeNoteId)) {
+      hooks!.onToast(
+        `⚠️ Over ${NOTE_BODY_MAX_LENGTH} characters — shorten and Commit, or Cancel / Delete`,
+        'warning',
+      );
+      return;
+    }
     settleFreshNoteOnSwitch(activeNoteId);
   }
   const prev = activeNoteId;
   activeNoteId = noteId;
   hooks!.onActiveChanged(prev, noteId);
+}
+
+function isOverLengthLimit(id: NoteId): boolean {
+  const note = notes.get(id);
+  return (
+    !!note &&
+    !note.isDeleted &&
+    serverNoteBodyLength(note.current.text) > NOTE_BODY_MAX_LENGTH
+  );
 }
 
 /**

@@ -185,6 +185,28 @@ describe('drag reads the image rect once per gesture (Task 3.2)', () => {
   });
 });
 
+describe('switch refused while the active note is over 5000', () => {
+  it('a mouse drag on another box neither selects nor moves it', () => {
+    const other = asServerNoteId('8');
+    notes.set(other, {
+      current: {...START, x: 600, text: 'x'.repeat(5001)},
+      initialState: {...START, x: 600},
+      confirmedState: {...START, x: 600},
+      isDeleted: false,
+      isServerNote: true,
+      everConfirmed: false,
+      domElement: null,
+    });
+    setActiveNote(other);
+
+    const down = drag(el, 'mouse');
+
+    expect(getActiveNoteId()).toBe(other);
+    expect(notes.get(ID)!.current).toEqual(START);
+    expect(down.defaultPrevented).toBe(false);
+  });
+});
+
 describe('pen and cancelled gestures (review #3)', () => {
   it('a pen swipe on an unselected box neither moves nor selects it', () => {
     const down = drag(el, 'pen');

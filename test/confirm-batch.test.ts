@@ -1121,10 +1121,12 @@ describe('handleSendResult', () => {
 
     expect(actionLog.size).toBe(0);
     expect(flowHooks.onToast).toHaveBeenCalledWith('✓ Saved', 'success');
+    expect(document.body.classList.contains('dmna-send-success')).toBe(true);
 
     expect(reloadSpy).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1000);
     expect(reloadSpy).toHaveBeenCalledTimes(1);
+    document.body.classList.remove('dmna-send-success');
   });
 
   it('partial failure: opens error modal, no reload, no actionLog clear', async () => {

@@ -812,6 +812,8 @@ export async function handleSendResult(
     // stale draft from the now-committed state; clearing here keeps
     // a redundant restore prompt from popping on the next entry.
     clearDraft();
+    // Turns the pending highlight green until the reload (styles.ts).
+    document.body.classList.add('dmna-send-success');
     hooks!.onToast('✓ Saved', 'success');
     // Brief pause so the user sees the success toast before the
     // page swaps. setMode('idle') is overkill (reload nukes
