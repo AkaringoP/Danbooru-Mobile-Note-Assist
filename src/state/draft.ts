@@ -22,8 +22,8 @@
  *   - saveDraft(snapshot)    — write under the current post's key
  *   - loadDraft()            — read + validate + TTL gate, or null
  *   - clearDraft()           — remove the current post's draft
- *   - safeSetItem/safeGetItem — shared localStorage guards (F5,
- *                               used by ui/floating-button in Task 1.4)
+ *   - safeSetItem/safeGetItem/safeRemoveItem — shared localStorage
+ *                               guards (F5, used by ui/floating-button)
  *
  * Per-post key scheme: `dmna_draft_{postId}`. Non-post pages are
  * no-ops for all operations (getPostId returns null).
@@ -149,7 +149,8 @@ export function safeGetItem(key: string): string | null {
   }
 }
 
-function safeRemoveItem(key: string): void {
+/** localStorage.removeItem with the same guard. */
+export function safeRemoveItem(key: string): void {
   try {
     localStorage.removeItem(key);
   } catch (err) {

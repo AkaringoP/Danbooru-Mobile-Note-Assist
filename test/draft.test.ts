@@ -11,6 +11,7 @@ import {
   clearDraft,
   safeSetItem,
   safeGetItem,
+  safeRemoveItem,
 } from '../src/state/draft';
 import type {DraftSnapshot} from '../src/state/draft';
 
@@ -108,6 +109,35 @@ describe('safeSetItem', () => {
     expect(result).toBe(false);
     expect(warnSpy).toHaveBeenCalledTimes(1);
     spy.mockRestore();
+  });
+});
+
+describe('safeRemoveItem (Task 4.2)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it('removes the key', () => {
+    localStorage.setItem('gone', '1');
+    safeRemoveItem('gone');
+    expect(localStorage.getItem('gone')).toBeNull();
+  });
+
+  it('swallows a SecurityError and warns instead of throwing', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spy = vi
+      .spyOn(window.localStorage, 'removeItem')
+      .mockImplementation(() => {
+        throw new DOMException('access denied', 'SecurityError');
+      });
+    try {
+      expect(() => safeRemoveItem('k')).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      // happy-dom's Storage isn't reset by restoreAllMocks.
+      spy.mockRestore();
+    }
   });
 });
 

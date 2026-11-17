@@ -42,7 +42,7 @@ import {
   POS_X_KEY,
 } from '../config';
 import {isTextInputElement} from '../utils/dom';
-import {safeGetItem, safeSetItem} from '../state/draft';
+import {safeGetItem, safeRemoveItem, safeSetItem} from '../state/draft';
 import {getMode, toggleEditMode} from '../state/notes-store';
 import {closeMenu, toggleMenu} from './arc-menu';
 import {showToast} from './toast';
@@ -75,8 +75,9 @@ let userBtnMarginY = Number.isFinite(initialStoredY)
 
 // One-shot cleanup of the v2.x ON/OFF flag — v3.0 has no global
 // enabled state; mode is per-session and lives only in the menu state
-// machine.
-localStorage.removeItem(LEGACY_STATE_KEY);
+// machine. Guarded: a bare localStorage call here threw at import time
+// where storage is blocked and took the whole script down (v5.1).
+safeRemoveItem(LEGACY_STATE_KEY);
 
 // Auto-hide signal: `true` while Danbooru's native translation mode
 // or edit dialog is active. Flipped via `setNativeActiveHide` from
