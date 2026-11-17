@@ -3,7 +3,12 @@
  * vitest globals: describe/it/expect/beforeEach/afterEach/vi.
  */
 
-import {apiDeleteNote, apiPutNote, fetchServerNotes} from '../src/api/notes';
+import {
+  apiDeleteNote,
+  apiPreviewNote,
+  apiPutNote,
+  fetchServerNotes,
+} from '../src/api/notes';
 import {asServerNoteId} from '../src/types';
 
 const STATE = {x: 1, y: 2, w: 3, h: 4, text: 't'};
@@ -40,6 +45,42 @@ describe('apiPutNote / apiDeleteNote — server id guard (Task 2.2)', () => {
       '/notes/4535572.json',
       '/notes/4535572.json',
     ]);
+  });
+});
+
+describe('apiPreviewNote — sends the whole note like Danbooru does', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('posts post_id, rounded geometry and body under `note`', async () => {
+    window.history.pushState(null, '', '/posts/123');
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({sanitized_body: '<p>t</p>'}), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await apiPreviewNote({
+      x: 1.4,
+      y: 2.6,
+      w: 3,
+      h: 4,
+      text: 'hello',
+    });
+
+    expect(res.sanitized_body).toBe('<p>t</p>');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe('/notes/preview.json');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      note: {post_id: 123, x: 1, y: 3, width: 3, height: 4, body: 'hello'},
+    });
   });
 });
 
