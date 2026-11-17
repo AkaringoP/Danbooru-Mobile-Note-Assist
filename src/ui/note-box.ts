@@ -78,6 +78,15 @@ export interface NoteBoxHooks {
    * underlying `suppressNextBoxClick` state).
    */
   consumeBoxClickSuppression: () => boolean;
+
+  /**
+   * A box's visual state was just recomputed — the one choke point
+   * every dirty / deleted / active change passes through, including
+   * drag ends that never touch the store hooks. Subscriber:
+   * interactions/pending-indicator.schedulePendingRefresh (v5.1 Task
+   * 4.8).
+   */
+  onVisualsUpdated: () => void;
 }
 
 let hooks: NoteBoxHooks | null = null;
@@ -224,6 +233,7 @@ export function updateNoteVisuals(noteId: NoteId): void {
   el.classList.toggle('is-active', getActiveNoteId() === noteId);
   el.classList.toggle('is-deleted', note.isDeleted);
   el.classList.toggle('is-dirty', isDirty(note));
+  hooks!.onVisualsUpdated();
 }
 
 /**

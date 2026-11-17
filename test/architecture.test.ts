@@ -259,6 +259,7 @@ const NOTE_BOX_HOOK_KEYS = [
   'attachBodyDrag',
   'attachHandle',
   'consumeBoxClickSuppression',
+  'onVisualsUpdated',
 ] as const;
 
 const ARC_MENU_HOOK_KEYS = ['onConfirm'] as const;
@@ -284,7 +285,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(missing).toEqual([]);
   });
 
-  it('main.ts wires all 3 NoteBoxHooks callbacks', () => {
+  it('main.ts wires all 4 NoteBoxHooks callbacks', () => {
     const missing = NOTE_BOX_HOOK_KEYS.filter(
       k => !new RegExp(`\\b${k}\\b`).test(MAIN!),
     );
@@ -329,7 +330,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     }
   });
 
-  it('NoteBoxHooks interface in ui/note-box.ts exposes exactly the 3 keys', () => {
+  it('NoteBoxHooks interface in ui/note-box.ts exposes exactly the 4 keys', () => {
     const src = FILE_CONTENTS.get('ui/note-box.ts')!;
     const ifaceMatch = src.match(
       /export interface NoteBoxHooks\s*{([\s\S]*?)\n}/,

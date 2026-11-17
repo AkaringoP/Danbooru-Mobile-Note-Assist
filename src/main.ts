@@ -96,6 +96,7 @@ import {
 } from './interactions/drag-resize';
 import {bindImageHandlers} from './interactions/image-pointer';
 import {bindLifecycleSave} from './interactions/lifecycle';
+import {schedulePendingRefresh} from './interactions/pending-indicator';
 import {bindGlobalHotkeys} from './interactions/keyboard';
 import {bindNativeBlockers} from './interactions/native-block';
 
@@ -126,9 +127,13 @@ const notesStoreHooks: NotesStoreHooks = {
     refreshActivePopover();
   },
   onNoteVisualsChanged: id => updateNoteVisuals(id),
-  onNoteRemoved: id => removeNoteBoxDOM(id),
+  onNoteRemoved: id => {
+    removeNoteBoxDOM(id);
+    schedulePendingRefresh();
+  },
   onModeChanged: mode => {
     setFloatingButtonIconForMode();
+    schedulePendingRefresh();
     // Entering idle is the user's explicit "I'm done with this
     // session" signal — discard the persisted draft so a future
     // page entry doesn't surface a misleading restore prompt
@@ -152,7 +157,10 @@ const confirmFlowHooks: ConfirmFlowHooks = {
     // boot site without touching the ui module.
     setFloatingButtonIcon('⏳');
   },
-  onSendEnd: () => setFloatingButtonIconForMode(),
+  onSendEnd: () => {
+    setFloatingButtonIconForMode();
+    schedulePendingRefresh();
+  },
   onNoteRenderRequested: id => renderNoteBox(id),
   onNoteVisualsChanged: id => updateNoteVisuals(id),
   onToast: (msg, level, err) => showToast(msg, level, err),
@@ -164,6 +172,7 @@ const noteBoxHooks: NoteBoxHooks = {
   attachHandle: (el, corner, noteId) =>
     attachHandleListeners(el, corner, noteId),
   consumeBoxClickSuppression: () => consumeBoxClickSuppression(),
+  onVisualsUpdated: () => schedulePendingRefresh(),
 };
 
 const arcMenuHooks: ArcMenuHooks = {

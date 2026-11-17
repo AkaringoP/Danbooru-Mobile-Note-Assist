@@ -68,3 +68,18 @@ describe('Popover action buttons (Task 4.7)', () => {
     expect(body).toMatch(/var\(--form-button-text-color,\s*#[0-9a-f]{6}\)/i);
   });
 });
+
+describe('Pending highlight (Task 4.8)', () => {
+  it('outlines the floating button and the Confirm item in green', () => {
+    expect(STYLES).toMatch(
+      /body\.dmna-has-pending:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*#43a047/,
+    );
+    expect(STYLES).toMatch(
+      /body\.dmna-has-pending \.dmna-menu-item\[data-action="confirm"\][^{]*\{[^}]*#43a047/,
+    );
+  });
+
+  it('draws the count badge from data-pending-count', () => {
+    expect(STYLES).toMatch(/content:\s*attr\(data-pending-count\)/);
+  });
+});

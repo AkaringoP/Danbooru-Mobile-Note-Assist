@@ -131,6 +131,21 @@ export function setFloatingButtonIconForMode(): void {
 }
 
 /**
+ * Shows how many requests Confirm would send as a badge on the button
+ * (CSS draws it from `data-pending-count`); 0 removes it (v5.1 Task 4.8).
+ */
+export function setFloatingButtonPendingCount(count: number): void {
+  if (!floatBtnElement) {
+    return;
+  }
+  if (count > 0) {
+    floatBtnElement.dataset.pendingCount = count > 99 ? '99+' : String(count);
+  } else {
+    delete floatBtnElement.dataset.pendingCount;
+  }
+}
+
+/**
  * Creates the floating button DOM (idempotent), wires its gesture
  * handlers, and binds the document-level focus/blur listeners that
  * auto-hide it while the on-screen keyboard is up. Caller is

@@ -49,6 +49,7 @@ The 📝 button in the bottom-right is the script's only entry point. It respond
 | **Double-tap** (within ~300ms) | Toggles Edit mode on/off. Icon flips between 📝 (idle) and ✏️ (active). If the arc menu was already opening from the first tap, it closes automatically. |
 | **Long-press (~1.0s hold)** | Enters drag-to-reposition mode. The button turns orange; drag to move it, release to save its new position. (See [Customization](#customization).) |
 | **Auto-hide** | While a per-note popover is open, the button is hidden so it doesn't sit on top of the popover's Commit / Cancel / Delete buttons (which fall in the same screen region on mobile). |
+| **Unsent changes (v5.2+)** | While anything is waiting for ✓ Confirm — committed new boxes, edited or moved notes, deletions — the button has a green outline and a badge with the number of changes. Nothing reaches the server until you Confirm. |
 
 The single-tap-opens-menu / double-tap-toggles design means the menu shows up instantly on every tap (no waiting for a long-press) but is canceled if your second tap arrives quickly enough — so you can use a fast double-tap as a quick toggle when you don't need the menu.
 
@@ -59,7 +60,7 @@ Tap the floating button once to open a 2-item arc:
 <img width="392" height="383" alt="Image" src="https://github.com/user-attachments/assets/35170024-f938-4db1-99c6-8331f50e304b" />
 
 - **✏️ Edit** — toggle Edit mode on/off (same as double-tapping the floating button).
-- **✓ Confirm** — send all your local changes to the server (covered in [Sending your work to the server](#sending-your-work-to-the-server)).
+- **✓ Confirm** — send all your local changes to the server (covered in [Sending your work to the server](#sending-your-work-to-the-server)). Outlined in green while there is something to send.
 
 ### Idle vs Edit mode
 

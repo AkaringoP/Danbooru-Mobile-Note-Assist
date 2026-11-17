@@ -89,6 +89,7 @@ function makeBoxHooks(): NoteBoxHooks {
     attachBodyDrag: vi.fn(),
     attachHandle: vi.fn(),
     consumeBoxClickSuppression: vi.fn(() => false),
+    onVisualsUpdated: vi.fn(),
   };
 }
 
@@ -482,6 +483,17 @@ describe('updateNoteVisuals — 4-color class set', () => {
 // ---------------------------------------------------------------------------
 // updateAllNoteVisuals
 // ---------------------------------------------------------------------------
+
+describe('updateNoteVisuals — onVisualsUpdated hook (Task 4.8)', () => {
+  it('fires after the classes are applied', () => {
+    const id = asTempNoteId('temp-vis-hook');
+    notes.set(id, makeNote());
+    renderNoteBox(id, {left: 0, top: 0, width: 1000, height: 750});
+    vi.mocked(boxHooks.onVisualsUpdated).mockClear();
+    updateNoteVisuals(id);
+    expect(boxHooks.onVisualsUpdated).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('updateAllNoteVisuals', () => {
   it('toggles classes on every note in the Map', () => {
