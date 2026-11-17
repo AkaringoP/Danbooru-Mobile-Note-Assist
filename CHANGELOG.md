@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Unsent changes are orange, sent is green.** The floating button's outline and badge and the arc menu's Confirm item are now orange while changes wait for ✓ Confirm — not on the server yet — and turn green once everything was sent, until the page reloads. The highlight is a soft glow, like the open-menu state, with a lightly rippled edge that slowly turns (held still under `prefers-reduced-motion`).
-- **Commit is off past 5000 characters.** Danbooru rejects a longer note whole (it does not truncate), which used to surface only at Confirm. While the counter is red, Commit and Ctrl/Cmd+Enter do nothing; typing is not blocked, so a long paste can be trimmed.
+- **Commit is off past 5000 characters.** Danbooru rejects a longer note whole (it does not truncate), which used to surface only at Confirm. While the counter is red, Commit and Ctrl/Cmd+Enter do nothing and tapping another box keeps the current one selected (with a warning) — switching used to commit a new box as-is, or leave an edited note's text for Confirm to send. Shorten it and Commit, or Cancel (back to the last committed text) / Delete. Typing is not blocked, so a long paste can be trimmed. The limit counts the note's markup too (`<b>`, `<span style=…>`), as Danbooru does.
 
 ## [5.1.0] - 2026-11-17
 

@@ -306,6 +306,71 @@ describe('setActiveNote', () => {
   });
 });
 
+describe('setActiveNote — over the 5000 limit, the box stays selected', () => {
+  const OVER = 'x'.repeat(5001);
+
+  it('a fresh new box over the limit is neither switched away from nor committed', () => {
+    const a = createTempNote({...BASE});
+    const b = createTempNote({...BASE, x: 200});
+    popoverConfirm(b);
+    setActiveNote(a);
+    notes.get(a)!.current.text = OVER;
+    vi.mocked(hooks.onActiveChanged).mockClear();
+
+    setActiveNote(b);
+
+    expect(getActiveNoteId()).toBe(a);
+    expect(notes.get(a)!.everConfirmed).toBe(false);
+    expect(hooks.onActiveChanged).not.toHaveBeenCalled();
+    expect(hooks.onToast).toHaveBeenCalledWith(
+      expect.stringMatching(/5000/),
+      'warning',
+    );
+  });
+
+  it('an edited server note over the limit stays selected too', () => {
+    const server = asServerNoteId('77');
+    notes.set(server, makeNote({isServerNote: true}));
+    const other = createTempNote({...BASE, x: 300});
+    popoverConfirm(other);
+    setActiveNote(server);
+    notes.get(server)!.current.text = OVER;
+
+    setActiveNote(other);
+
+    expect(getActiveNoteId()).toBe(server);
+  });
+
+  it('exactly 5000 switches normally', () => {
+    const a = createTempNote({...BASE});
+    const b = createTempNote({...BASE, x: 200});
+    popoverConfirm(b);
+    setActiveNote(a);
+    notes.get(a)!.current.text = 'x'.repeat(5000);
+
+    setActiveNote(b);
+
+    expect(getActiveNoteId()).toBe(b);
+  });
+
+  it('Cancel and Delete still close an over-limit box', () => {
+    const server = asServerNoteId('78');
+    notes.set(server, makeNote({isServerNote: true}));
+    setActiveNote(server);
+    notes.get(server)!.current.text = OVER;
+    popoverCancel(server);
+    expect(getActiveNoteId()).toBeNull();
+    expect(notes.get(server)!.current.text).toBe('');
+
+    const fresh = createTempNote({...BASE});
+    setActiveNote(fresh);
+    notes.get(fresh)!.current.text = OVER;
+    popoverDelete(fresh);
+    expect(getActiveNoteId()).toBeNull();
+    expect(notes.has(fresh)).toBe(false);
+  });
+});
+
 describe('setActiveNote — leaving a fresh new box (Task 1.6)', () => {
   it('switching to another note checkpoints typed text like ✔', () => {
     const a = createTempNote({...BASE, text: ''});
