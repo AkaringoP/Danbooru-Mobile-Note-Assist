@@ -5,6 +5,11 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Build: vite 8 and vite-plugin-monkey 8** (replaces Dependabot PR #1). vite 8 bundles with rolldown, so esbuild is no longer installed; `tsconfig.json` moves to `moduleResolution: "bundler"`, which vite 8's export-only types need. The userscript header is unchanged and the bundle is about 8% smaller; no user-facing change.
+
 ## [5.1.2] - 2026-11-17
 
 Hotfix: Preview works again after Danbooru's preview validation change.
