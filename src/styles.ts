@@ -114,13 +114,17 @@ export const STYLES = `
 
     /* In active mode boxes accept their own click (to swap active selection)
        and stop propagation, so the underlying image handler doesn't also
-       fire and spawn a duplicate note over the existing box. The
-       touch-action: none is necessary for the body's pointerdown drag —
-       without it the browser hijacks short drags as pan/scroll on mobile
-       and our pointermove never fires. */
+       fire and spawn a duplicate note over the existing box.
+       touch-action: only the selected box takes touch drags (none —
+       otherwise the browser turns them into pan/scroll and pointermove
+       never fires); on every other box a swipe scrolls the page and a
+       tap selects it (v5.1). */
     body.dmna-mode-active .dmna-note-box {
       pointer-events: auto;
       cursor: pointer;
+      touch-action: manipulation;
+    }
+    body.dmna-mode-active .dmna-note-box.is-active {
       touch-action: none;
     }
 

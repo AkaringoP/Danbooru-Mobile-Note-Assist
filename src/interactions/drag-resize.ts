@@ -116,6 +116,12 @@ export function attachHandleListeners(
  * Wires the box body's pointerdown for body-drag (move). Stops at
  * the body — handles have their own pointerdown that stopPropagation
  * before reaching here.
+ *
+ * Touch only drags the box that is already selected (v5.1 Task 2.5).
+ * On any other box the gesture is left to the browser, so a swipe that
+ * happens to start on someone's note scrolls the page instead of
+ * moving the note; a plain tap still selects it via the box's click
+ * handler. Mouse and pen keep activate-and-drag in one gesture.
  */
 export function attachBodyDragListener(
   bodyEl: HTMLElement,
@@ -123,6 +129,9 @@ export function attachBodyDragListener(
 ): void {
   bodyEl.addEventListener('pointerdown', e => {
     if (getMode() !== 'active') {
+      return;
+    }
+    if (e.pointerType === 'touch' && getActiveNoteId() !== noteId) {
       return;
     }
     const note = notes.get(noteId);
@@ -135,8 +144,7 @@ export function attachBodyDragListener(
       }
       return;
     }
-    // Activate-on-touch so a single tap-and-drag works on inactive
-    // boxes without requiring two gestures.
+    // Mouse / pen: activate and drag in one gesture.
     if (getActiveNoteId() !== noteId) {
       setActiveNote(noteId);
     }

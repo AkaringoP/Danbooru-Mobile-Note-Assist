@@ -27,3 +27,18 @@ describe('Preview containment (Task 2.1)', () => {
     );
   });
 });
+
+describe('Box touch-action (Task 2.5)', () => {
+  it('unselected boxes let the browser scroll; the selected box takes drags', () => {
+    expect(ruleBody('body.dmna-mode-active .dmna-note-box')).toMatch(
+      /touch-action:\s*manipulation/,
+    );
+    expect(ruleBody('body.dmna-mode-active .dmna-note-box.is-active')).toMatch(
+      /touch-action:\s*none/,
+    );
+  });
+
+  it('handles keep touch-action: none', () => {
+    expect(ruleBody('.dmna-handle')).toMatch(/touch-action:\s*none/);
+  });
+});

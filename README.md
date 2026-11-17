@@ -138,6 +138,8 @@ Each box has four invisible handle zones at its corners with generous touch padd
 - **✥ (top-right and bottom-left)** — Move. Drag from either corner to translate the whole box.
 - **The box body itself** — Also drag-to-move. Moves the same way as the ✥ corners.
 
+On a touch screen, **tap a box to select it first, then drag** (v5.1). A swipe that starts on a box you haven't selected scrolls the page instead of moving that box — so scrolling through a post full of notes can't shift someone's note by accident. With a mouse, press-and-drag works on any box in one gesture.
+
 Each drag and each resize is a single entry on the per-note undo stack, so a misjudged drag can be reverted with ↶ without losing the text.
 
 If you can't tell where the touch zones are on a small box, **hold 👁** in the popover to highlight them.
