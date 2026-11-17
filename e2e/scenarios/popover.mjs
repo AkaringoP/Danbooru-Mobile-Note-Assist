@@ -98,6 +98,54 @@ export default [
       ),
   },
   {
+    name: 'preview-full-note',
+    task: '5.1.2',
+    title: 'Preview sends the whole note, which Danbooru now validates',
+    run: () =>
+      withPage(
+        {
+          api: {
+            // Mirrors notes#preview since Danbooru validates the note
+            // before sanitizing: a body alone is a 422.
+            'POST /notes/preview.json': (route, req) => {
+              const note = JSON.parse(req.postData() || '{}').note || {};
+              const missing = ['post_id', 'x', 'y', 'width', 'height'].filter(
+                k => typeof note[k] !== 'number',
+              );
+              return missing.length
+                ? route.fulfill({
+                    status: 422,
+                    json: {
+                      success: false,
+                      reasons: missing.map(k => `${k} can't be blank`),
+                    },
+                  })
+                : route.fulfill({json: {sanitized_body: `<b>${note.body}</b>`}});
+            },
+          },
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.touchscreen.tap(200, 300);
+          await page.waitForSelector('#dmna-popover.show');
+          await page.locator('#dmna-popover-input').fill('hello');
+          await page.locator('#dmna-popover-mode-toggle').tap();
+          await page.waitForFunction(
+            () =>
+              document.getElementById('dmna-popover-preview').style.display ===
+              'block',
+            null,
+            {timeout: 5000},
+          );
+          const html = await page
+            .locator('#dmna-popover-preview')
+            .evaluate(el => el.innerHTML);
+          assert.equal(html, '<b>hello</b>');
+        },
+      ),
+  },
+  {
     name: 'popover-overflow',
     task: '4.6',
     title: 'The note popover stays on screen and its arrow points at the box',

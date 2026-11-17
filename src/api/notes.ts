@@ -109,10 +109,18 @@ async function fetchAllPages(postId: string): Promise<ServerNoteDescriptor[]> {
 export async function apiPostNote(
   state: NoteState,
 ): Promise<ServerNoteResponse | null> {
-  const postId = Number(getPostId());
-  const payload = {
+  return apiCall<ServerNoteResponse>(
+    'POST',
+    '/notes.json',
+    newNoteParams(state),
+  );
+}
+
+/** The `note` params Danbooru's create and preview actions take. */
+function newNoteParams(state: NoteState) {
+  return {
     note: {
-      post_id: postId,
+      post_id: Number(getPostId()),
       x: Math.round(state.x),
       y: Math.round(state.y),
       width: Math.round(state.w),
@@ -120,7 +128,6 @@ export async function apiPostNote(
       body: state.text || '',
     },
   };
-  return apiCall<ServerNoteResponse>('POST', '/notes.json', payload);
 }
 
 /**
@@ -174,6 +181,10 @@ export interface PreviewNoteResponse {
  * popover's Preview mode (Phase 3, v4.2) so the user can see how
  * `<b>` / `<tn>` / wiki markup will look before Confirm flushes it.
  *
+ * Sends the whole note, as Danbooru's own editor does: the server
+ * validates it like a new note before sanitizing (post, geometry
+ * inside the image, length), so a body alone is refused with a 422.
+ *
  * Throws on:
  *   - empty response — `apiCall` only returns `null` for 204/empty
  *     bodies, and a 2xx from `preview` always carries a sanitized body.
@@ -184,12 +195,12 @@ export interface PreviewNoteResponse {
  *     meaningful error instead (Phase 5-h Task 5.25).
  */
 export async function apiPreviewNote(
-  body: string,
+  state: NoteState,
 ): Promise<PreviewNoteResponse> {
   const res = await apiCall<PreviewNoteResponse>(
     'POST',
     '/notes/preview.json',
-    {body},
+    newNoteParams(state),
   );
   if (res === null) {
     throw new Error('Empty preview response');

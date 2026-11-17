@@ -44,6 +44,7 @@ import {
 import {serverNoteBodyLength} from '../utils/note-body';
 import {computePopoverPlacement} from '../utils/popover-placement';
 import {apiPreviewNote} from '../api/notes';
+import {ApiError} from '../api/csrf';
 import {getOriginalWidth} from '../state/image-state';
 import {
   clearTextActionsForNote,
@@ -871,7 +872,15 @@ async function handleModeToggle(): Promise<void> {
   popoverModeToggleElement.disabled = true;
   popoverModeToggleElement.textContent = '…';
   try {
-    const res = await apiPreviewNote(popoverInputElement.value);
+    const activeId = getActiveNoteId();
+    const note = activeId ? notes.get(activeId) : undefined;
+    if (!note) {
+      throw new Error('No active note to preview');
+    }
+    const res = await apiPreviewNote({
+      ...note.current,
+      text: popoverInputElement.value,
+    });
     if (myReq !== previewRequestId) {
       return;
     }
@@ -893,7 +902,12 @@ async function handleModeToggle(): Promise<void> {
     refreshStylePopoverState();
   } catch (err) {
     if (myReq === previewRequestId) {
-      showToast('⚠️ Preview failed', 'error', err);
+      const reason = err instanceof ApiError ? err.detail : '';
+      showToast(
+        reason ? `⚠️ Preview failed — ${reason}` : '⚠️ Preview failed',
+        'error',
+        err,
+      );
       popoverModeToggleElement.textContent = '👁 Preview';
     }
   } finally {
