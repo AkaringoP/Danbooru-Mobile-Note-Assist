@@ -103,7 +103,13 @@ describe('Pending highlight (Task 4.8)', () => {
     );
     expect(ring).not.toBeNull();
     expect(ring![1]).toMatch(/mask:\s*url\("data:image\/svg\+xml,/);
-    expect(ring![1]).toMatch(/animation:\s*dmna-ripple/);
+    expect(ring![1]).toMatch(/animation:\s*dmna-ripple 8\.6s linear infinite/);
+    const svg = decodeURIComponent(
+      ring![1].match(/mask:\s*url\("data:image\/svg\+xml,([^"]*)"\)/)![1],
+    );
+    // A filled band from the wavy edge in to the button border, no gaps.
+    expect(svg).toMatch(/fill-rule="evenodd"/);
+    expect(svg).not.toMatch(/fill="none"/);
     expect(ring![1]).toMatch(/pointer-events:\s*none/);
     expect(STYLES).toMatch(/@keyframes dmna-ripple/);
   });

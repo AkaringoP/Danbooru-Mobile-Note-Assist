@@ -6,23 +6,25 @@ import {
 } from './config';
 
 /**
- * A ring with a rippled edge, as a CSS mask image. The pending / sent
- * highlight paints its color through it and turns it, so the edge
- * reads as moving water rather than a hard outline.
+ * A band with a rippled outer edge, as a CSS mask image. The pending /
+ * sent highlight paints its color through it and turns it, so the edge
+ * reads as moving water rather than a hard outline. The band is solid
+ * down to the button's border: its hole (r = 38 of 100) stays inside
+ * the border at both ends of the 1.05 scale pulse, so no gap shows.
  */
 function rippledRingMask(): string {
   const steps = 160;
   const points = Array.from({length: steps}, (_, i) => {
     const angle = (i / steps) * 2 * Math.PI;
-    const radius = 43.5 + 1.8 * Math.sin(angle * 16);
+    const radius = 45.3 + 1.8 * Math.sin(angle * 16);
     const x = 50 + radius * Math.cos(angle);
     const y = 50 + radius * Math.sin(angle);
     return `${x.toFixed(1)} ${y.toFixed(1)}`;
   });
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
-    `<path d="M${points.join('L')}Z" fill="none" stroke="#000" ` +
-    'stroke-width="3.6" stroke-linejoin="round"/></svg>';
+    `<path fill="#000" fill-rule="evenodd" d="M${points.join('L')}Z ` +
+    'M12 50A38 38 0 1 0 88 50A38 38 0 1 0 12 50Z"/></svg>';
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
@@ -145,7 +147,7 @@ export const STYLES = `
       -webkit-mask: ${rippledRingMask()} center / 100% 100% no-repeat;
       mask: ${rippledRingMask()} center / 100% 100% no-repeat;
       pointer-events: none;
-      animation: dmna-ripple 6s linear infinite;
+      animation: dmna-ripple 8.6s linear infinite;
     }
     /* The menu item's border is 0.5px thinner than the button's. */
     body.dmna-has-pending .dmna-menu-item[data-action="confirm"]::before,
