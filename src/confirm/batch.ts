@@ -49,6 +49,7 @@ import {
   ServerNoteResponse,
 } from '../api/notes';
 import {apiPatchPostTags} from '../api/posts';
+import {ApiError} from '../api/csrf';
 import {
   classifyChanges,
   needsTagPopover,
@@ -79,9 +80,14 @@ export type SuccessfulPost = PendingPost & {
  * failure, so it's unknown whether the server stored this note anyway
  * (lost response). Retry holds such POSTs back until it can check.
  */
-export type FailedPost = PendingPost & {error: string; unverified?: boolean};
-export type FailedPut = PendingPut & {error: string};
-export type FailedDelete = PendingDelete & {error: string};
+export type FailedPost = PendingPost & {
+  error: string;
+  unverified?: boolean;
+  skipped?: boolean;
+};
+/** `skipped`: never sent because an earlier request hit the rate limit. */
+export type FailedPut = PendingPut & {error: string; skipped?: boolean};
+export type FailedDelete = PendingDelete & {error: string; skipped?: boolean};
 
 /**
  * Outcome of `sendBatch`. Each item in `classified` ends up in either
@@ -104,6 +110,8 @@ export interface SendBatchResult {
     deletes: FailedDelete[];
     tagPatch: string | null;
   };
+  /** A request got 429; everything after it was skipped (v5.1 Task 4.3). */
+  rateLimited?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,54 +286,90 @@ export async function sendBatch(
     successful: {posts: [], puts: [], deletes: []},
     failed: {posts: [], puts: [], deletes: [], tagPatch: null},
   };
+  // Once Danbooru answers 429, every further request deepens the
+  // penalty (its limiter charges limited callers), so the rest of the
+  // batch is skipped and left for Retry (v5.1 Task 4.3).
+  let rateLimited = false;
+  const noteFailure = (label: string, err: unknown): string => {
+    // The error modal shows result.failed[...].error (a compact
+    // string). Log the full Error here so its stack trace is
+    // available in the console for cross-referencing — useful
+    // when triaging "what actually went wrong" across multiple
+    // partial failures in one batch.
+    console.error(`[${SCRIPT_NAME}] ${label} failed`, err);
+    if (err instanceof ApiError && err.status === 429) {
+      rateLimited = true;
+    }
+    return errMessage(err);
+  };
   startSendingUI();
   try {
     for (const item of classified.deletes) {
+      if (rateLimited) {
+        result.failed.deletes.push({
+          ...item,
+          error: RATE_LIMIT_SKIP,
+          skipped: true,
+        });
+        continue;
+      }
       try {
         await apiDeleteNote(item.serverId);
         result.successful.deletes.push(item);
       } catch (err) {
-        // The error modal shows result.failed[...].error (a compact
-        // string). Log the full Error here so its stack trace is
-        // available in the console for cross-referencing — useful
-        // when triaging "what actually went wrong" across multiple
-        // partial failures in one batch.
-        console.error(
-          `[${SCRIPT_NAME}] DELETE note ${item.serverId} failed`,
-          err,
-        );
-        result.failed.deletes.push({...item, error: errMessage(err)});
+        const error = noteFailure(`DELETE note ${item.serverId}`, err);
+        result.failed.deletes.push({...item, error});
       }
     }
     for (const item of classified.puts) {
+      if (rateLimited) {
+        result.failed.puts.push({
+          ...item,
+          error: RATE_LIMIT_SKIP,
+          skipped: true,
+        });
+        continue;
+      }
       try {
         await apiPutNote(item.serverId, item.state);
         result.successful.puts.push(item);
       } catch (err) {
-        console.error(`[${SCRIPT_NAME}] PUT note ${item.serverId} failed`, err);
-        result.failed.puts.push({...item, error: errMessage(err)});
+        const error = noteFailure(`PUT note ${item.serverId}`, err);
+        result.failed.puts.push({...item, error});
       }
     }
     for (const item of classified.posts) {
+      if (rateLimited) {
+        result.failed.posts.push({
+          ...item,
+          error: RATE_LIMIT_SKIP,
+          skipped: true,
+        });
+        continue;
+      }
       try {
         const serverResponse = await apiPostNote(item.state);
         result.successful.posts.push({...item, serverResponse});
       } catch (err) {
-        console.error(`[${SCRIPT_NAME}] POST temp ${item.noteId} failed`, err);
-        result.failed.posts.push({...item, error: errMessage(err)});
+        const error = noteFailure(`POST temp ${item.noteId}`, err);
+        result.failed.posts.push({...item, error});
       }
     }
     if (
       tagDelta &&
       (tagDelta.tagsToAdd.length > 0 || tagDelta.tagsToRemove.length > 0)
     ) {
-      try {
-        await apiPatchPostTags(tagDelta.tagsToAdd, tagDelta.tagsToRemove);
-      } catch (err) {
-        console.error(`[${SCRIPT_NAME}] tag PATCH failed`, err);
-        result.failed.tagPatch = errMessage(err);
+      if (rateLimited) {
+        result.failed.tagPatch = RATE_LIMIT_SKIP;
+      } else {
+        try {
+          await apiPatchPostTags(tagDelta.tagsToAdd, tagDelta.tagsToRemove);
+        } catch (err) {
+          result.failed.tagPatch = noteFailure('tag PATCH', err);
+        }
       }
     }
+    result.rateLimited = rateLimited;
   } finally {
     endSendingUI();
   }
@@ -468,6 +512,10 @@ export function countSendResult(result: SendBatchResult): {
   return {successCount, failureCount};
 }
 
+const RATE_LIMIT_SKIP = 'Skipped — rate limited';
+const RATE_LIMIT_NOTE =
+  'Rate limited by Danbooru — wait about a minute, then Retry.';
+
 const UNVERIFIED_TOAST =
   "Can't verify what the server saved — check your connection and retry";
 
@@ -513,24 +561,31 @@ async function findCommittedPosts<T extends PendingPost>(
 async function reconcileFailedPosts(
   result: SendBatchResult,
 ): Promise<SendBatchResult> {
-  if (result.failed.posts.length === 0) {
+  // Skipped POSTs were never sent, so there is nothing to look for.
+  const attempted = result.failed.posts.filter(p => !p.skipped);
+  if (attempted.length === 0) {
     return result;
   }
+  const skipped = result.failed.posts.filter(p => p.skipped);
   const createdIds = result.successful.posts.flatMap(p =>
     typeof p.serverResponse?.id === 'number' ? [p.serverResponse.id] : [],
   );
-  const found = await findCommittedPosts(result.failed.posts, createdIds);
+  const found = await findCommittedPosts(attempted, createdIds);
   return {
+    ...result,
     successful: {
       ...result.successful,
       posts: [...result.successful.posts, ...(found ? found.committed : [])],
     },
     failed: {
       ...result.failed,
-      posts: (found ? found.rest : result.failed.posts).map(p => ({
-        ...p,
-        unverified: !found,
-      })),
+      posts: [
+        ...(found ? found.rest : attempted).map(p => ({
+          ...p,
+          unverified: !found,
+        })),
+        ...skipped,
+      ],
     },
   };
 }
@@ -707,7 +762,8 @@ function openErrorModal(result: SendBatchResult): void {
   if (summaryEl) {
     summaryEl.textContent =
       `${successCount} of ${total} operation(s) succeeded; ` +
-      `${failureCount} failed.`;
+      `${failureCount} failed.` +
+      (result.rateLimited ? ` ${RATE_LIMIT_NOTE}` : '');
   }
   const listEl = errorModalElement!.querySelector('#dmna-error-modal-list');
   if (listEl) {

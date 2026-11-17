@@ -47,6 +47,7 @@ import {
   fetchServerNotes,
 } from '../src/api/notes';
 import {apiPatchPostTags} from '../src/api/posts';
+import {ApiError} from '../src/api/csrf';
 
 import {
   ConfirmFlowHooks,
@@ -830,6 +831,105 @@ describe('runConfirmFlow — POST reconciliation', () => {
 
     expect(apiPostNote).toHaveBeenCalledTimes(2);
     expect(notes.has(asServerNoteId(778))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sendBatch — stop on 429 (Task 4.3)
+// ---------------------------------------------------------------------------
+
+describe('sendBatch — rate limit', () => {
+  const RL = new ApiError('HTTP 429 Too Many Requests', 'http', 429);
+
+  function post(id: string): PendingPost {
+    return {noteId: asTempNoteId(id), state: {...BASE, text: id}};
+  }
+
+  it('stops at the first 429 and marks the rest skipped, tags included', async () => {
+    vi.mocked(apiPostNote)
+      .mockResolvedValueOnce({id: 1, x: 0, y: 0, width: 100, height: 100})
+      .mockRejectedValueOnce(RL);
+    const classified: ClassifiedChanges = {
+      ...makeEmptyClassified(),
+      posts: [post('temp-rl-1'), post('temp-rl-2'), post('temp-rl-3')],
+      hasChanges: true,
+    };
+
+    const result = await sendBatch(classified, {
+      tagsToAdd: ['translated'],
+      tagsToRemove: [],
+    });
+
+    expect(apiPostNote).toHaveBeenCalledTimes(2);
+    expect(apiPatchPostTags).not.toHaveBeenCalled();
+    expect(result.rateLimited).toBe(true);
+    expect(result.successful.posts.map(p => p.noteId)).toEqual(['temp-rl-1']);
+    expect(result.failed.posts.map(p => [p.noteId, p.error])).toEqual([
+      ['temp-rl-2', 'HTTP 429 Too Many Requests'],
+      ['temp-rl-3', 'Skipped — rate limited'],
+    ]);
+    expect(result.failed.tagPatch).toBe('Skipped — rate limited');
+  });
+
+  it('a 429 on DELETE skips the PUTs and POSTs after it', async () => {
+    vi.mocked(apiDeleteNote).mockRejectedValueOnce(RL);
+    const classified: ClassifiedChanges = {
+      ...makeEmptyClassified(),
+      deletes: [{noteId: asServerNoteId('1'), serverId: asServerNoteId('1')}],
+      puts: [
+        {
+          noteId: asServerNoteId('2'),
+          serverId: asServerNoteId('2'),
+          state: {...BASE},
+          textChanged: false,
+        },
+      ],
+      posts: [post('temp-rl-4')],
+      hasChanges: true,
+    };
+
+    const result = await sendBatch(classified, null);
+
+    expect(apiPutNote).not.toHaveBeenCalled();
+    expect(apiPostNote).not.toHaveBeenCalled();
+    expect(result.failed.puts[0].error).toBe('Skipped — rate limited');
+    expect(result.failed.posts[0].error).toBe('Skipped — rate limited');
+  });
+
+  it('other errors keep the batch going', async () => {
+    vi.mocked(apiPostNote)
+      .mockRejectedValueOnce(new ApiError('HTTP 422', 'http', 422))
+      .mockResolvedValueOnce({id: 2, x: 0, y: 0, width: 100, height: 100});
+    const classified: ClassifiedChanges = {
+      ...makeEmptyClassified(),
+      posts: [post('temp-rl-5'), post('temp-rl-6')],
+      hasChanges: true,
+    };
+
+    const result = await sendBatch(classified, null);
+
+    expect(apiPostNote).toHaveBeenCalledTimes(2);
+    expect(result.rateLimited).toBeFalsy();
+  });
+
+  it('the error modal tells the user to wait', async () => {
+    const result = makeEmptyResult();
+    result.rateLimited = true;
+    result.failed.posts = [
+      {...post('temp-rl-7'), error: 'Skipped — rate limited', skipped: true},
+    ];
+    const promise = handleSendResult(result, null);
+    await waitForErrorModal();
+    expect(
+      document.querySelector('#dmna-error-modal-summary')?.textContent,
+    ).toContain('Rate limited by Danbooru — wait about a minute, then Retry.');
+    expect(fetchServerNotes).not.toHaveBeenCalled();
+    (
+      document.querySelector(
+        '#dmna-error-modal .dmna-error-modal-btn[data-action="cancel"]',
+      ) as HTMLButtonElement
+    ).click();
+    await promise;
   });
 });
 
