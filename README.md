@@ -89,7 +89,7 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v5.1.2** (2026-11-17). The 5.1 series came from a mobile-focused audit: safer sending, clearer send state, a length counter, and a Preview fix after a change on Danbooru's side. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
+The current release is **v5.1.3** (2026-11-17), a maintenance release with no change in behavior. The 5.1 series came from a mobile-focused audit: safer sending, clearer send state, a length counter, and a Preview fix after a change on Danbooru's side. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 
 ---
 
