@@ -101,7 +101,7 @@ The default box size is 10% of the image's shorter dimension, clamped to 30–15
 | **view help** (header) | Opens Danbooru's notes wiki page in a new tab. |
 | **Aa Style** (side) | Opens the **style sub-popover** — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons + Text / Stroke / Background color pickers + Size / Font dropdowns. Enabled only while the textarea has selected text (the wrap target). |
 | **↶ Undo** (side) | Step back through this note's history. Each box has its own undo stack — independent from every other box. Reverts Commit checkpoints, drag/resize moves, Delete, and **individual style toggles** one at a time. |
-| **👁 Peek** (side) | Hold this button to temporarily reveal the box's invisible touch zones (red squares, see below). Useful for aiming on small boxes. |
+| **Touch zones** (side, dashed box with an eye) | Hold this button to temporarily reveal the box's invisible touch zones (red squares, see below). Useful for aiming on small boxes. |
 | **Commit** | Save the current text + geometry as the note's local checkpoint. The popover closes; the box stays green until ✓ Confirm sends it. **Does not** send to the server yet — that happens at ✓ Confirm time. |
 | **Cancel** | Discard uncommitted changes. On a brand-new box that was never committed, this hard-deletes it. On a committed or server-loaded box, this reverts text and geometry to the last checkpoint. |
 | **Delete** | Mark this note for deletion. New boxes are deleted immediately. Already-committed or server-loaded notes turn into a red dashed box (soft-deleted) — they aren't gone until ✓ Confirm runs, so you can ↶ to bring them back. |
@@ -144,7 +144,7 @@ On a touch screen, **tap a box to select it first, then drag** (v5.1). A swipe t
 
 Each drag and each resize is a single entry on the per-note undo stack, so a misjudged drag can be reverted with ↶ without losing the text.
 
-If you can't tell where the touch zones are on a small box, **hold 👁** in the popover to highlight them.
+If you can't tell where the touch zones are on a small box, **hold the touch-zone button** (dashed box with an eye) in the popover to highlight them.
 
 ### Box colors at a glance
 
@@ -212,7 +212,7 @@ A drag is registered when the pointer moves more than 5px during the press; belo
 ## Mobile tips
 
 - **Pinch-zoom freely.** The popover, arc menu, floating button, and toasts all counter-scale, so they stay the same physical size on screen no matter how far you zoom in. Position your zoom on the bubble before tapping, and the box will land precisely.
-- **Hold 👁 when aiming on a small box.** The corner touch zones extend ~30px past the visible box edge, which is invisible by default. Holding 👁 shows you exactly where they are.
+- **Hold the touch-zone button when aiming on a small box.** The corner touch zones extend ~30px past the visible box edge, which is invisible by default. Holding it shows you exactly where they are.
 - **Tap any box to switch focus.** No need to tap Commit before moving on — tapping a different box closes the current popover. A new box you typed into is committed for you (as if you'd tapped Commit, so ↶ can still undo it) and waits for ✓ Confirm; a new box you left empty is removed. Edits to existing notes stay as `dirty` (green) and wait for ✓ Confirm.
 - **Force-quit safe (v4.1+).** If the OS kills your tab while you have unsaved edits — phone went to sleep, you switched apps for too long, the browser crashed — your work is snapshotted on background-into and offered back as a Restore prompt the next time you open the same post. Drafts age out after 24 hours and are cleared automatically when you press ✓ Confirm or explicitly leave Edit mode.
 - **Plays nice with Danbooru's native note tool (v5.0+).** If you tap Danbooru's own `Translate` button or open a note's edit dialog, the floating button hides itself so the two UIs don't fight. `Shift+N` is gated symmetrically. Close the native tool and the button reappears.

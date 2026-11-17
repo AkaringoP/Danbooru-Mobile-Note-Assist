@@ -152,3 +152,17 @@ describe('character counter (Task 4.5 follow-up)', () => {
     expect(counter().classList.contains('is-over')).toBe(true);
   });
 });
+
+describe('touch-zone button icon (distinct from Preview)', () => {
+  it('draws a dashed box with a small eye, not the 👁 glyph', () => {
+    const btn = document.getElementById('dmna-popover-eye')!;
+    expect(btn.textContent).not.toContain('👁');
+    const svg = btn.querySelector('svg.dmna-zone-icon');
+    expect(svg).not.toBeNull();
+    expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    expect(svg!.querySelector('[stroke-dasharray]')).not.toBeNull();
+    expect(btn.getAttribute('aria-label')).toBe(
+      'Show touch zones (press and hold)',
+    );
+  });
+});

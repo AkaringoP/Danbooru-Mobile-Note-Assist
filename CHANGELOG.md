@@ -16,6 +16,7 @@ Second batch of the mobile-focused audit: clearer state at a glance, native-look
 ### Changed
 - **Popover buttons look like Danbooru's note dialog.** The action row is now text — **Commit** / **Cancel** / **Delete** / **History** — in the site's form-button colors (following your theme), instead of ✔ ✖ 🗑 📜 glyphs. It's "Commit", not "Save": the note is checkpointed locally and only sent on ✓ Confirm. The buttons stay 36 px tall (the native dialog's 24 px is too small for thumbs).
 - **Tag changes merge with other editors'.** The tag update now sends the tag string you saw as `old_tag_string`, the same way Danbooru's own edit form does, so a tag someone else changed in the meantime is kept — and the extra re-fetch before the update is gone.
+- **The touch-zone button has its own icon.** The side button you hold to see a box's touch zones was a plain 👁, easy to mistake for the note **Preview** toggle next to it. It is now a dashed box with a small eye on its corner.
 
 ### Fixed
 - **Entering edit mode on note-heavy posts.** Notes were rendered one by one with a layout read each; on a throttled phone 1000 notes took about 9 s. They now render in one pass (about 0.35 s in the same test). Posts with more than 1000 notes (Danbooru allows 1200) now load all of them.

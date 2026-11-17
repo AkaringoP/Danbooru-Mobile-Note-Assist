@@ -274,7 +274,7 @@ export const STYLES = `
       opacity: 0;
     }
 
-    /* Touch-zone debug overlay: while the user holds the popover's 👁
+    /* Touch-zone debug overlay: while the user holds the popover's zone
        button, paint each (otherwise invisible) corner handle in red so
        they can see exactly where the touch zones extend past the visible
        border. Only renders for the active box's handles since those are
@@ -529,7 +529,7 @@ export const STYLES = `
       background: rgba(74, 158, 255, 0.26);
     }
     /* Hover / press text-color shift for the white-glyph side buttons
-       (Aa / ↶). 👁 is an emoji and ignores color; undo's highlighted
+       (Aa / ↶ / touch zones). Undo's highlighted
        state has its own hue rule (specificity wins below). */
     .dmna-popover-side-btn:hover,
     .dmna-popover-side-btn:active {
@@ -538,6 +538,11 @@ export const STYLES = `
     /* Eye uses pointer events for press-and-hold, so it overrides
        touch-action to disable scroll/zoom while held. */
     #dmna-popover-eye { touch-action: none; }
+    #dmna-popover-eye .dmna-zone-icon {
+      display: block;
+      margin: 0 auto;
+      pointer-events: none;
+    }
     #dmna-popover-eye:active,
     #dmna-popover-eye.is-pressed {
       background: rgba(74, 158, 255, 0.30);

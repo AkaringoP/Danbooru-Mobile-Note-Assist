@@ -340,7 +340,7 @@ function createNoteBoxDOM(noteId: NoteId): HTMLElement {
   // Add 4 corner handles. NW/SE = resize, NE/SW = move-only.
   // The `data-icon` attribute is consumed by the debug-zone overlay
   // (`body.dmna-show-debug-zones .dmna-handle::before`) — invisible
-  // unless the popover's 👁 button is held.
+  // unless the popover's touch-zone button is held.
   const handleIcons: Record<HandleCorner, string> = {
     nw: '↖',
     ne: '✥',

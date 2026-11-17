@@ -1,5 +1,5 @@
 /**
- * Per-note popover (v3.0 Phase 3 Wave 3) — textarea + ✔/✖/🗑 + 👁/↶
+ * Per-note popover (v3.0 Phase 3 Wave 3) — textarea + action row + touch-zone/↶
  * side stack, anchored under the active box.
  *
  * Layer 3 (ui). Module-private state owns:
@@ -260,13 +260,13 @@ export function createPopover(): void {
   inputRow.appendChild(preview);
   popoverPreviewElement = preview;
 
-  // Right-side button stack: 👁 (top, hold-to-show debug zones) +
+  // Right-side button stack: touch zones (top, hold-to-show) +
   // ↶ (bottom, per-note undo). Two narrow stacked buttons share the
   // same column width as the old single eye button (44 px).
   const sideStack = document.createElement('div');
   sideStack.id = 'dmna-popover-side-stack';
 
-  // 👁 hold-to-show touch-zone debug button. Press-and-hold mirrors
+  // Hold-to-show touch-zone debug button. Press-and-hold mirrors
   // the v2.6 affordance (matches user muscle memory for "where do
   // those invisible corner zones really extend?"). Pointer-capture
   // ensures the up event lands on the button even if the user drags
@@ -275,7 +275,7 @@ export function createPopover(): void {
   eyeBtn.type = 'button';
   eyeBtn.id = 'dmna-popover-eye';
   eyeBtn.className = 'dmna-popover-side-btn';
-  eyeBtn.textContent = '👁';
+  eyeBtn.appendChild(createZoneIcon());
   eyeBtn.setAttribute('aria-label', 'Show touch zones (press and hold)');
   eyeBtn.title = 'Show touch zones (hold)';
   eyeBtn.addEventListener('pointerdown', e => {
@@ -474,8 +474,8 @@ export function hidePopover(): void {
  * Reflects the active note's `isDeleted` and `isServerNote` state
  * onto the popover's controls.
  *
- * - Soft-deleted note: textarea + ✔ / ✖ / 🗑 / 👁 disabled. ↶ is
- *   highlighted as the only live action. Re-enabled when popoverUndo
+ * - Soft-deleted note: textarea, Commit / Cancel / Delete and the
+ *   touch-zone button disabled. ↶ is highlighted as the only live action. Re-enabled when popoverUndo
  *   restores the note (`isDeleted` flips back to false).
  * - History 📜 (Phase 2, v4.2): disable mirrors `!isServerNote`, not
  *   `isDeleted` — viewing the version history of a server note still
@@ -646,6 +646,60 @@ export function applyTextUndoSnapshot(
     snapshot.selectionEnd,
   );
   popoverInputElement.dispatchEvent(new Event('input', {bubbles: true}));
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgEl(
+  tag: string,
+  attrs: Record<string, string | number>,
+): SVGElement {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    el.setAttribute(k, String(v));
+  }
+  return el;
+}
+
+/**
+ * Touch-zone button icon: a dashed box (the note box's zones) with a
+ * small eye on its corner. The plain 👁 read as a second "Preview"
+ * next to the header toggle (v5.2). Built with DOM calls — the
+ * Preview sink stays the only innerHTML write.
+ */
+function createZoneIcon(): SVGElement {
+  const svg = svgEl('svg', {
+    class: 'dmna-zone-icon',
+    viewBox: '0 0 24 24',
+    width: 22,
+    height: 22,
+    'aria-hidden': 'true',
+    focusable: 'false',
+  });
+  // The box outline stops short of the corner the eye sits on, so the
+  // eye needs no fill and works on both the idle and the pressed color.
+  svg.appendChild(
+    svgEl('path', {
+      d: 'M16.5 10 V2.5 H2.5 V16.5 H9.5',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.6,
+      'stroke-dasharray': '2.6 2',
+    }),
+  );
+  svg.appendChild(
+    svgEl('path', {
+      d: 'M10.5 17.5 Q16.5 11.8 22.5 17.5 Q16.5 23.2 10.5 17.5 Z',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.5,
+      'stroke-linejoin': 'round',
+    }),
+  );
+  svg.appendChild(
+    svgEl('circle', {cx: 16.5, cy: 17.5, r: 2.1, fill: 'currentColor'}),
+  );
+  return svg;
 }
 
 /** Refreshes the header's "length / limit" label from the textarea. */
