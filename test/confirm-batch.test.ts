@@ -93,6 +93,7 @@ function makeStoreHooks(): NotesStoreHooks {
     onReopenMenuRequested: vi.fn(),
     hasPendingChanges: vi.fn(() => false),
     onTextUndo: vi.fn(),
+    onNotesAdded: vi.fn(),
   };
 }
 

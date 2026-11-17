@@ -244,6 +244,7 @@ const NOTES_STORE_HOOK_KEYS = [
   'onReopenMenuRequested',
   'hasPendingChanges',
   'onTextUndo',
+  'onNotesAdded',
 ] as const;
 
 const CONFIRM_FLOW_HOOK_KEYS = [
@@ -271,7 +272,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(MAIN).toBeDefined();
   });
 
-  it('main.ts wires all 9 NotesStoreHooks callbacks', () => {
+  it('main.ts wires all 10 NotesStoreHooks callbacks', () => {
     const missing = NOTES_STORE_HOOK_KEYS.filter(
       k => !new RegExp(`\\b${k}\\b`).test(MAIN!),
     );
@@ -306,7 +307,7 @@ describe('Hook bag completeness — main.ts wires every callback', () => {
     expect(MAIN).toMatch(/\binitArcMenu\s*\(/);
   });
 
-  it('NotesStoreHooks interface in state/notes-store.ts exposes exactly the 9 keys main.ts wires', () => {
+  it('NotesStoreHooks interface in state/notes-store.ts exposes exactly the 10 keys main.ts wires', () => {
     const src = FILE_CONTENTS.get('state/notes-store.ts')!;
     const ifaceMatch = src.match(
       /export interface NotesStoreHooks\s*{([\s\S]*?)\n}/,

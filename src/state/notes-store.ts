@@ -116,6 +116,16 @@ export interface NotesStoreHooks {
    *   - ui/popover: `applyTextUndoSnapshot(noteId, snapshot)`.
    */
   onTextUndo: (noteId: NoteId, snapshot: TextSnapshot) => void;
+
+  /**
+   * A batch of notes entered the collection without being rendered
+   * (edit-mode entry, draft restore). Rendering them one by one read
+   * the image rect per note between style writes — 9 s of layout for
+   * 1000 notes on a throttled phone (v5.1 Task 3.5). Subscribers:
+   *   - ui/note-box: `updateAllNoteBoxPositions()` (one rect read)
+   *   - ui/popover: `refreshActivePopover()`
+   */
+  onNotesAdded: (ids: NoteId[]) => void;
 }
 
 let hooks: NotesStoreHooks | null = null;
@@ -396,8 +406,12 @@ async function enterActiveMode(gen: number): Promise<void> {
     return;
   }
 
-  for (const sn of serverNotes) {
-    addServerNote(sn);
+  const added = serverNotes.flatMap(sn => {
+    const id = insertServerNote(sn);
+    return id ? [id] : [];
+  });
+  if (added.length > 0) {
+    hooks!.onNotesAdded(added);
   }
 }
 
@@ -700,9 +714,21 @@ export function hardDeleteNote(id: NoteId): void {
  * `fetchServerNotes` resolves.
  */
 export function addServerNote(sn: ServerNoteDescriptor): void {
+  const id = insertServerNote(sn);
+  if (id) {
+    hooks!.onNoteRenderRequested(id);
+  }
+}
+
+/**
+ * Puts a server note into the collection without rendering it.
+ * Returns its id, or null when the id is already present (a restored
+ * draft wins over the server copy).
+ */
+function insertServerNote(sn: ServerNoteDescriptor): NoteId | null {
   const id = asServerNoteId(sn.id);
   if (notes.has(id)) {
-    return;
+    return null;
   }
   const state: NoteState = {
     x: sn.x,
@@ -721,7 +747,7 @@ export function addServerNote(sn: ServerNoteDescriptor): void {
     domElement: null,
   };
   notes.set(id, note);
-  hooks!.onNoteRenderRequested(id);
+  return id;
 }
 
 /**
@@ -925,9 +951,9 @@ export async function applyDraftSnapshot(
   //    onModeChanged hook itself.
   setMode(snapshot.mode);
 
-  // 5. Render restored boxes + re-establish active selection.
-  for (const id of notes.keys()) {
-    hooks!.onNoteRenderRequested(id);
+  // 5. Render restored boxes in one pass + re-establish active selection.
+  if (notes.size > 0) {
+    hooks!.onNotesAdded([...notes.keys()]);
   }
   if (snapshot.activeNoteId !== null) {
     const activeId = rebrandNoteId(snapshot.activeNoteId);

@@ -82,6 +82,7 @@ function makeHooks(): NotesStoreHooks {
     onReopenMenuRequested: vi.fn(),
     hasPendingChanges: vi.fn(() => false),
     onTextUndo: vi.fn(),
+    onNotesAdded: vi.fn(),
   };
 }
 
@@ -999,6 +1000,46 @@ describe('enterActiveMode — gen-counter cancellation', () => {
 // Draft serialization helpers (v4.1)
 // ---------------------------------------------------------------------------
 
+describe('enterActiveMode — batch render (Task 3.5)', () => {
+  it('adds every server note, then fires one onNotesAdded and no per-note renders', async () => {
+    const descriptors = Array.from({length: 50}, (_, i) => ({
+      id: 3000 + i,
+      x: i,
+      y: i,
+      width: 10,
+      height: 10,
+      body: 'n' + i,
+    }));
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce(descriptors);
+
+    setMode('active');
+    await vi.waitFor(() => expect(hooks.onNotesAdded).toHaveBeenCalled());
+
+    expect(notes.size).toBe(50);
+    expect(hooks.onNoteRenderRequested).not.toHaveBeenCalled();
+    expect(hooks.onNotesAdded).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(hooks.onNotesAdded).mock.calls[0][0]).toHaveLength(50);
+  });
+
+  it('notes already in the collection (restored draft) are kept and not re-announced', async () => {
+    const id = asServerNoteId('3100');
+    notes.set(
+      id,
+      makeNote({isServerNote: true, current: {...BASE, text: 'mine'}}),
+    );
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce([
+      {id: 3100, x: 0, y: 0, width: 1, height: 1, body: 'server'},
+      {id: 3101, x: 0, y: 0, width: 1, height: 1, body: 'new'},
+    ]);
+
+    setMode('active');
+    await vi.waitFor(() => expect(hooks.onNotesAdded).toHaveBeenCalled());
+
+    expect(notes.get(id)!.current.text).toBe('mine');
+    expect(hooks.onNotesAdded).toHaveBeenCalledWith(['3101']);
+  });
+});
+
 describe('hasContentToSave', () => {
   it('returns false in idle mode', () => {
     // Module starts idle after beforeEach
@@ -1220,7 +1261,7 @@ describe('applyDraftSnapshot', () => {
     expect(key).toBe('9999');
   });
 
-  it('triggers onNoteRenderRequested for each restored note', async () => {
+  it('renders restored notes in one batch (onNotesAdded), not per note', async () => {
     vi.mocked(hooks.onNoteRenderRequested).mockClear();
     const snap: DraftSnapshot = {
       mode: 'idle',
@@ -1253,7 +1294,12 @@ describe('applyDraftSnapshot', () => {
     };
     await applyDraftSnapshot(snap);
 
-    expect(hooks.onNoteRenderRequested).toHaveBeenCalledTimes(2);
+    expect(hooks.onNoteRenderRequested).not.toHaveBeenCalled();
+    expect(hooks.onNotesAdded).toHaveBeenCalledTimes(1);
+    expect(hooks.onNotesAdded).toHaveBeenCalledWith([
+      'temp-render-a',
+      'temp-render-b',
+    ]);
   });
 
   it('calls setMode with snapshot.mode — verified via onModeChanged hook', async () => {

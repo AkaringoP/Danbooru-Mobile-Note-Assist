@@ -146,6 +146,10 @@ const notesStoreHooks: NotesStoreHooks = {
   onReopenMenuRequested: () => openMenu(),
   hasPendingChanges: () => hasPendingChanges(),
   onTextUndo: (id, snapshot) => applyTextUndoSnapshot(id, snapshot),
+  onNotesAdded: () => {
+    updateAllNoteBoxPositions();
+    refreshActivePopover();
+  },
 };
 
 const confirmFlowHooks: ConfirmFlowHooks = {

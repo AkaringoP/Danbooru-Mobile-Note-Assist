@@ -46,13 +46,20 @@ export interface ServerNoteResponse {
   body?: string;
 }
 
+/** Danbooru's page-size cap for /notes.json. */
+const NOTES_PAGE_SIZE = 1000;
+/** Posts allow up to 1200 active notes (`Note::MAX_NOTES_PER_POST`). */
+const NOTES_MAX_PAGES = 5;
+
 /**
  * Fetches the active (non-deleted) notes for the current post.
  *
  * Danbooru exposes notes via the global `/notes.json` endpoint with a
  * search filter — there is no `/posts/{id}/notes.json` route (404).
- * `is_active=true` skips server-side soft-deleted notes; `limit=1000`
- * is well above any sane post's note count.
+ * `is_active=true` skips server-side soft-deleted notes. A post can
+ * hold up to 1200 notes but a page holds 1000, so a full page is
+ * followed by the next one (`page=b<lowest id>`, stable while notes
+ * change) — v5.1 Task 3.5.
  *
  * In-flight dedupe (Phase 5-h Task 5.32): a fast active-mode toggle
  * could otherwise fire two overlapping `enterActiveMode` runs and
@@ -71,14 +78,28 @@ export function fetchServerNotes(): Promise<ServerNoteDescriptor[]> {
   if (!id) {
     return Promise.reject(new Error('No post id in URL'));
   }
-  const url =
-    `/notes.json?search%5Bpost_id%5D=${id}` +
-    '&search%5Bis_active%5D=true&limit=1000';
-  const p = getJson<ServerNoteDescriptor[]>(url).finally(() => {
+  const p = fetchAllPages(id).finally(() => {
     serverNotesInFlight = null;
   });
   serverNotesInFlight = p;
   return p;
+}
+
+async function fetchAllPages(postId: string): Promise<ServerNoteDescriptor[]> {
+  const base =
+    `/notes.json?search%5Bpost_id%5D=${postId}` +
+    `&search%5Bis_active%5D=true&limit=${NOTES_PAGE_SIZE}`;
+  let all: ServerNoteDescriptor[] = [];
+  let cursor = '';
+  for (let i = 0; i < NOTES_MAX_PAGES; i++) {
+    const page = await getJson<ServerNoteDescriptor[]>(base + cursor);
+    all = all.concat(page);
+    if (page.length < NOTES_PAGE_SIZE) {
+      break;
+    }
+    cursor = `&page=b${Math.min(...page.map(n => n.id))}`;
+  }
+  return all;
 }
 
 /**
