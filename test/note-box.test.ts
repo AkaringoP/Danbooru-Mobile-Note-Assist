@@ -226,6 +226,32 @@ describe('renderNoteBox — cachedRect branches', () => {
   });
 });
 
+describe('renderNoteBox — stacking order (Task 2.6)', () => {
+  const RECT: DisplayRect = {left: 0, top: 0, width: 1000, height: 750};
+
+  function zOf(w: number, h: number, id: string): number {
+    const noteId = asTempNoteId(id);
+    notes.set(noteId, makeNote({current: {...BASE, w, h}}));
+    renderNoteBox(noteId, RECT);
+    return Number(
+      notes.get(noteId)!.domElement!.style.getPropertyValue('--dmna-box-z'),
+    );
+  }
+
+  it('a smaller box stacks above a larger one', () => {
+    const big = zOf(1000, 750, 'temp-z-big');
+    const mid = zOf(500, 375, 'temp-z-mid');
+    const small = zOf(20, 20, 'temp-z-small');
+    expect(big).toBe(9990);
+    expect(mid).toBeGreaterThan(big);
+    expect(small).toBeGreaterThan(mid);
+  });
+
+  it('stays below the drag ghost (10500)', () => {
+    expect(zOf(1, 1, 'temp-z-tiny')).toBeLessThan(10500);
+  });
+});
+
 describe('renderNoteBox — DOM lifecycle', () => {
   it('creates the DOM element on first render and reuses it on the second', () => {
     const id = asTempNoteId('temp-lifecycle');

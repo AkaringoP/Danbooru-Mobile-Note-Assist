@@ -150,6 +150,18 @@ export function renderNoteBox(
     // at high pinch zoom.
     const triSize = Math.min(Math.min(screen.width, screen.height) / 6, 8);
     el.style.setProperty('--dmna-triangle-size', `${triSize}px`);
+    // Smaller boxes stack higher so a note covering the image can't
+    // hide the notes under it from taps (v5.1 Task 2.6). Range
+    // 9990–10490 stays below the drag ghost (10500); the selected box
+    // gets 10495 from CSS.
+    const areaRatio = Math.min(
+      1,
+      (screen.width * screen.height) / (rect.width * rect.height),
+    );
+    el.style.setProperty(
+      '--dmna-box-z',
+      String(9990 + Math.round(500 * (1 - areaRatio))),
+    );
   } else {
     // Image rect not yet known — hide until the next re-render
     // (window resize, image load, or explicit

@@ -79,7 +79,8 @@ export const STYLES = `
       position: absolute;
       border: 1.2px solid #0073ff;
       background-color: rgba(0, 115, 255, 0.15);
-      z-index: 9990;
+      /* Per-box, set by renderNoteBox: smaller boxes stack higher. */
+      z-index: var(--dmna-box-z, 9990);
       box-sizing: border-box;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
       pointer-events: none;
@@ -96,6 +97,7 @@ export const STYLES = `
       background-color: rgba(229, 57, 53, 0.10);
     }
     .dmna-note-box.is-active {
+      z-index: 10495;
       border-style: solid;
       border-color: #ff9800;
       background-color: rgba(255, 152, 0, 0.15);

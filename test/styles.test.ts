@@ -42,3 +42,15 @@ describe('Box touch-action (Task 2.5)', () => {
     expect(ruleBody('.dmna-handle')).toMatch(/touch-action:\s*none/);
   });
 });
+
+describe('Box stacking (Task 2.6)', () => {
+  it('boxes take their z-index from --dmna-box-z', () => {
+    expect(ruleBody('.dmna-note-box')).toMatch(
+      /z-index:\s*var\(--dmna-box-z,\s*9990\)/,
+    );
+  });
+
+  it('the selected box sits above every other box, below the ghost', () => {
+    expect(ruleBody('.dmna-note-box.is-active')).toMatch(/z-index:\s*10495/);
+  });
+});
