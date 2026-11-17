@@ -5,6 +5,11 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- **Development dependencies updated** to clear the open advisories: happy-dom 21, vitest 4.1.12, and newer `tmp`, `postcss`, `js-yaml`, `brace-expansion`, `ws`, `nanoid`, `source-map-js` (the last ones through `overrides` and the lockfile). All of them are test, lint and build tools; none of their code is in the published script, and the bundle is byte-for-byte the same as 5.1.3. If `npm install` fails with `Cannot read properties of null (reading 'edgesOut')` while changing dependencies, use `npx npm@11 install`; `npm ci` is unaffected.
+
 ## [5.1.3] - 2026-11-17
 
 Maintenance release: new build tooling and reorganized docs. The script behaves the same as 5.1.2.
