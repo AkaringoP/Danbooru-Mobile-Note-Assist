@@ -78,6 +78,15 @@ export interface NoteBoxHooks {
    * underlying `suppressNextBoxClick` state).
    */
   consumeBoxClickSuppression: () => boolean;
+
+  /**
+   * A box's visual state was just recomputed — the one choke point
+   * every dirty / deleted / active change passes through, including
+   * drag ends that never touch the store hooks. Subscriber:
+   * interactions/pending-indicator.schedulePendingRefresh (v5.1 Task
+   * 4.8).
+   */
+  onVisualsUpdated: () => void;
 }
 
 let hooks: NoteBoxHooks | null = null;
@@ -150,6 +159,18 @@ export function renderNoteBox(
     // at high pinch zoom.
     const triSize = Math.min(Math.min(screen.width, screen.height) / 6, 8);
     el.style.setProperty('--dmna-triangle-size', `${triSize}px`);
+    // Smaller boxes stack higher so a note covering the image can't
+    // hide the notes under it from taps (v5.1 Task 2.6). Range
+    // 9990–10490 stays below the drag ghost (10500); the selected box
+    // gets 10495 from CSS.
+    const areaRatio = Math.min(
+      1,
+      (screen.width * screen.height) / (rect.width * rect.height),
+    );
+    el.style.setProperty(
+      '--dmna-box-z',
+      String(9990 + Math.round(500 * (1 - areaRatio))),
+    );
   } else {
     // Image rect not yet known — hide until the next re-render
     // (window resize, image load, or explicit
@@ -212,6 +233,7 @@ export function updateNoteVisuals(noteId: NoteId): void {
   el.classList.toggle('is-active', getActiveNoteId() === noteId);
   el.classList.toggle('is-deleted', note.isDeleted);
   el.classList.toggle('is-dirty', isDirty(note));
+  hooks!.onVisualsUpdated();
 }
 
 /**
@@ -318,7 +340,7 @@ function createNoteBoxDOM(noteId: NoteId): HTMLElement {
   // Add 4 corner handles. NW/SE = resize, NE/SW = move-only.
   // The `data-icon` attribute is consumed by the debug-zone overlay
   // (`body.dmna-show-debug-zones .dmna-handle::before`) — invisible
-  // unless the popover's 👁 button is held.
+  // unless the popover's touch-zone button is held.
   const handleIcons: Record<HandleCorner, string> = {
     nw: '↖',
     ne: '✥',

@@ -116,6 +116,16 @@ export interface NotesStoreHooks {
    *   - ui/popover: `applyTextUndoSnapshot(noteId, snapshot)`.
    */
   onTextUndo: (noteId: NoteId, snapshot: TextSnapshot) => void;
+
+  /**
+   * A batch of notes entered the collection without being rendered
+   * (edit-mode entry, draft restore). Rendering them one by one read
+   * the image rect per note between style writes — 9 s of layout for
+   * 1000 notes on a throttled phone (v5.1 Task 3.5). Subscribers:
+   *   - ui/note-box: `updateAllNoteBoxPositions()` (one rect read)
+   *   - ui/popover: `refreshActivePopover()`
+   */
+  onNotesAdded: (ids: NoteId[]) => void;
 }
 
 let hooks: NotesStoreHooks | null = null;
@@ -396,8 +406,12 @@ async function enterActiveMode(gen: number): Promise<void> {
     return;
   }
 
-  for (const sn of serverNotes) {
-    addServerNote(sn);
+  const added = serverNotes.flatMap(sn => {
+    const id = insertServerNote(sn);
+    return id ? [id] : [];
+  });
+  if (added.length > 0) {
+    hooks!.onNotesAdded(added);
   }
 }
 
@@ -464,14 +478,46 @@ function tryDeactivate(): void {
  * to clear. Fires `onActiveChanged` with both the previous and new id
  * so subscribers can update visuals on each side and show/hide the
  * popover in one step.
+ *
+ * Switching straight from a fresh new box (never ✔'d) to another note
+ * settles that box first, so no un-committed new box is left behind
+ * without its popover — Confirm would silently drop it (v5.1 Task
+ * 1.6). Clearing the selection (`null`) is left to the callers, which
+ * already route fresh new boxes (✔ / ✖ / 🗑 / outside tap / Esc).
  */
 export function setActiveNote(noteId: NoteId | null): void {
   if (activeNoteId === noteId) {
     return;
   }
+  if (activeNoteId !== null && noteId !== null) {
+    settleFreshNoteOnSwitch(activeNoteId);
+  }
   const prev = activeNoteId;
   activeNoteId = noteId;
   hooks!.onActiveChanged(prev, noteId);
+}
+
+/**
+ * Typed text → checkpoint it exactly like ✔ (undoable with ↶). Blank →
+ * remove the box, the same as an outside tap.
+ */
+function settleFreshNoteOnSwitch(id: NoteId): void {
+  const note = notes.get(id);
+  if (!note || note.isServerNote || note.everConfirmed) {
+    return;
+  }
+  if (note.current.text.trim()) {
+    commitCheckpoint(id, note);
+  } else {
+    hardDeleteNote(id);
+  }
+}
+
+/** ✔ semantics without the selection change. */
+function commitCheckpoint(noteId: NoteId, note: Note): void {
+  pushAction(noteId, 'edit', {...note.confirmedState});
+  note.confirmedState = {...note.current};
+  note.everConfirmed = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -566,9 +612,7 @@ export function popoverConfirm(noteId: NoteId): void {
   if (!note) {
     return;
   }
-  pushAction(noteId, 'edit', {...note.confirmedState});
-  note.confirmedState = {...note.current};
-  note.everConfirmed = true;
+  commitCheckpoint(noteId, note);
   // setActiveNote(null) fires onActiveChanged(prev=noteId, null),
   // whose main.ts subscriber refreshes the prev box's visuals.
   // v3.1.1 had a redundant `onNoteVisualsChanged(noteId)` here too —
@@ -670,9 +714,21 @@ export function hardDeleteNote(id: NoteId): void {
  * `fetchServerNotes` resolves.
  */
 export function addServerNote(sn: ServerNoteDescriptor): void {
+  const id = insertServerNote(sn);
+  if (id) {
+    hooks!.onNoteRenderRequested(id);
+  }
+}
+
+/**
+ * Puts a server note into the collection without rendering it.
+ * Returns its id, or null when the id is already present (a restored
+ * draft wins over the server copy).
+ */
+function insertServerNote(sn: ServerNoteDescriptor): NoteId | null {
   const id = asServerNoteId(sn.id);
   if (notes.has(id)) {
-    return;
+    return null;
   }
   const state: NoteState = {
     x: sn.x,
@@ -691,7 +747,7 @@ export function addServerNote(sn: ServerNoteDescriptor): void {
     domElement: null,
   };
   notes.set(id, note);
-  hooks!.onNoteRenderRequested(id);
+  return id;
 }
 
 /**
@@ -783,6 +839,9 @@ export function serializeForDraft(): DraftSnapshot {
         isDeleted: note.isDeleted,
         isServerNote: note.isServerNote,
         everConfirmed: note.everConfirmed,
+        ...(note.uncertainPosts?.length
+          ? {uncertainPosts: note.uncertainPosts.map(s => ({...s}))}
+          : {}),
       },
     ]);
   }
@@ -852,6 +911,9 @@ export async function applyDraftSnapshot(
       isDeleted: snote.isDeleted,
       isServerNote: snote.isServerNote,
       everConfirmed: snote.everConfirmed,
+      ...(snote.uncertainPosts?.length
+        ? {uncertainPosts: snote.uncertainPosts.map(s => ({...s}))}
+        : {}),
       domElement: null,
     };
     notes.set(noteId, note);
@@ -895,9 +957,9 @@ export async function applyDraftSnapshot(
   //    onModeChanged hook itself.
   setMode(snapshot.mode);
 
-  // 5. Render restored boxes + re-establish active selection.
-  for (const id of notes.keys()) {
-    hooks!.onNoteRenderRequested(id);
+  // 5. Render restored boxes in one pass + re-establish active selection.
+  if (notes.size > 0) {
+    hooks!.onNotesAdded([...notes.keys()]);
   }
   if (snapshot.activeNoteId !== null) {
     const activeId = rebrandNoteId(snapshot.activeNoteId);

@@ -22,7 +22,7 @@ export default defineConfig([
   // package.json). All sources live under `src/` post-Phase-4 — there
   // is no root userscript file to exclude.
   {
-    ignores: [...gtsIgnores, 'dist/', 'eslint.config.js'],
+    ignores: [...gtsIgnores, 'dist/', 'e2e/', 'eslint.config.js'],
   },
   ...gtsRules,
   // Project-wide overrides applied after gts so they take precedence.

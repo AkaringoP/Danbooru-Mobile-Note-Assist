@@ -1,5 +1,5 @@
 /**
- * Per-note popover (v3.0 Phase 3 Wave 3) — textarea + ✔/✖/🗑 + 👁/↶
+ * Per-note popover (v3.0 Phase 3 Wave 3) — textarea + action row + touch-zone/↶
  * side stack, anchored under the active box.
  *
  * Layer 3 (ui). Module-private state owns:
@@ -31,13 +31,18 @@
 
 import {NoteId, TextSnapshot, isServerNoteId} from '../types';
 import {
+  NOTE_BODY_MAX_LENGTH,
   POPOVER_OFFSET,
-  POPOVER_VIEWPORT_PADDING,
-  POPOVER_WIDTH,
   SCRIPT_NAME,
   SCRIPT_VERSION,
 } from '../config';
-import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {
+  DisplayRect,
+  getImageDisplayRect,
+  imageToScreenRect,
+} from '../utils/coords';
+import {serverNoteBodyLength} from '../utils/note-body';
+import {computePopoverPlacement} from '../utils/popover-placement';
 import {apiPreviewNote} from '../api/notes';
 import {getOriginalWidth} from '../state/image-state';
 import {
@@ -69,11 +74,9 @@ import {showToast} from './toast';
 
 let popoverElement: HTMLElement | null = null;
 let popoverInputElement: HTMLTextAreaElement | null = null;
-// `popoverArrowElement` from v3.1.1's closure inventory is dropped:
-// the arrow div is appended once during createPopover but no caller
-// (in or out of this module) reads it after — the static CSS-center
-// arrow doesn't need a per-call slide. Phase 1 fidelity loss is
-// nominal; Phase 2 won't miss it.
+// Slides along the top edge so it keeps pointing at the box when the
+// popover is clamped against a viewport edge (v5.1).
+let popoverArrowElement: HTMLElement | null = null;
 
 // Preview-mode state (Phase 3, v4.2). `previewElement` is the read-only
 // div that shows the server-sanitized HTML when isPreviewMode is true;
@@ -84,6 +87,7 @@ let popoverInputElement: HTMLTextAreaElement | null = null;
 let popoverPreviewElement: HTMLElement | null = null;
 let popoverModeToggleElement: HTMLButtonElement | null = null;
 let popoverStyleToggleElement: HTMLButtonElement | null = null;
+let popoverCountElement: HTMLElement | null = null;
 let isPreviewMode = false;
 
 /**
@@ -156,6 +160,7 @@ export function createPopover(): void {
   const arrow = document.createElement('div');
   arrow.id = 'dmna-popover-arrow';
   root.appendChild(arrow);
+  popoverArrowElement = arrow;
 
   // Header row (Phase 3, v4.2) — hosts the Preview/Edit mode toggle
   // on the left and a "view help" wiki link on the right, mirroring
@@ -178,6 +183,14 @@ export function createPopover(): void {
     void handleModeToggle();
   });
   header.appendChild(modeToggle);
+
+  // "123 / 5000" — the body length as the server will count it, so a
+  // translation that is too long shows up before Confirm fails on it.
+  const count = document.createElement('span');
+  count.className = 'dmna-popover-count';
+  count.setAttribute('aria-live', 'polite');
+  header.appendChild(count);
+  popoverCountElement = count;
 
   const helpLink = document.createElement('a');
   helpLink.id = 'dmna-popover-help-link';
@@ -213,6 +226,7 @@ export function createPopover(): void {
       note.current.text = input.value;
       updateNoteVisuals(activeId);
     }
+    updateCharCount();
   });
   // Ctrl/Cmd+Enter inside the textarea = ✔. Bare Enter still inserts
   // a newline. Esc is handled at document level
@@ -246,13 +260,13 @@ export function createPopover(): void {
   inputRow.appendChild(preview);
   popoverPreviewElement = preview;
 
-  // Right-side button stack: 👁 (top, hold-to-show debug zones) +
+  // Right-side button stack: touch zones (top, hold-to-show) +
   // ↶ (bottom, per-note undo). Two narrow stacked buttons share the
   // same column width as the old single eye button (44 px).
   const sideStack = document.createElement('div');
   sideStack.id = 'dmna-popover-side-stack';
 
-  // 👁 hold-to-show touch-zone debug button. Press-and-hold mirrors
+  // Hold-to-show touch-zone debug button. Press-and-hold mirrors
   // the v2.6 affordance (matches user muscle memory for "where do
   // those invisible corner zones really extend?"). Pointer-capture
   // ensures the up event lands on the button even if the user drags
@@ -261,7 +275,7 @@ export function createPopover(): void {
   eyeBtn.type = 'button';
   eyeBtn.id = 'dmna-popover-eye';
   eyeBtn.className = 'dmna-popover-side-btn';
-  eyeBtn.textContent = '👁';
+  eyeBtn.appendChild(createZoneIcon());
   eyeBtn.setAttribute('aria-label', 'Show touch zones (press and hold)');
   eyeBtn.title = 'Show touch zones (hold)';
   eyeBtn.addEventListener('pointerdown', e => {
@@ -298,7 +312,7 @@ export function createPopover(): void {
   undoBtn.type = 'button';
   undoBtn.id = 'dmna-popover-undo';
   undoBtn.className = 'dmna-popover-side-btn';
-  undoBtn.textContent = '↶';
+  undoBtn.appendChild(createUndoIcon());
   undoBtn.setAttribute('aria-label', 'Undo last change to this note');
   undoBtn.title = 'Undo last change';
   undoBtn.addEventListener('click', e => {
@@ -350,31 +364,31 @@ export function createPopover(): void {
 
   const buttons = document.createElement('div');
   buttons.id = 'dmna-popover-buttons';
-  // ✔ / ✖ have dual presentation: text glyph (CSS color applies) or
-  // emoji (system color, CSS ignored). On Safari/iOS the default
-  // falls back to emoji, which made the buttons look uniformly dark
-  // in the user's screenshot. Appending ︎ (Variation Selector-15)
-  // forces the text presentation. 🗑 has no text variant so it stays
-  // as a system emoji — its CSS color is a visual hint that may be
-  // ignored.
+  // Text labels styled like Danbooru's own note dialog buttons (v5.1).
+  // "Commit", not "Save": it sets a local checkpoint; nothing reaches
+  // the server until ✓ Confirm.
   const actions: Array<{
     action: 'confirm' | 'cancel' | 'delete' | 'history';
-    icon: string;
     label: string;
+    title: string;
   }> = [
-    {action: 'confirm', icon: '✔︎', label: 'Confirm'},
-    {action: 'cancel', icon: '✖︎', label: 'Cancel'},
-    {action: 'delete', icon: '🗑', label: 'Delete'},
-    {action: 'history', icon: '📜', label: 'History'},
+    {
+      action: 'confirm',
+      label: 'Commit',
+      title: 'Commit this note locally (sent on ✓ Confirm)',
+    },
+    {action: 'cancel', label: 'Cancel', title: 'Discard uncommitted edits'},
+    {action: 'delete', label: 'Delete', title: 'Delete this note'},
+    {action: 'history', label: 'History', title: 'Open the version history'},
   ];
-  actions.forEach(({action, icon, label}) => {
+  actions.forEach(({action, label, title}) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'dmna-popover-btn';
     b.dataset.action = action;
     b.setAttribute('aria-label', label);
-    b.title = label;
-    b.textContent = icon;
+    b.title = title;
+    b.textContent = label;
     b.addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -413,6 +427,7 @@ export function showPopover(noteId: NoteId): void {
   if (popoverInputElement.dataset.boundNoteId !== noteId) {
     popoverInputElement.value = note.current.text || '';
     popoverInputElement.dataset.boundNoteId = noteId;
+    updateCharCount();
     // Note swap (or first show) drops any leftover Preview mode from
     // the previous note. v4.2 Phase 3.
     resetPreviewMode();
@@ -459,8 +474,8 @@ export function hidePopover(): void {
  * Reflects the active note's `isDeleted` and `isServerNote` state
  * onto the popover's controls.
  *
- * - Soft-deleted note: textarea + ✔ / ✖ / 🗑 / 👁 disabled. ↶ is
- *   highlighted as the only live action. Re-enabled when popoverUndo
+ * - Soft-deleted note: textarea, Commit / Cancel / Delete and the
+ *   touch-zone button disabled. ↶ is highlighted as the only live action. Re-enabled when popoverUndo
  *   restores the note (`isDeleted` flips back to false).
  * - History 📜 (Phase 2, v4.2): disable mirrors `!isServerNote`, not
  *   `isDeleted` — viewing the version history of a server note still
@@ -500,7 +515,9 @@ export function updatePopoverForActiveNote(): void {
  * Re-projects the active box's image-space rect to display space and
  * pins the popover under it. Counter-scales the popover so its
  * visual size stays constant under pinch zoom — the same trick the
- * floating button uses, but with anchoring math.
+ * floating button uses, but with anchoring math. Horizontal clamp,
+ * narrow-screen shrink and the arrow slide come from
+ * `computePopoverPlacement`.
  *
  * No `.show` check: showPopover deliberately calls this BEFORE
  * adding the show class so the transform is in place when the
@@ -509,7 +526,7 @@ export function updatePopoverForActiveNote(): void {
  * the real "should we be running this" check — activeNoteId and
  * popover-shown are kept in sync by setActiveNote.
  */
-export function updatePopoverPosition(): void {
+export function updatePopoverPosition(cachedRect?: DisplayRect): void {
   if (!popoverElement) {
     return;
   }
@@ -521,11 +538,11 @@ export function updatePopoverPosition(): void {
   if (!note) {
     return;
   }
-  const img = document.getElementById('image') as HTMLImageElement | null;
-  if (!img) {
-    return;
+  let displayRect = cachedRect ?? null;
+  if (!displayRect) {
+    const img = document.getElementById('image') as HTMLImageElement | null;
+    displayRect = img ? getImageDisplayRect(img) : null;
   }
-  const displayRect = getImageDisplayRect(img);
   if (!displayRect) {
     return;
   }
@@ -537,40 +554,29 @@ export function updatePopoverPosition(): void {
 
   const vv = window.visualViewport;
   const scale = vv ? vv.scale : 1;
-  const invScale = 1 / scale;
   const vvPageLeft = vv ? vv.pageLeft : window.pageXOffset;
   const vvPageTop = vv ? vv.pageTop : window.pageYOffset;
-  const vvWidth = vv ? vv.width : window.innerWidth;
+  const visW = (vv ? vv.width : window.innerWidth) * scale;
 
-  // Box's visual rect in viewport-CSS-pixels.
+  // Box's visual rect in screen px.
   const boxVisualLeft = (boxRectPage.left - vvPageLeft) * scale;
   const boxVisualTop = (boxRectPage.top - vvPageTop) * scale;
-  const boxVisualWidth = boxRectPage.width * scale;
-  const boxVisualHeight = boxRectPage.height * scale;
-  const boxCenterVisualX = boxVisualLeft + boxVisualWidth / 2;
-  const boxBottomVisualY = boxVisualTop + boxVisualHeight;
+  const boxCenterVisualX = boxVisualLeft + (boxRectPage.width * scale) / 2;
+  const boxBottomVisualY = boxVisualTop + boxRectPage.height * scale;
 
-  // Popover visual position: centered on the box, then clamped
-  // horizontally to keep it inside the visual viewport WHEN it fits.
-  // At extreme pinch-zoom the popover is wider than the visual
-  // viewport (e.g., vvWidth=300, popover=343), where any clamp would
-  // pin it to the viewport edge and break the "anchored to box"
-  // illusion — in that case we skip the clamp and let it overflow
-  // (pinch out / pan to see the rest). The arrow stays at the
-  // popover's CSS-center (set statically in createPopover); no
-  // per-call slide needed.
-  let popVisualLeft = boxCenterVisualX - POPOVER_WIDTH / 2;
+  const {left, fit, arrowLeft} = computePopoverPlacement({
+    boxCenterX: boxCenterVisualX,
+    visW,
+  });
   const popVisualTop = boxBottomVisualY + POPOVER_OFFSET;
-  if (POPOVER_WIDTH + POPOVER_VIEWPORT_PADDING * 2 <= vvWidth) {
-    const minLeft = POPOVER_VIEWPORT_PADDING;
-    const maxLeft = vvWidth - POPOVER_WIDTH - POPOVER_VIEWPORT_PADDING;
-    popVisualLeft = Math.max(minLeft, Math.min(popVisualLeft, maxLeft));
-  }
 
   // Convert visual coords back to document coords for the transform.
-  const tx = vvPageLeft + popVisualLeft / scale;
+  const tx = vvPageLeft + left / scale;
   const ty = vvPageTop + popVisualTop / scale;
-  popoverElement.style.transform = `translate(${tx}px, ${ty}px) scale(${invScale})`;
+  popoverElement.style.transform = `translate(${tx}px, ${ty}px) scale(${fit / scale})`;
+  if (popoverArrowElement) {
+    popoverArrowElement.style.left = `${arrowLeft}px`;
+  }
 }
 
 /**
@@ -600,6 +606,7 @@ export function refreshActivePopover(): void {
   }
   if (popoverInputElement.dataset.boundNoteId === activeId) {
     popoverInputElement.value = note.current.text || '';
+    updateCharCount();
   }
   updatePopoverForActiveNote();
   updatePopoverPosition();
@@ -639,6 +646,97 @@ export function applyTextUndoSnapshot(
     snapshot.selectionEnd,
   );
   popoverInputElement.dispatchEvent(new Event('input', {bubbles: true}));
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgEl(
+  tag: string,
+  attrs: Record<string, string | number>,
+): SVGElement {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    el.setAttribute(k, String(v));
+  }
+  return el;
+}
+
+/**
+ * Undo icon: the line runs down the right side, curves over the top and
+ * ends in an arrowhead pointing left (9 o'clock). The ↶ glyph rendered
+ * small and differed per font.
+ */
+function createUndoIcon(): SVGElement {
+  const svg = svgEl('svg', {
+    class: 'dmna-undo-icon',
+    viewBox: '0 0 24 24',
+    width: 22,
+    height: 22,
+    'aria-hidden': 'true',
+    focusable: 'false',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': 2,
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+  });
+  svg.appendChild(svgEl('path', {d: 'M4.5 8 H11 A8 8 0 0 1 19 16 V19.5'}));
+  svg.appendChild(svgEl('path', {d: 'M8.5 4 L4.5 8 L8.5 12'}));
+  return svg;
+}
+
+/**
+ * Touch-zone button icon: a dashed box (the note box's zones) with a
+ * small eye on its top-right corner. The plain 👁 read as a second "Preview"
+ * next to the header toggle (v5.1). Built with DOM calls — the
+ * Preview sink stays the only innerHTML write.
+ */
+function createZoneIcon(): SVGElement {
+  const svg = svgEl('svg', {
+    class: 'dmna-zone-icon',
+    viewBox: '0 0 24 24',
+    width: 22,
+    height: 22,
+    'aria-hidden': 'true',
+    focusable: 'false',
+  });
+  // The box outline stops short of the corner the eye sits on, so the
+  // eye needs no fill and works on both the idle and the pressed color.
+  svg.appendChild(
+    svgEl('path', {
+      d: 'M9.5 7.5 H2.5 V21.5 H16.5 V14',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.6,
+      'stroke-dasharray': '2.6 2',
+    }),
+  );
+  svg.appendChild(
+    svgEl('path', {
+      d: 'M10.5 6.5 Q16.5 0.8 22.5 6.5 Q16.5 12.2 10.5 6.5 Z',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.5,
+      'stroke-linejoin': 'round',
+    }),
+  );
+  svg.appendChild(
+    svgEl('circle', {cx: 16.5, cy: 6.5, r: 2.1, fill: 'currentColor'}),
+  );
+  return svg;
+}
+
+/** Refreshes the header's "length / limit" label from the textarea. */
+function updateCharCount(): void {
+  if (!popoverCountElement || !popoverInputElement) {
+    return;
+  }
+  const length = serverNoteBodyLength(popoverInputElement.value);
+  popoverCountElement.textContent = `${length} / ${NOTE_BODY_MAX_LENGTH}`;
+  popoverCountElement.classList.toggle(
+    'is-over',
+    length > NOTE_BODY_MAX_LENGTH,
+  );
 }
 
 /**

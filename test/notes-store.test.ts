@@ -82,6 +82,7 @@ function makeHooks(): NotesStoreHooks {
     onReopenMenuRequested: vi.fn(),
     hasPendingChanges: vi.fn(() => false),
     onTextUndo: vi.fn(),
+    onNotesAdded: vi.fn(),
   };
 }
 
@@ -302,6 +303,85 @@ describe('setActiveNote', () => {
     vi.mocked(hooks.onActiveChanged).mockClear();
     setActiveNote(id);
     expect(hooks.onActiveChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('setActiveNote — leaving a fresh new box (Task 1.6)', () => {
+  it('switching to another note checkpoints typed text like ✔', () => {
+    const a = createTempNote({...BASE, text: ''});
+    const b = createTempNote({...BASE, x: 200});
+    popoverConfirm(b);
+    setActiveNote(a);
+    notes.get(a)!.current.text = 'typed, no ✔';
+
+    setActiveNote(b);
+
+    const note = notes.get(a)!;
+    expect(note.everConfirmed).toBe(true);
+    expect(note.confirmedState.text).toBe('typed, no ✔');
+    expect(actionLog.get(a)!.map(e => e.type)).toEqual(['create', 'edit']);
+    expect(getActiveNoteId()).toBe(b);
+    expect(hooks.onActiveChanged).toHaveBeenLastCalledWith(a, b);
+  });
+
+  it('the auto-checkpoint can be undone with ↶', () => {
+    const a = createTempNote({...BASE});
+    const b = createTempNote({...BASE, x: 200});
+    setActiveNote(a);
+    notes.get(a)!.current.text = 'typed';
+    setActiveNote(b);
+
+    popoverUndo(a);
+
+    expect(notes.get(a)!.current.text).toBe('');
+    expect(notes.get(a)!.confirmedState.text).toBe('');
+  });
+
+  it('a blank new box is removed on switch', () => {
+    const a = createTempNote({...BASE});
+    const b = createTempNote({...BASE, x: 200});
+    setActiveNote(a);
+    notes.get(a)!.current.text = '   ';
+    vi.mocked(hooks.onActiveChanged).mockClear();
+
+    setActiveNote(b);
+
+    expect(notes.has(a)).toBe(false);
+    expect(actionLog.has(a)).toBe(false);
+    expect(hooks.onNoteRemoved).toHaveBeenCalledWith(a);
+    expect(getActiveNoteId()).toBe(b);
+    expect(hooks.onActiveChanged).toHaveBeenLastCalledWith(null, b);
+  });
+
+  it('committed temps and server notes switch unchanged', () => {
+    const temp = createTempNote({...BASE, text: 'x'});
+    popoverConfirm(temp);
+    const server = asServerNoteId('42');
+    notes.set(server, makeNote({isServerNote: true}));
+    const other = createTempNote({...BASE, x: 300});
+    popoverConfirm(other);
+
+    setActiveNote(temp);
+    notes.get(temp)!.current.text = 'edited';
+    setActiveNote(server);
+    expect(notes.get(temp)!.confirmedState.text).toBe('x');
+    expect(actionLog.get(temp)!.map(e => e.type)).toEqual(['create', 'edit']);
+
+    notes.get(server)!.current.text = 'edited';
+    setActiveNote(other);
+    expect(notes.get(server)!.everConfirmed).toBe(false);
+    expect(actionLog.has(server)).toBe(false);
+  });
+
+  it('clearing the selection (null) leaves a fresh new box as it was', () => {
+    const a = createTempNote({...BASE});
+    setActiveNote(a);
+    notes.get(a)!.current.text = 'typed';
+
+    setActiveNote(null);
+
+    expect(notes.get(a)!.everConfirmed).toBe(false);
+    expect(actionLog.get(a)!.map(e => e.type)).toEqual(['create']);
   });
 });
 
@@ -920,6 +1000,46 @@ describe('enterActiveMode — gen-counter cancellation', () => {
 // Draft serialization helpers (v4.1)
 // ---------------------------------------------------------------------------
 
+describe('enterActiveMode — batch render (Task 3.5)', () => {
+  it('adds every server note, then fires one onNotesAdded and no per-note renders', async () => {
+    const descriptors = Array.from({length: 50}, (_, i) => ({
+      id: 3000 + i,
+      x: i,
+      y: i,
+      width: 10,
+      height: 10,
+      body: 'n' + i,
+    }));
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce(descriptors);
+
+    setMode('active');
+    await vi.waitFor(() => expect(hooks.onNotesAdded).toHaveBeenCalled());
+
+    expect(notes.size).toBe(50);
+    expect(hooks.onNoteRenderRequested).not.toHaveBeenCalled();
+    expect(hooks.onNotesAdded).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(hooks.onNotesAdded).mock.calls[0][0]).toHaveLength(50);
+  });
+
+  it('notes already in the collection (restored draft) are kept and not re-announced', async () => {
+    const id = asServerNoteId('3100');
+    notes.set(
+      id,
+      makeNote({isServerNote: true, current: {...BASE, text: 'mine'}}),
+    );
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce([
+      {id: 3100, x: 0, y: 0, width: 1, height: 1, body: 'server'},
+      {id: 3101, x: 0, y: 0, width: 1, height: 1, body: 'new'},
+    ]);
+
+    setMode('active');
+    await vi.waitFor(() => expect(hooks.onNotesAdded).toHaveBeenCalled());
+
+    expect(notes.get(id)!.current.text).toBe('mine');
+    expect(hooks.onNotesAdded).toHaveBeenCalledWith(['3101']);
+  });
+});
+
 describe('hasContentToSave', () => {
   it('returns false in idle mode', () => {
     // Module starts idle after beforeEach
@@ -1064,6 +1184,25 @@ describe('serializeForDraft', () => {
   });
 });
 
+describe('draft round-trip of uncertainPosts (review #1)', () => {
+  it('serializes the sent states and restores them', async () => {
+    const id = createTempNote({...BASE, text: 'x'});
+    popoverConfirm(id);
+    notes.get(id)!.uncertainPosts = [{...BASE, text: 'x'}];
+    const snap = serializeForDraft();
+    expect(snap.notes[0][1].uncertainPosts).toEqual([{...BASE, text: 'x'}]);
+
+    await applyDraftSnapshot(snap);
+
+    expect(notes.get(id)!.uncertainPosts).toEqual([{...BASE, text: 'x'}]);
+  });
+
+  it('leaves the field out when there is nothing uncertain', () => {
+    popoverConfirm(createTempNote({...BASE, text: 'x'}));
+    expect('uncertainPosts' in serializeForDraft().notes[0][1]).toBe(false);
+  });
+});
+
 describe('applyDraftSnapshot', () => {
   it('clears existing state before populating — onNoteRemoved fires for each prior note', async () => {
     const prior = asTempNoteId('temp-prior');
@@ -1141,7 +1280,7 @@ describe('applyDraftSnapshot', () => {
     expect(key).toBe('9999');
   });
 
-  it('triggers onNoteRenderRequested for each restored note', async () => {
+  it('renders restored notes in one batch (onNotesAdded), not per note', async () => {
     vi.mocked(hooks.onNoteRenderRequested).mockClear();
     const snap: DraftSnapshot = {
       mode: 'idle',
@@ -1174,7 +1313,12 @@ describe('applyDraftSnapshot', () => {
     };
     await applyDraftSnapshot(snap);
 
-    expect(hooks.onNoteRenderRequested).toHaveBeenCalledTimes(2);
+    expect(hooks.onNoteRenderRequested).not.toHaveBeenCalled();
+    expect(hooks.onNotesAdded).toHaveBeenCalledTimes(1);
+    expect(hooks.onNotesAdded).toHaveBeenCalledWith([
+      'temp-render-a',
+      'temp-render-b',
+    ]);
   });
 
   it('calls setMode with snapshot.mode — verified via onModeChanged hook', async () => {

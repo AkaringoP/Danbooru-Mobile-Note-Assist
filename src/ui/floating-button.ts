@@ -42,7 +42,7 @@ import {
   POS_X_KEY,
 } from '../config';
 import {isTextInputElement} from '../utils/dom';
-import {safeGetItem, safeSetItem} from '../state/draft';
+import {safeGetItem, safeRemoveItem, safeSetItem} from '../state/draft';
 import {getMode, toggleEditMode} from '../state/notes-store';
 import {closeMenu, toggleMenu} from './arc-menu';
 import {showToast} from './toast';
@@ -75,8 +75,9 @@ let userBtnMarginY = Number.isFinite(initialStoredY)
 
 // One-shot cleanup of the v2.x ON/OFF flag — v3.0 has no global
 // enabled state; mode is per-session and lives only in the menu state
-// machine.
-localStorage.removeItem(LEGACY_STATE_KEY);
+// machine. Guarded: a bare localStorage call here threw at import time
+// where storage is blocked and took the whole script down (v5.1).
+safeRemoveItem(LEGACY_STATE_KEY);
 
 // Auto-hide signal: `true` while Danbooru's native translation mode
 // or edit dialog is active. Flipped via `setNativeActiveHide` from
@@ -127,6 +128,21 @@ export function setFloatingButtonIcon(icon: string): void {
  */
 export function setFloatingButtonIconForMode(): void {
   setFloatingButtonIcon(getMode() === 'active' ? ICON_ACTIVE : ICON_IDLE);
+}
+
+/**
+ * Shows how many requests Confirm would send as a badge on the button
+ * (CSS draws it from `data-pending-count`); 0 removes it (v5.1 Task 4.8).
+ */
+export function setFloatingButtonPendingCount(count: number): void {
+  if (!floatBtnElement) {
+    return;
+  }
+  if (count > 0) {
+    floatBtnElement.dataset.pendingCount = count > 99 ? '99+' : String(count);
+  } else {
+    delete floatBtnElement.dataset.pendingCount;
+  }
 }
 
 /**
@@ -320,21 +336,31 @@ function setupButtonInteractions(btn: HTMLElement): void {
     }
   };
 
-  const handleEnd = (e: TouchEvent | MouseEvent): void => {
-    if (e.type === 'touchend') {
-      e.preventDefault();
-    }
+  /**
+   * Stops the long-press timer and, if a reposition drag was running,
+   * ends it and persists the position. Returns whether a drag ended.
+   */
+  const releasePress = (): boolean => {
     if (longPressTimer) {
       clearTimeout(longPressTimer);
       longPressTimer = null;
     }
     isPressing = false;
-    if (isDraggingBtn) {
-      isDraggingBtn = false;
-      btn.classList.remove('dragging');
-      safeSetItem(POS_X_KEY, String(userBtnMarginX));
-      safeSetItem(POS_KEY, String(userBtnMarginY));
-    } else {
+    if (!isDraggingBtn) {
+      return false;
+    }
+    isDraggingBtn = false;
+    btn.classList.remove('dragging');
+    safeSetItem(POS_X_KEY, String(userBtnMarginX));
+    safeSetItem(POS_KEY, String(userBtnMarginY));
+    return true;
+  };
+
+  const handleEnd = (e: TouchEvent | MouseEvent): void => {
+    if (e.type === 'touchend') {
+      e.preventDefault();
+    }
+    if (!releasePress()) {
       const isTouch = e.type.startsWith('touch');
       const endX = isTouch
         ? (e as TouchEvent).changedTouches[0].clientX
@@ -369,6 +395,13 @@ function setupButtonInteractions(btn: HTMLElement): void {
   btn.addEventListener('touchstart', handleStart, {passive: false});
   btn.addEventListener('touchmove', handleMove, {passive: false});
   btn.addEventListener('touchend', handleEnd);
+  // The OS can take a touch away (notification shade, back gesture,
+  // incoming call). Without this the long-press timer still fired and
+  // left the button in drag mode with no finger on it (v5.1 Task 4.1).
+  // No tap action runs on a cancel.
+  btn.addEventListener('touchcancel', () => {
+    releasePress();
+  });
   btn.addEventListener('mousedown', handleStart);
   document.addEventListener('mousemove', e => {
     if (isPressing) {

@@ -3,7 +3,8 @@
  * vitest globals: describe/it/expect/beforeEach/afterEach/vi — no explicit imports needed.
  */
 
-import {getCsrfToken, apiCall} from '../src/api/csrf';
+import {ApiError, apiCall, getCsrfToken, getJson} from '../src/api/csrf';
+import {REQUEST_TIMEOUT_MS} from '../src/config';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -332,5 +333,176 @@ describe('apiCall — error responses (4xx/5xx body surface, v3.0 D11)', () => {
     await expect(apiCall('POST', '/notes.json', {})).rejects.toThrow(
       /^HTTP 422 Unprocessable Entity$/,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Timeout + ApiError (v5.1 Task 1.3)
+// ---------------------------------------------------------------------------
+
+/** A fetch mock that never settles until its signal aborts. */
+function hangingFetch(): ReturnType<typeof vi.fn> {
+  return vi.fn(
+    (_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError')),
+        );
+      }),
+  );
+}
+
+async function caughtApiError(p: Promise<unknown>): Promise<ApiError> {
+  try {
+    await p;
+  } catch (e) {
+    if (e instanceof ApiError) {
+      return e;
+    }
+    throw e;
+  }
+  throw new Error('expected an ApiError rejection');
+}
+
+describe('request timeout + ApiError', () => {
+  beforeEach(() => {
+    document.head.innerHTML = '';
+    setMeta('fixture-token');
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('REQUEST_TIMEOUT_MS is 20 s', () => {
+    expect(REQUEST_TIMEOUT_MS).toBe(20_000);
+  });
+
+  it('apiCall: a request that never answers rejects with kind "timeout"', async () => {
+    const fetchMock = hangingFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const p = apiCall('POST', '/notes.json', {a: 1});
+    const assertion = expect(p).rejects.toMatchObject({
+      name: 'ApiError',
+      kind: 'timeout',
+      status: null,
+    });
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal?.aborted).toBe(
+      false,
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    await assertion;
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal?.aborted).toBe(
+      true,
+    );
+  });
+
+  it('apiCall: a body that never finishes reading also times out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            );
+          }),
+      })),
+    );
+    const p = apiCall('PUT', '/notes/1.json', {a: 1});
+    const assertion = expect(p).rejects.toMatchObject({kind: 'timeout'});
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await assertion;
+  });
+
+  it('apiCall: success leaves no timer behind', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeResponse(200, {ok: true})),
+    );
+    await apiCall('POST', '/notes.json', {a: 1});
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('apiCall: HTTP errors carry kind "http" and the status, message unchanged', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          makeResponse(429, 'slow down', {statusText: 'Too Many Requests'}),
+        ),
+    );
+    const err = await caughtApiError(apiCall('POST', '/notes.json', {}));
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({kind: 'http', status: 429});
+    expect(err.message).toBe('HTTP 429 Too Many Requests — slow down');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('apiCall: a fetch TypeError becomes kind "network"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+    );
+    const err = await caughtApiError(apiCall('POST', '/notes.json', {}));
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({kind: 'network', status: null});
+    expect(err.message).toBe('Failed to fetch');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('getJson: parses JSON, sends credentials and a signal', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse(200, {x: 1}));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getJson('/posts/1.json')).resolves.toEqual({x: 1});
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.credentials).toBe('same-origin');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('getJson: non-2xx rejects with kind "http"', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(404, '')));
+    await expect(getJson('/posts/1.json')).rejects.toMatchObject({
+      kind: 'http',
+      status: 404,
+      message: 'HTTP 404',
+    });
+  });
+
+  it('getJson: times out like apiCall', async () => {
+    vi.stubGlobal('fetch', hangingFetch());
+    const p = getJson('/notes.json');
+    const assertion = expect(p).rejects.toMatchObject({kind: 'timeout'});
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await assertion;
+  });
+});
+
+describe('timedFetch — only fetch() failures count as network errors (review #6)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('a TypeError while handling the response is not relabelled', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => Promise.reject(new TypeError('body stream broke')),
+      })),
+    );
+    const err = await apiCall('POST', '/notes.json', {}).catch(e => e);
+    expect(err).toBeInstanceOf(TypeError);
+    expect(err).not.toBeInstanceOf(ApiError);
   });
 });

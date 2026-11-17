@@ -8,11 +8,13 @@
  *     stored there.
  *   - `fetchPostTagString` — the post's current tag_string; not cached
  *     (the modal's seed state must reflect live tags at open time).
- *   - `apiPatchPostTags` — re-fetches tag_string, applies an add/
- *     remove delta, and PUTs back. Used by the Confirm-time tag modal.
+ *   - `apiPatchPostTags` — PUTs the add/remove delta with
+ *     `old_tag_string` so Danbooru merges it. Used by the Confirm-time
+ *     tag modal.
  */
 
-import {apiCall} from './csrf';
+import {TagDelta} from '../types';
+import {apiCall, getJson} from './csrf';
 import {
   getOriginalHeight,
   getOriginalWidth,
@@ -46,15 +48,9 @@ export function fetchPostMeta(): Promise<{width: number; height: number}> {
   if (!id) {
     return Promise.reject(new Error('No post id in URL'));
   }
-  const p = fetch(`/posts/${id}.json?only=image_width,image_height`, {
-    credentials: 'same-origin',
-  })
-    .then(r => {
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}`);
-      }
-      return r.json();
-    })
+  const p = getJson<{image_width?: unknown; image_height?: unknown}>(
+    `/posts/${id}.json?only=image_width,image_height`,
+  )
     .then(data => {
       const w = Number(data.image_width) || 0;
       const h = Number(data.image_height) || 0;
@@ -86,36 +82,28 @@ export function fetchPostTagString(): Promise<string> {
   if (!id) {
     return Promise.reject(new Error('No post id in URL'));
   }
-  return fetch(`/posts/${id}.json?only=tag_string`, {
-    credentials: 'same-origin',
-  })
-    .then(r => {
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}`);
-      }
-      return r.json();
-    })
-    .then(data => String(data.tag_string || ''));
+  return getJson<{tag_string?: unknown}>(
+    `/posts/${id}.json?only=tag_string`,
+  ).then(data => String(data.tag_string || ''));
 }
 
 /**
- * Re-fetches the post's tag_string, applies the user's add/remove
- * delta, and PUTs the updated tag_string back. Re-fetch (vs. using
- * the snapshot from the modal) closes the race where a co-editor
- * changed tags between modal-open and Confirm-submit; the delta is
- * still meaningful (it only adds tags the user wants ON and removes
- * tags they wanted OFF, leaving everything else alone).
+ * Applies the Confirm popover's add/remove delta to the post's tags in
+ * one PUT. `old_tag_string` is the tag string the user saw; Danbooru
+ * (PostEdit, the same path as its own edit form) adds and removes only
+ * what changed relative to it, so tags another editor changed in the
+ * meantime are kept. Replaces the earlier re-fetch + overwrite, which
+ * cost an extra GET and still raced with concurrent edits (v5.1).
  */
-export async function apiPatchPostTags(
-  tagsToAdd: string[],
-  tagsToRemove: string[],
-): Promise<unknown> {
-  const current = await fetchPostTagString();
-  const tags = new Set(current.split(/\s+/).filter(Boolean));
+export async function apiPatchPostTags({
+  tagsToAdd,
+  tagsToRemove,
+  baseTagString,
+}: TagDelta): Promise<unknown> {
+  const tags = new Set(baseTagString.split(/\s+/).filter(Boolean));
   tagsToAdd.forEach(t => tags.add(t));
   tagsToRemove.forEach(t => tags.delete(t));
-  const newTagString = [...tags].join(' ');
   return apiCall('PUT', `/posts/${getPostId()}.json`, {
-    post: {tag_string: newTagString},
+    post: {old_tag_string: baseTagString, tag_string: [...tags].join(' ')},
   });
 }

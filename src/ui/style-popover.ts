@@ -32,14 +32,11 @@
  * `console.log` for now.
  */
 
-import {
-  POPOVER_OFFSET,
-  POPOVER_VIEWPORT_PADDING,
-  POPOVER_WIDTH,
-} from '../config';
+import {POPOVER_OFFSET, POPOVER_WIDTH} from '../config';
 import {getOriginalWidth} from '../state/image-state';
 import {getActiveNoteId, notes, pushTextAction} from '../state/notes-store';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {computePopoverPlacement} from '../utils/popover-placement';
 import {parseStyleAttr, serializeStyleAttr} from '../utils/style-attr';
 import {
   getColorPickerTarget,
@@ -263,7 +260,10 @@ export function detectOuterLayers(before: string, after: string): OuterLayer[] {
   let consumedAfter = 0;
   while (true) {
     const slice = before.slice(0, bLen);
-    const openMatch = slice.match(/<([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)>$/);
+    // `\s[^<>]*`, not `\s+[^<>]*`: both accept the same strings, but
+    // the overlapping quantifiers backtracked quadratically on a long
+    // unterminated tag in a note body (v5.1 Task 2.7).
+    const openMatch = slice.match(/<([a-zA-Z][a-zA-Z0-9]*)((?:\s[^<>]*)?)>$/);
     if (!openMatch) {
       break;
     }
@@ -1220,10 +1220,9 @@ export function updateStylePopoverPosition(): void {
 
   const vv = window.visualViewport;
   const scale = vv ? vv.scale : 1;
-  const invScale = 1 / scale;
   const vvPageLeft = vv ? vv.pageLeft : window.pageXOffset;
   const vvPageTop = vv ? vv.pageTop : window.pageYOffset;
-  const vvWidth = vv ? vv.width : window.innerWidth;
+  const visW = (vv ? vv.width : window.innerWidth) * scale;
 
   const boxVisualLeft = (boxRectPage.left - vvPageLeft) * scale;
   const boxVisualTop = (boxRectPage.top - vvPageTop) * scale;
@@ -1232,17 +1231,15 @@ export function updateStylePopoverPosition(): void {
   const boxCenterVisualX = boxVisualLeft + boxVisualWidth / 2;
   const boxBottomVisualY = boxVisualTop + boxVisualHeight;
 
-  // Note popover's visual anchor (must match updatePopoverPosition,
-  // including the in-viewport horizontal clamp — otherwise the mobile
-  // stack drifts off-anchor when the note popover slides to fit).
-  let notePopVisualLeft = boxCenterVisualX - POPOVER_WIDTH / 2;
-  if (POPOVER_WIDTH + POPOVER_VIEWPORT_PADDING * 2 <= vvWidth) {
-    const minLeft = POPOVER_VIEWPORT_PADDING;
-    const maxLeft = vvWidth - POPOVER_WIDTH - POPOVER_VIEWPORT_PADDING;
-    notePopVisualLeft = Math.max(minLeft, Math.min(notePopVisualLeft, maxLeft));
-  }
+  // Note popover's visual anchor — the same placement
+  // updatePopoverPosition uses, so the two popovers move as one column.
+  const {left: notePopVisualLeft, fit} = computePopoverPlacement({
+    boxCenterX: boxCenterVisualX,
+    visW,
+  });
+  const notePopVisualWidth = POPOVER_WIDTH * fit;
   const notePopVisualTop = boxBottomVisualY + POPOVER_OFFSET;
-  const notePopVisualRight = notePopVisualLeft + POPOVER_WIDTH;
+  const notePopVisualRight = notePopVisualLeft + notePopVisualWidth;
 
   const isMobile = window.innerWidth < STYLE_POPOVER_MOBILE_BREAKPOINT;
   stylePopoverElement.classList.toggle('is-mobile', isMobile);
@@ -1267,15 +1264,15 @@ export function updateStylePopoverPosition(): void {
     // re-pins the note popover also re-pins this one, so a page swipe
     // brings the whole column into view together.
     const notePopEl = document.getElementById('dmna-popover');
-    const notePopHeight = notePopEl ? notePopEl.offsetHeight : 0;
+    const notePopHeight = notePopEl ? notePopEl.offsetHeight * fit : 0;
 
     styleVisualLeft =
-      notePopVisualLeft + (POPOVER_WIDTH - STYLE_POPOVER_WIDTH) / 2;
+      notePopVisualLeft + (notePopVisualWidth - STYLE_POPOVER_WIDTH) / 2;
     styleVisualTop = notePopVisualTop + notePopHeight + STYLE_POPOVER_GAP;
   } else {
     // Right default; flip left when right overflows.
     styleVisualLeft = notePopVisualRight + STYLE_POPOVER_GAP;
-    if (styleVisualLeft + STYLE_POPOVER_WIDTH > vvWidth) {
+    if (styleVisualLeft + STYLE_POPOVER_WIDTH > visW) {
       styleVisualLeft =
         notePopVisualLeft - STYLE_POPOVER_GAP - STYLE_POPOVER_WIDTH;
     }
@@ -1284,5 +1281,5 @@ export function updateStylePopoverPosition(): void {
 
   const tx = vvPageLeft + styleVisualLeft / scale;
   const ty = vvPageTop + styleVisualTop / scale;
-  stylePopoverElement.style.transform = `translate(${tx}px, ${ty}px) scale(${invScale})`;
+  stylePopoverElement.style.transform = `translate(${tx}px, ${ty}px) scale(${1 / scale})`;
 }

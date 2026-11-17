@@ -114,6 +114,14 @@ export interface Note {
    * "user ✔'d an empty box without editing" as fresh-new.
    */
   everConfirmed: boolean;
+  /**
+   * Temp notes only: the states sent by POSTs that failed without a
+   * refusal (network drop, timeout, 5xx) — the server may have stored
+   * any of them. Every later send looks for them among the post's
+   * notes before POSTing again; a match is adopted and edits made since
+   * go out as a PUT. Survives Cancel and drafts (v5.1).
+   */
+  uncertainPosts?: NoteState[];
   /** The `.dmna-note-box` div, or `null` until first render. */
   domElement: HTMLElement | null;
 }
@@ -225,4 +233,23 @@ export type ToastLevel = 'info' | 'success' | 'warning' | 'error';
 export interface TagDelta {
   tagsToAdd: string[];
   tagsToRemove: string[];
+  /**
+   * The post's tag_string as the popover showed it ('' when no tags
+   * were fetched). Sent as `old_tag_string` so Danbooru applies only
+   * this delta on top of whatever the post has now (v5.1 Task 4.4).
+   */
+  baseTagString: string;
+}
+
+/**
+ * What Confirm is about to send, per bucket (v5.1 Task 2.4). Shown at
+ * the top of the Confirm popover so a stray move or a mass delete is
+ * visible before anything reaches the server. Lives here because
+ * confirm/classify builds it and ui/tag-popover renders it.
+ */
+export interface ChangeSummary {
+  created: number;
+  textEdited: number;
+  movedOnly: number;
+  deleted: number;
 }

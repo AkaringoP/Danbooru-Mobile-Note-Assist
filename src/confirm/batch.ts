@@ -25,6 +25,8 @@
 import {SCRIPT_NAME} from '../config';
 import {
   asServerNoteId,
+  ChangeSummary,
+  isServerNoteId,
   Note,
   NoteId,
   NoteState,
@@ -36,6 +38,7 @@ import {
   notes,
   actionLog,
   hardDeleteNote,
+  isDirty,
   setMode,
   setActiveNote,
 } from '../state/notes-store';
@@ -43,17 +46,22 @@ import {
   apiPostNote,
   apiPutNote,
   apiDeleteNote,
+  fetchServerNotes,
+  ServerNoteDescriptor,
   ServerNoteResponse,
 } from '../api/notes';
 import {apiPatchPostTags} from '../api/posts';
+import {ApiError} from '../api/csrf';
 import {
   classifyChanges,
   needsTagPopover,
+  summarizeChanges,
   ClassifiedChanges,
   PendingPost,
   PendingPut,
   PendingDelete,
 } from './classify';
+import {matchCommittedPosts} from './reconcile';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,9 +77,20 @@ export type {TagDelta};
 export type SuccessfulPost = PendingPost & {
   serverResponse: ServerNoteResponse | null;
 };
-export type FailedPost = PendingPost & {error: string};
-export type FailedPut = PendingPut & {error: string};
-export type FailedDelete = PendingDelete & {error: string};
+/**
+ * `unverified`: the POST failed without a refusal (network, timeout,
+ * 5xx), so the server may have stored the note anyway. The sent state
+ * is added to `Note.uncertainPosts`, and every later send looks for it
+ * before POSTing the note again.
+ */
+export type FailedPost = PendingPost & {
+  error: string;
+  unverified?: boolean;
+  skipped?: boolean;
+};
+/** `skipped`: never sent because an earlier request hit the rate limit. */
+export type FailedPut = PendingPut & {error: string; skipped?: boolean};
+export type FailedDelete = PendingDelete & {error: string; skipped?: boolean};
 
 /**
  * Outcome of `sendBatch`. Each item in `classified` ends up in either
@@ -94,6 +113,8 @@ export interface SendBatchResult {
     deletes: FailedDelete[];
     tagPatch: string | null;
   };
+  /** A request got 429; everything after it was skipped (v5.1 Task 4.3). */
+  rateLimited?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,11 +161,15 @@ export interface ConfirmFlowHooks {
   onToast: (message: string, level: ToastLevel, err?: unknown) => void;
 
   /**
-   * Opens the Confirm-time tag popover (D9). Resolves to the user's
-   * add/remove delta on submit, or `null` on cancel (which aborts
-   * the entire Confirm flow).
+   * Opens the Confirm popover: the send summary, plus the translation
+   * tag toggles (D9) when `withTags`. Resolves to the user's add/remove
+   * delta on submit (empty without tags), or `null` on cancel (which
+   * aborts the entire Confirm flow).
    */
-  showTagPopover: () => Promise<TagDelta | null>;
+  showTagPopover: (
+    summary: ChangeSummary,
+    withTags: boolean,
+  ) => Promise<TagDelta | null>;
 }
 
 let hooks: ConfirmFlowHooks | null = null;
@@ -168,18 +193,21 @@ let isSending = false;
 
 /**
  * `runConfirmFlow` re-entrancy guard, broader than `isSending`. Stays
- * latched across the whole pipeline — tag popover wait, sendBatch,
- * applyServerStateToLocal, error modal wait, retry recursion. The
- * narrower `isSending` only covers `sendBatch`'s try/finally (the
- * actual HTTP requests + UI lock CSS), and unlatches before the error
- * modal opens — leaving a window in `handleSendResult` where local
- * state already reflects partial server commits but the user might
- * still tap Retry. A force-quit `saveDraftIfNeeded` firing in that
- * window would persist a half-applied snapshot that double-sends on
- * the next page entry. `isInConfirmPipeline` closes the gap (Phase
- * 5-h Task 5.21). Read by main.ts's lifecycle save handlers.
+ * latched across the whole pipeline — Confirm popover wait, sendBatch,
+ * applyServerStateToLocal, error modal wait, retry recursion.
  */
 let isInConfirmPipeline = false;
+
+/**
+ * Lifecycle draft saves are off from the moment the first request is
+ * about to go out until the pipeline ends. Before that point nothing
+ * has reached the server, so the draft is still the only copy of the
+ * user's work and must keep being saved (v5.1 Task 1.2). After it,
+ * local state may mirror partial server commits; a snapshot taken
+ * there could double-send on the next page entry (Phase 5-h Task
+ * 5.21). Read by interactions/lifecycle.
+ */
+let draftSaveBlocked = false;
 
 let errorModalElement: HTMLElement | null = null;
 let errorModalBackdropElement: HTMLElement | null = null;
@@ -192,13 +220,17 @@ export function getIsSending(): boolean {
 }
 
 /**
- * Cross-module read of the broader Confirm-pipeline guard. True from
- * `runConfirmFlow` entry through error-modal dismissal / retry
- * resolution. Used by `main.ts#saveDraftIfNeeded` to skip lifecycle
- * draft saves while local state may be mid-transition.
+ * Cross-module read of the Confirm-pipeline re-entrancy guard. True
+ * from `runConfirmFlow` entry through error-modal dismissal / retry
+ * resolution.
  */
 export function getIsInConfirmPipeline(): boolean {
   return isInConfirmPipeline;
+}
+
+/** Whether lifecycle draft saves must be skipped (see `draftSaveBlocked`). */
+export function getIsDraftSaveBlocked(): boolean {
+  return draftSaveBlocked;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,58 +285,91 @@ export async function sendBatch(
   classified: ClassifiedChanges,
   tagDelta: TagDelta | null,
 ): Promise<SendBatchResult> {
-  const result: SendBatchResult = {
-    successful: {posts: [], puts: [], deletes: []},
-    failed: {posts: [], puts: [], deletes: [], tagPatch: null},
+  const result = emptyResult();
+  // Once Danbooru answers 429, every further request deepens the
+  // penalty (its limiter charges limited callers), so the rest of the
+  // batch is skipped and left for Retry (v5.1 Task 4.3).
+  let rateLimited = false;
+  const noteFailure = (label: string, err: unknown): string => {
+    // The error modal shows result.failed[...].error (a compact
+    // string). Log the full Error here so its stack trace is
+    // available in the console for cross-referencing — useful
+    // when triaging "what actually went wrong" across multiple
+    // partial failures in one batch.
+    console.error(`[${SCRIPT_NAME}] ${label} failed`, err);
+    if (err instanceof ApiError && err.status === 429) {
+      rateLimited = true;
+    }
+    return errMessage(err);
   };
   startSendingUI();
   try {
     for (const item of classified.deletes) {
+      if (rateLimited) {
+        result.failed.deletes.push({
+          ...item,
+          error: RATE_LIMIT_SKIP,
+          skipped: true,
+        });
+        continue;
+      }
       try {
         await apiDeleteNote(item.serverId);
         result.successful.deletes.push(item);
       } catch (err) {
-        // The error modal shows result.failed[...].error (a compact
-        // string). Log the full Error here so its stack trace is
-        // available in the console for cross-referencing — useful
-        // when triaging "what actually went wrong" across multiple
-        // partial failures in one batch.
-        console.error(
-          `[${SCRIPT_NAME}] DELETE note ${item.serverId} failed`,
-          err,
-        );
-        result.failed.deletes.push({...item, error: errMessage(err)});
+        const error = noteFailure(`DELETE note ${item.serverId}`, err);
+        result.failed.deletes.push({...item, error});
       }
     }
     for (const item of classified.puts) {
+      if (rateLimited) {
+        result.failed.puts.push({
+          ...item,
+          error: RATE_LIMIT_SKIP,
+          skipped: true,
+        });
+        continue;
+      }
       try {
         await apiPutNote(item.serverId, item.state);
         result.successful.puts.push(item);
       } catch (err) {
-        console.error(`[${SCRIPT_NAME}] PUT note ${item.serverId} failed`, err);
-        result.failed.puts.push({...item, error: errMessage(err)});
+        const error = noteFailure(`PUT note ${item.serverId}`, err);
+        result.failed.puts.push({...item, error});
       }
     }
     for (const item of classified.posts) {
+      if (rateLimited) {
+        result.failed.posts.push({
+          ...item,
+          error: RATE_LIMIT_SKIP,
+          skipped: true,
+        });
+        continue;
+      }
       try {
         const serverResponse = await apiPostNote(item.state);
         result.successful.posts.push({...item, serverResponse});
       } catch (err) {
-        console.error(`[${SCRIPT_NAME}] POST temp ${item.noteId} failed`, err);
-        result.failed.posts.push({...item, error: errMessage(err)});
+        const error = noteFailure(`POST temp ${item.noteId}`, err);
+        result.failed.posts.push({...item, error, unverified: !isRefusal(err)});
       }
     }
     if (
       tagDelta &&
       (tagDelta.tagsToAdd.length > 0 || tagDelta.tagsToRemove.length > 0)
     ) {
-      try {
-        await apiPatchPostTags(tagDelta.tagsToAdd, tagDelta.tagsToRemove);
-      } catch (err) {
-        console.error(`[${SCRIPT_NAME}] tag PATCH failed`, err);
-        result.failed.tagPatch = errMessage(err);
+      if (rateLimited) {
+        result.failed.tagPatch = RATE_LIMIT_SKIP;
+      } else {
+        try {
+          await apiPatchPostTags(tagDelta);
+        } catch (err) {
+          result.failed.tagPatch = noteFailure('tag PATCH', err);
+        }
       }
     }
+    result.rateLimited = rateLimited;
   } finally {
     endSendingUI();
   }
@@ -420,7 +485,8 @@ export function buildFailureLines(result: SendBatchResult): string[] {
     lines.push(`PUT note ${f.serverId}: ${f.error}`);
   }
   for (const f of result.failed.posts) {
-    lines.push(`POST new note: ${f.error}`);
+    const suffix = f.unverified ? ' (server state unverified)' : '';
+    lines.push(`POST new note: ${f.error}${suffix}`);
   }
   if (result.failed.tagPatch) {
     lines.push(`Tag PATCH: ${result.failed.tagPatch}`);
@@ -446,6 +512,250 @@ export function countSendResult(result: SendBatchResult): {
   return {successCount, failureCount};
 }
 
+function emptyResult(): SendBatchResult {
+  return {
+    successful: {posts: [], puts: [], deletes: []},
+    failed: {posts: [], puts: [], deletes: [], tagPatch: null},
+  };
+}
+
+/** A 4xx answer: the server refused the request, so nothing was stored. */
+function isRefusal(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.kind === 'http' &&
+    err.status !== null &&
+    err.status < 500
+  );
+}
+
+const RATE_LIMIT_SKIP = 'Skipped — rate limited';
+const NOT_RESENT = 'not re-sent — the server could not be checked';
+const RATE_LIMIT_NOTE =
+  'Rate limited by Danbooru — wait about a minute, then Retry.';
+
+const UNVERIFIED_TOAST =
+  "Can't verify what the server saved — check your connection and retry";
+
+/**
+ * Splits POSTs into the ones the server already stored (lost response)
+ * and the rest, by matching them against the post's live notes. Server
+ * ids already in the local collection or in `extraKnownIds` (created by
+ * this batch) are never candidates. Resolves `null` when the live notes
+ * can't be fetched.
+ */
+async function findCommittedPosts<T extends PendingPost>(
+  posts: T[],
+  extraKnownIds: number[],
+): Promise<{committed: SuccessfulPost[]; rest: T[]} | null> {
+  let serverNotes;
+  try {
+    serverNotes = await fetchServerNotes();
+  } catch (err) {
+    console.warn(`[${SCRIPT_NAME}] could not verify failed POSTs`, err);
+    return null;
+  }
+  const known = new Set<string>([
+    ...[...notes.keys()].filter(isServerNoteId),
+    ...extraKnownIds.map(String),
+  ]);
+  const pairs = matchCommittedPosts(posts, serverNotes, known);
+  const matched = new Set<PendingPost>(pairs.map(p => p.post));
+  return {
+    committed: pairs.map(({post, serverNote}) => ({
+      noteId: post.noteId,
+      state: post.state,
+      serverResponse: serverNote,
+    })),
+    rest: posts.filter(p => !matched.has(p)),
+  };
+}
+
+/**
+ * Adopts failed POSTs that the server stored anyway (lost response) as
+ * successes. Only POSTs whose outcome is unknown are looked up; when the
+ * live notes can't be fetched they simply stay unverified.
+ */
+async function reconcileFailedPosts(
+  result: SendBatchResult,
+): Promise<SendBatchResult> {
+  const uncertain = result.failed.posts.filter(p => p.unverified && !p.skipped);
+  if (uncertain.length === 0) {
+    return result;
+  }
+  const createdIds = result.successful.posts.flatMap(p =>
+    typeof p.serverResponse?.id === 'number' ? [p.serverResponse.id] : [],
+  );
+  const found = await findCommittedPosts(uncertain, createdIds);
+  if (!found || found.committed.length === 0) {
+    return result;
+  }
+  const adopted = new Set(found.committed.map(c => c.noteId));
+  return {
+    ...result,
+    successful: {
+      ...result.successful,
+      posts: [...result.successful.posts, ...found.committed],
+    },
+    failed: {
+      ...result.failed,
+      posts: result.failed.posts.filter(p => !adopted.has(p.noteId)),
+    },
+  };
+}
+
+function sameState(a: NoteState, b: NoteState): boolean {
+  return (
+    a.x === b.x &&
+    a.y === b.y &&
+    a.w === b.w &&
+    a.h === b.h &&
+    a.text === b.text
+  );
+}
+
+interface StoredPost {
+  noteId: NoteId;
+  sent: NoteState;
+  serverNote: ServerNoteDescriptor;
+}
+
+/**
+ * Looks for the notes that `uncertainPosts` may have created. A stored
+ * copy can already be loaded locally as an ordinary server note (a
+ * draft restore loads it), so clean local server notes are candidates
+ * too; edited or soft-deleted ones are not. One match per temp note.
+ * Resolves `null` when the live notes can't be fetched.
+ */
+async function findStoredPosts(
+  flagged: PendingPost[],
+): Promise<StoredPost[] | null> {
+  let serverNotes;
+  try {
+    serverNotes = await fetchServerNotes();
+  } catch (err) {
+    console.warn(`[${SCRIPT_NAME}] could not check unverified POSTs`, err);
+    return null;
+  }
+  const excluded = new Set<string>(
+    [...notes.entries()]
+      .filter(([id, n]) => isServerNoteId(id) && (n.isDeleted || isDirty(n)))
+      .map(([id]) => id),
+  );
+  const attempts = flagged.flatMap(p =>
+    (notes.get(p.noteId)?.uncertainPosts ?? []).map(state => ({
+      noteId: p.noteId,
+      state,
+    })),
+  );
+  const pairs = matchCommittedPosts(attempts, serverNotes, excluded);
+  return pairs
+    .filter(
+      (m, i) => pairs.findIndex(o => o.post.noteId === m.post.noteId) === i,
+    )
+    .map(({post, serverNote}) => ({
+      noteId: post.noteId,
+      sent: post.state,
+      serverNote,
+    }));
+}
+
+/**
+ * Replaces a temp note with the server note its lost POST created — or
+ * folds it into that note when it is already loaded. Edits made after
+ * the POST stay on the note, so the next classification sends them as
+ * a PUT; an unedited note takes the server's (normalized) values.
+ */
+function adoptStoredPost({noteId, sent, serverNote: sn}: StoredPost): void {
+  const temp = notes.get(noteId);
+  if (!temp) {
+    return;
+  }
+  const serverId = asServerNoteId(sn.id);
+  const stored: NoteState = {
+    x: sn.x,
+    y: sn.y,
+    w: sn.width,
+    h: sn.height,
+    text: sn.body ?? '',
+  };
+  const edited = !sameState(temp.current, sent);
+  const note: Note = notes.get(serverId) ?? {
+    current: {...stored},
+    initialState: {...stored},
+    confirmedState: {...stored},
+    isDeleted: false,
+    isServerNote: true,
+    everConfirmed: true,
+    domElement: null,
+  };
+  if (edited) {
+    note.current = {...temp.current};
+    note.confirmedState = {...temp.current};
+    note.everConfirmed = true;
+  }
+  hardDeleteNote(noteId);
+  notes.set(serverId, note);
+  hooks!.onNoteRenderRequested(serverId);
+}
+
+/**
+ * Sends a classified batch, first looking up any temp note whose
+ * earlier POST may have been stored (`Note.uncertainPosts`): found →
+ * adopted (later edits become a PUT) and the batch is re-classified;
+ * the server can't be asked → those POSTs are held back (`skipped`,
+ * still unverified). PUT / DELETE / tags are always sent — only POST is
+ * not idempotent. Used by Confirm and by Retry, so neither a Cancel in
+ * between nor a draft restore leads to a re-POST. The send lock covers
+ * the check. Skips `sendBatch` entirely when nothing is left to send.
+ */
+async function sendChecked(
+  classified: ClassifiedChanges,
+  tagDelta: TagDelta | null,
+): Promise<SendBatchResult> {
+  const flagged = classified.posts.filter(
+    p => notes.get(p.noteId)?.uncertainPosts?.length,
+  );
+  let batch = classified;
+  let heldBack: FailedPost[] = [];
+  if (flagged.length > 0) {
+    startSendingUI();
+    let found: StoredPost[] | null;
+    try {
+      found = await findStoredPosts(flagged);
+    } finally {
+      endSendingUI();
+    }
+    if (!found) {
+      hooks!.onToast(UNVERIFIED_TOAST, 'warning');
+      heldBack = flagged.map(p => ({
+        ...p,
+        error: NOT_RESENT,
+        unverified: true,
+        skipped: true,
+      }));
+      batch = {
+        ...classified,
+        posts: classified.posts.filter(p => !flagged.includes(p)),
+      };
+    } else if (found.length > 0) {
+      found.forEach(adoptStoredPost);
+      batch = classifyChanges();
+    }
+  }
+  const hasTagChange =
+    !!tagDelta &&
+    (tagDelta.tagsToAdd.length > 0 || tagDelta.tagsToRemove.length > 0);
+  const hasRequests =
+    batch.posts.length > 0 ||
+    batch.puts.length > 0 ||
+    batch.deletes.length > 0 ||
+    hasTagChange;
+  const result = hasRequests ? await sendBatch(batch, tagDelta) : emptyResult();
+  result.failed.posts.push(...heldBack);
+  return result;
+}
+
 /**
  * Post-sendBatch orchestration. Updates local state to mirror what
  * the server confirmed, then either:
@@ -465,10 +775,23 @@ export function countSendResult(result: SendBatchResult): {
  * Exported for unit tests; module-internal otherwise.
  */
 export async function handleSendResult(
-  result: SendBatchResult,
+  sent: SendBatchResult,
   tagDelta: TagDelta | null,
 ): Promise<void> {
+  const result = await reconcileFailedPosts(sent);
   applyServerStateToLocal(result);
+  // Remember, across Cancel and drafts, what each temp note sent with
+  // an unknown outcome. Never cleared until the note is adopted or
+  // posted: a later refusal doesn't prove an earlier POST wasn't stored.
+  for (const p of result.failed.posts) {
+    const note = notes.get(p.noteId);
+    if (note && p.unverified && !p.skipped) {
+      const known = note.uncertainPosts ?? [];
+      if (!known.some(s => sameState(s, p.state))) {
+        note.uncertainPosts = [...known, {...p.state}];
+      }
+    }
+  }
 
   const hasFailures =
     result.failed.posts.length > 0 ||
@@ -506,16 +829,17 @@ export async function handleSendResult(
     return;
   }
 
-  const newClassified = classifyChanges();
+  const classified = classifyChanges();
   const retryTagDelta = result.failed.tagPatch ? tagDelta : null;
-  if (!newClassified.hasChanges && !retryTagDelta) {
+  if (!classified.hasChanges && !retryTagDelta) {
     // Nothing left to retry — this is rare (would mean failures
     // self-resolved between modal and click), but bail cleanly
     // rather than spin sendBatch on an empty payload.
     hooks!.onToast('Nothing left to retry', 'info');
     return;
   }
-  const retryResult = await sendBatch(newClassified, retryTagDelta);
+
+  const retryResult = await sendChecked(classified, retryTagDelta);
   await handleSendResult(retryResult, retryTagDelta);
 }
 
@@ -592,7 +916,8 @@ function openErrorModal(result: SendBatchResult): void {
   if (summaryEl) {
     summaryEl.textContent =
       `${successCount} of ${total} operation(s) succeeded; ` +
-      `${failureCount} failed.`;
+      `${failureCount} failed.` +
+      (result.rateLimited ? ` ${RATE_LIMIT_NOTE}` : '');
   }
   const listEl = errorModalElement!.querySelector('#dmna-error-modal-list');
   if (listEl) {
@@ -684,12 +1009,6 @@ export async function runConfirmFlow(): Promise<void> {
   }
   isInConfirmPipeline = true;
   try {
-    // Clear any stale draft — entering the send pipeline transfers
-    // authority to the server. A force-quit mid-send shouldn't
-    // surface a "Restore?" prompt with mixed local/server state on
-    // next page entry; fetchServerNotes is the canonical recovery
-    // path in that case (PLAN D4 + D6, v4.1).
-    clearDraft();
     // Close any open popover before showing modals or starting sends —
     // the popover is positioned above boxes but below modals; leaving
     // it open would visually layer awkwardly behind a tag modal, and
@@ -702,19 +1021,28 @@ export async function runConfirmFlow(): Promise<void> {
       return;
     }
 
-    let tagDelta: TagDelta | null = null;
-    if (needsTagPopover(classified)) {
-      tagDelta = await hooks!.showTagPopover();
-      if (tagDelta === null) {
-        // User canceled the tag modal — abort the entire Confirm
-        // flow. State unchanged, user back in active mode.
-        return;
-      }
+    // Always ask, even for a move-only batch: the summary is the last
+    // chance to notice a box moved by accident (v5.1 Task 2.4).
+    const tagDelta = await hooks!.showTagPopover(
+      summarizeChanges(classified),
+      needsTagPopover(classified),
+    );
+    if (tagDelta === null) {
+      // User canceled — abort the entire Confirm flow. State
+      // unchanged, user back in active mode.
+      return;
     }
 
-    const result = await sendBatch(classified, tagDelta);
+    // The first request is about to go out: authority passes to the
+    // server. A force-quit from here on shouldn't surface a "Restore?"
+    // prompt with mixed local/server state on next page entry;
+    // fetchServerNotes is the canonical recovery path (PLAN D4 + D6).
+    clearDraft();
+    draftSaveBlocked = true;
+    const result = await sendChecked(classified, tagDelta);
     await handleSendResult(result, tagDelta);
   } finally {
     isInConfirmPipeline = false;
+    draftSaveBlocked = false;
   }
 }
