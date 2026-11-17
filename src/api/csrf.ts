@@ -20,6 +20,8 @@ export class ApiError extends Error {
     message: string,
     readonly kind: ApiErrorKind,
     readonly status: number | null,
+    /** The server's own explanation for an http error, if it gave one. */
+    readonly detail = '',
   ) {
     super(message);
     this.name = 'ApiError';
@@ -136,6 +138,9 @@ export async function apiCall<T = unknown>(
             detail =
               errJson.message ||
               errJson.error ||
+              (Array.isArray(errJson.reasons)
+                ? errJson.reasons.join('; ')
+                : '') ||
               (errJson.errors ? JSON.stringify(errJson.errors) : '') ||
               errText;
           } catch (_parseErr) {
@@ -152,6 +157,7 @@ export async function apiCall<T = unknown>(
         truncated ? `${head} — ${truncated}` : head,
         'http',
         r.status,
+        truncated,
       );
     }
     // Empty / 204 responses are fine; only parse when there's a body.

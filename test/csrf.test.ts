@@ -222,6 +222,29 @@ describe('apiCall — error responses (4xx/5xx body surface, v3.0 D11)', () => {
     );
   });
 
+  it("surfaces Danbooru's `reasons` list (notes 422)", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          makeResponse(
+            422,
+            {success: false, reasons: ["X can't be blank", 'Body is too long']},
+            {statusText: 'Unprocessable Entity'},
+          ),
+        ),
+    );
+    const err = await apiCall('POST', '/notes/preview.json', {}).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).message).toMatch(
+      /^HTTP 422.*X can't be blank; Body is too long$/,
+    );
+    expect((err as ApiError).detail).toBe("X can't be blank; Body is too long");
+  });
+
   it('surfaces error field when message is absent', async () => {
     vi.stubGlobal(
       'fetch',

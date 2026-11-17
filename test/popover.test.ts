@@ -19,6 +19,8 @@ import {
   setActiveNote,
 } from '../src/state/notes-store';
 import {NoteState, asServerNoteId, asTempNoteId} from '../src/types';
+import {apiPreviewNote} from '../src/api/notes';
+import {ApiError} from '../src/api/csrf';
 import {
   createPopover,
   showPopover,
@@ -151,6 +153,69 @@ describe('character counter (Task 4.5 follow-up)', () => {
     type('x'.repeat(5001));
     expect(counter().textContent).toBe('5001 / 5000');
     expect(counter().classList.contains('is-over')).toBe(true);
+  });
+});
+
+describe('Preview request', () => {
+  function openWith(text: string): ReturnType<typeof asTempNoteId> {
+    const id = asTempNoteId('temp-preview-1');
+    notes.set(id, {
+      current: {x: 10, y: 20, w: 30, h: 40, text: 'stale'},
+      initialState: {...ST},
+      confirmedState: {...ST},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+    setActiveNote(id);
+    showPopover(id);
+    const ta = document.getElementById(
+      'dmna-popover-input',
+    ) as HTMLTextAreaElement;
+    ta.value = text;
+    return id;
+  }
+
+  const toggle = () =>
+    document.getElementById('dmna-popover-mode-toggle') as HTMLButtonElement;
+
+  it("sends the active note's geometry with the typed text", async () => {
+    vi.mocked(apiPreviewNote).mockResolvedValueOnce({
+      sanitized_body: '<b>hi</b>',
+    } as Awaited<ReturnType<typeof apiPreviewNote>>);
+    openWith('<b>hi</b>');
+
+    toggle().click();
+    await vi.waitFor(() => expect(toggle().disabled).toBe(false));
+
+    expect(apiPreviewNote).toHaveBeenLastCalledWith({
+      x: 10,
+      y: 20,
+      w: 30,
+      h: 40,
+      text: '<b>hi</b>',
+    });
+    toggle().click();
+  });
+
+  it("a refused preview shows the server's reason", async () => {
+    vi.mocked(apiPreviewNote).mockRejectedValueOnce(
+      new ApiError(
+        'HTTP 422 — Note must be inside the image',
+        'http',
+        422,
+        'Note must be inside the image',
+      ),
+    );
+    openWith('x');
+
+    toggle().click();
+    await vi.waitFor(() => expect(toggle().disabled).toBe(false));
+
+    expect(document.getElementById('dmna-toast')!.textContent).toContain(
+      'Note must be inside the image',
+    );
   });
 });
 

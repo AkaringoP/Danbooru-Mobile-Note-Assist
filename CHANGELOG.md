@@ -5,6 +5,12 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Preview always failed.** Danbooru now validates a previewed note like a new one before sanitizing it (post, position, size, length), and the script sent only the body, so every Preview came back 422 (`⚠️ Preview failed`). It now sends the note's post, position and size too, the same way Danbooru's own editor does.
+- **Server reasons are shown.** Danbooru's note errors (`reasons: [...]`) now appear in the message — a refused Preview says why (`⚠️ Preview failed — …`), and so does the send error list — instead of raw JSON.
+
 ## [5.1.1] - 2026-11-17
 
 Follow-up polish to 5.1.0: clearer send state, and no way to commit or switch away from a note Danbooru would reject for length.
