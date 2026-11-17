@@ -415,6 +415,13 @@ export const STYLES = `
       color: #9192a7;
     }
     #dmna-popover-preview {
+      /* Containment: note markup may carry position / inset / z-index
+         (NoteSanitizer allows them). Without a positioned, paint-
+         contained box a previewed note could cover the popover's own
+         buttons (v5.1). */
+      position: relative;
+      isolation: isolate;
+      contain: paint;
       min-width: 0;
       /* Matches Danbooru's div.note-body (notes.scss line 13-15) so
          the preview reads as a faithful screenshot of how the note
@@ -438,6 +445,9 @@ export const STYLES = `
       overflow-wrap: anywhere;
       overflow-y: auto;
     }
+    /* Preview is display-only: a tap on a rendered link must not
+       navigate away from unsaved work. */
+    #dmna-popover-preview a { pointer-events: none; }
     #dmna-popover-input:focus { border-color: #0073ff; }
     #dmna-popover-side-stack {
       display: flex;
