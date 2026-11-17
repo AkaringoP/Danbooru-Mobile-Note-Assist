@@ -22,6 +22,7 @@
  *   - saveDraft(snapshot)    — write under the current post's key
  *   - loadDraft()            — read + validate + TTL gate, or null
  *   - clearDraft()           — remove the current post's draft
+ *   - sweepExpiredDrafts()   — remove stale drafts of every post
  *   - safeSetItem/safeGetItem/safeRemoveItem — shared localStorage
  *                               guards (F5, used by ui/floating-button)
  *
@@ -231,6 +232,41 @@ export function loadDraft(): DraftSnapshot | null {
     notes: parsed.notes,
     actionLog: parsed.actionLog,
   };
+}
+
+/**
+ * Deletes every `dmna_draft_*` entry that is expired, unparseable or
+ * fails validation (other schema, tampered ids), for any post. The
+ * TTL in `loadDraft` only covers the post being opened, so drafts of
+ * posts never revisited used to stay forever (v5.1 Task 3.3). Returns
+ * the number removed; never throws.
+ */
+export function sweepExpiredDrafts(now: number = Date.now()): number {
+  try {
+    const keys = Array.from({length: localStorage.length}, (_, i) =>
+      localStorage.key(i),
+    ).filter((k): k is string => !!k && k.startsWith(DRAFT_KEY_PREFIX));
+    const stale = keys.filter(k => !isLiveDraft(localStorage.getItem(k), now));
+    stale.forEach(k => localStorage.removeItem(k));
+    return stale.length;
+  } catch (err) {
+    console.warn('[MobileNoteAssist] draft sweep skipped', err);
+    return 0;
+  }
+}
+
+function isLiveDraft(raw: string | null, now: number): boolean {
+  if (!raw) {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return (
+      isPersistedDraftV1(parsed) && now - parsed.savedAt <= MAX_DRAFT_AGE_MS
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Removes the draft for the current post id. Idempotent — no-op

@@ -12,6 +12,7 @@ import {
   safeSetItem,
   safeGetItem,
   safeRemoveItem,
+  sweepExpiredDrafts,
 } from '../src/state/draft';
 import type {DraftSnapshot} from '../src/state/draft';
 
@@ -604,5 +605,69 @@ describe('loadDraft — note id validation', () => {
     store(overrides);
     expect(loadDraft()).toBeNull();
     expect(localStorage.getItem(draftKey('123'))).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sweepExpiredDrafts (v5.1 Task 3.3)
+// ---------------------------------------------------------------------------
+
+describe('sweepExpiredDrafts', () => {
+  const NOW = new Date('2026-11-17T00:00:00Z').getTime();
+
+  function envelope(savedAt: number, schemaVersion = DRAFT_SCHEMA_VERSION) {
+    return JSON.stringify({
+      schemaVersion,
+      savedAt,
+      mode: 'active',
+      activeNoteId: null,
+      notes: [],
+      actionLog: [],
+    });
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('removes expired, unparseable and other-schema drafts only', () => {
+    localStorage.setItem(draftKey('1'), envelope(NOW - MAX_DRAFT_AGE_MS - 1));
+    localStorage.setItem(draftKey('2'), envelope(NOW - 1000));
+    localStorage.setItem(draftKey('3'), '{not json');
+    localStorage.setItem(draftKey('4'), envelope(NOW - 1000, 99));
+    localStorage.setItem(draftKey('5'), envelope(NOW - MAX_DRAFT_AGE_MS));
+    localStorage.setItem('dmna_btn_margin_y', '80');
+    localStorage.setItem('unrelated', 'x');
+
+    expect(sweepExpiredDrafts(NOW)).toBe(3);
+
+    expect(Object.keys(localStorage).sort()).toEqual([
+      'dmna_btn_margin_y',
+      draftKey('2'),
+      draftKey('5'),
+      'unrelated',
+    ]);
+  });
+
+  it('returns 0 and does not throw when storage is unavailable', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('denied', 'SecurityError');
+      },
+    });
+    try {
+      expect(sweepExpiredDrafts(NOW)).toBe(0);
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'localStorage', original);
+      warnSpy.mockRestore();
+    }
   });
 });

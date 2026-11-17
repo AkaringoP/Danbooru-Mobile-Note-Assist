@@ -26,7 +26,7 @@
 import {APP_VERSION} from './version';
 import {STYLES} from './styles';
 
-import {clearDraft, loadDraft} from './state/draft';
+import {clearDraft, loadDraft, sweepExpiredDrafts} from './state/draft';
 import {
   applyDraftSnapshot,
   initNotesStore,
@@ -346,6 +346,13 @@ function init(): void {
   //    point). Runs last in init so any earlier failure short-
   //    circuits before the user sees a misleading prompt.
   checkAndPromptRestore();
+
+  // 11. Drop expired drafts of other posts once the page is idle.
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => sweepExpiredDrafts());
+  } else {
+    setTimeout(() => sweepExpiredDrafts(), 2000);
+  }
 }
 
 console.log(`[MobileNoteAssist v${APP_VERSION}] loaded`);
