@@ -119,7 +119,7 @@ export interface Note {
    * refusal (network drop, timeout, 5xx) — the server may have stored
    * any of them. Every later send looks for them among the post's
    * notes before POSTing again; a match is adopted and edits made since
-   * go out as a PUT. Survives Cancel and drafts (v5.2).
+   * go out as a PUT. Survives Cancel and drafts (v5.1).
    */
   uncertainPosts?: NoteState[];
   /** The `.dmna-note-box` div, or `null` until first render. */
@@ -236,7 +236,7 @@ export interface TagDelta {
   /**
    * The post's tag_string as the popover showed it ('' when no tags
    * were fetched). Sent as `old_tag_string` so Danbooru applies only
-   * this delta on top of whatever the post has now (v5.2 Task 4.4).
+   * this delta on top of whatever the post has now (v5.1 Task 4.4).
    */
   baseTagString: string;
 }

@@ -64,7 +64,7 @@ interface DragState {
   /**
    * Image page-coord rect, read once at gesture start and reused by
    * every move, render and popover update — reading it per frame
-   * interleaved layout reads with style writes (v5.2 Task 3.2).
+   * interleaved layout reads with style writes (v5.1 Task 3.2).
    */
   imageRect: DisplayRect;
 }
@@ -124,7 +124,7 @@ export function attachHandleListeners(
  * before reaching here.
  *
  * Touch and pen only drag the box that is already selected (v5.1 Task
- * 2.5; pen since v5.2). On any other box the gesture is left to the
+ * 2.5, pen included). On any other box the gesture is left to the
  * browser, so a swipe that happens to start on someone's note scrolls
  * the page instead of moving the note; a plain tap still selects it
  * via the box's click handler. Only a mouse keeps activate-and-drag in
@@ -352,7 +352,7 @@ function onInteractionEnd(e: PointerEvent): void {
     const moved = notes.get(dragState.noteId);
     if (e.type === 'pointercancel') {
       // The browser or OS took the pointer (a pan, a system gesture):
-      // put the box back instead of committing a partial move (v5.2).
+      // put the box back instead of committing a partial move (v5.1).
       if (moved) {
         const {x, y, w, h} = dragState.startState;
         moved.current = {...moved.current, x, y, w, h};

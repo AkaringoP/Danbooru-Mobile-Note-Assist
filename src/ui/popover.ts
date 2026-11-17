@@ -364,7 +364,7 @@ export function createPopover(): void {
 
   const buttons = document.createElement('div');
   buttons.id = 'dmna-popover-buttons';
-  // Text labels styled like Danbooru's own note dialog buttons (v5.2).
+  // Text labels styled like Danbooru's own note dialog buttons (v5.1).
   // "Commit", not "Save": it sets a local checkpoint; nothing reaches
   // the server until ✓ Confirm.
   const actions: Array<{
@@ -688,7 +688,7 @@ function createUndoIcon(): SVGElement {
 /**
  * Touch-zone button icon: a dashed box (the note box's zones) with a
  * small eye on its top-right corner. The plain 👁 read as a second "Preview"
- * next to the header toggle (v5.2). Built with DOM calls — the
+ * next to the header toggle (v5.1). Built with DOM calls — the
  * Preview sink stays the only innerHTML write.
  */
 function createZoneIcon(): SVGElement {

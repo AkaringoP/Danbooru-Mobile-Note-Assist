@@ -59,7 +59,7 @@ const NOTES_MAX_PAGES = 5;
  * `is_active=true` skips server-side soft-deleted notes. A post can
  * hold up to 1200 notes but a page holds 1000, so a full page is
  * followed by the next one (`page=b<lowest id>`, stable while notes
- * change) — v5.2 Task 3.5.
+ * change) — v5.1 Task 3.5.
  *
  * In-flight dedupe (Phase 5-h Task 5.32): a fast active-mode toggle
  * could otherwise fire two overlapping `enterActiveMode` runs and

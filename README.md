@@ -49,7 +49,7 @@ The 📝 button in the bottom-right is the script's only entry point. It respond
 | **Double-tap** (within ~300ms) | Toggles Edit mode on/off. Icon flips between 📝 (idle) and ✏️ (active). If the arc menu was already opening from the first tap, it closes automatically. |
 | **Long-press (~1.0s hold)** | Enters drag-to-reposition mode. The button turns orange; drag to move it, release to save its new position. (See [Customization](#customization).) |
 | **Auto-hide** | While a per-note popover is open, the button is hidden so it doesn't sit on top of the popover's Commit / Cancel / Delete buttons (which fall in the same screen region on mobile). |
-| **Unsent changes (v5.2+)** | While anything is waiting for ✓ Confirm — committed new boxes, edited or moved notes, deletions — the button has a green outline and a badge with the number of changes. Nothing reaches the server until you Confirm. |
+| **Unsent changes (v5.1+)** | While anything is waiting for ✓ Confirm — committed new boxes, edited or moved notes, deletions — the button has a green outline and a badge with the number of changes. Nothing reaches the server until you Confirm. |
 
 The single-tap-opens-menu / double-tap-toggles design means the menu shows up instantly on every tap (no waiting for a long-press) but is canceled if your second tap arrives quickly enough — so you can use a fast double-tap as a quick toggle when you don't need the menu.
 
@@ -285,7 +285,7 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v5.2.0** (2026-11-17). It adds an unsent-changes badge on the floating button, native-style Commit / Cancel / Delete / History buttons, tag updates that merge with other editors' changes, and fast edit-mode entry on posts with hundreds of notes. v5.1.0, released the same day, made sending safer — Confirm always shows what it is about to send, a swipe that starts on an unselected box scrolls instead of moving it, the note popover stays on screen at any width and pinch zoom, requests time out instead of hanging, Retry no longer duplicates a note whose response was lost, and the force-quit draft survives the Confirm popover and honors "Leave". See [CHANGELOG.md](./CHANGELOG.md) for the full list.
+The current release is **v5.1.0** (2026-11-17), from a mobile-focused audit. Sending is safer — Confirm always shows what it is about to send, requests time out instead of hanging, Retry no longer duplicates a note whose response was lost, a batch stops at the first rate limit, and the force-quit draft survives the Confirm popover and honors "Leave". On the page, a swipe that starts on an unselected box scrolls instead of moving it, the note popover stays on screen at any width and pinch zoom, fields no longer trigger iOS focus zoom, and edit mode opens fast on posts with hundreds of notes. New: an unsent-changes badge on the floating button, a note length counter, native-style Commit / Cancel / Delete / History buttons, and tag updates that merge with other editors' changes. See [CHANGELOG.md](./CHANGELOG.md) for the full list.
 
 v4.1 added force-quit / OS-kill recovery: in-progress edits are snapshotted to `localStorage` on lifecycle events (tab close, app background, OS kill), and the next time you open the same post you get a Restore / Discard prompt. v4.0 was the TypeScript migration. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 

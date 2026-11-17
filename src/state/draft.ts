@@ -238,7 +238,7 @@ export function loadDraft(): DraftSnapshot | null {
  * Deletes every `dmna_draft_*` entry that is expired, unparseable or
  * fails validation (other schema, tampered ids), for any post. The
  * TTL in `loadDraft` only covers the post being opened, so drafts of
- * posts never revisited used to stay forever (v5.2 Task 3.3). Returns
+ * posts never revisited used to stay forever (v5.1 Task 3.3). Returns
  * the number removed; never throws.
  */
 export function sweepExpiredDrafts(now: number = Date.now()): number {

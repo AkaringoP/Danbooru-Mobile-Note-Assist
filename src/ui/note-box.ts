@@ -83,7 +83,7 @@ export interface NoteBoxHooks {
    * A box's visual state was just recomputed — the one choke point
    * every dirty / deleted / active change passes through, including
    * drag ends that never touch the store hooks. Subscriber:
-   * interactions/pending-indicator.schedulePendingRefresh (v5.2 Task
+   * interactions/pending-indicator.schedulePendingRefresh (v5.1 Task
    * 4.8).
    */
   onVisualsUpdated: () => void;

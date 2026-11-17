@@ -113,7 +113,7 @@ export interface SendBatchResult {
     deletes: FailedDelete[];
     tagPatch: string | null;
   };
-  /** A request got 429; everything after it was skipped (v5.2 Task 4.3). */
+  /** A request got 429; everything after it was skipped (v5.1 Task 4.3). */
   rateLimited?: boolean;
 }
 
@@ -288,7 +288,7 @@ export async function sendBatch(
   const result = emptyResult();
   // Once Danbooru answers 429, every further request deepens the
   // penalty (its limiter charges limited callers), so the rest of the
-  // batch is skipped and left for Retry (v5.2 Task 4.3).
+  // batch is skipped and left for Retry (v5.1 Task 4.3).
   let rateLimited = false;
   const noteFailure = (label: string, err: unknown): string => {
     // The error modal shows result.failed[...].error (a compact

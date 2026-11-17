@@ -132,7 +132,7 @@ export function setFloatingButtonIconForMode(): void {
 
 /**
  * Shows how many requests Confirm would send as a badge on the button
- * (CSS draws it from `data-pending-count`); 0 removes it (v5.2 Task 4.8).
+ * (CSS draws it from `data-pending-count`); 0 removes it (v5.1 Task 4.8).
  */
 export function setFloatingButtonPendingCount(count: number): void {
   if (!floatBtnElement) {

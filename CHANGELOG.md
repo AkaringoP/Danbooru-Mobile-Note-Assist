@@ -5,34 +5,14 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.2.0] - 2026-11-17
+## [5.1.0] - 2026-11-17
 
-Second batch of the mobile-focused audit: clearer state at a glance, native-looking controls, and the remaining performance fixes.
+Reliability, security and mobile-fit release from a mobile-focused audit: safer sending, clearer state at a glance, native-looking controls, and faster edit mode on note-heavy posts. Every fix below was reproduced first in a Playwright mobile-emulation harness that now ships as the opt-in `npm run e2e` suite.
 
 ### Added
 - **Note length counter.** The popover header shows the body length as Danbooru counts it — `54 / 5000` — and turns red past the server's 5000-character limit. It follows the server's normalization (a line break is stored as CRLF and counts 2; an emoji counts 1), so it matches what Confirm will be judged on.
 - **Unsent-changes indicator.** While anything is waiting for ✓ Confirm, the floating button gets a green outline and a badge with the number of changes, and the arc menu's Confirm item is outlined. The count is exactly what Confirm would send — a new box you never committed doesn't count, a deletion does.
-
-### Changed
-- **Popover buttons look like Danbooru's note dialog.** The action row is now text — **Commit** / **Cancel** / **Delete** / **History** — in the site's form-button colors (following your theme), instead of ✔ ✖ 🗑 📜 glyphs. It's "Commit", not "Save": the note is checkpointed locally and only sent on ✓ Confirm. The buttons stay 36 px tall (the native dialog's 24 px is too small for thumbs).
-- **Tag changes merge with other editors'.** The tag update now sends the tag string you saw as `old_tag_string`, the same way Danbooru's own edit form does, so a tag someone else changed in the meantime is kept — and the extra re-fetch before the update is gone.
-- **The touch-zone button has its own icon.** The side button you hold to see a box's touch zones was a plain 👁, easy to mistake for the note **Preview** toggle next to it. It is now a dashed box with a small eye on its top-right corner.
-- **Undo has a drawn arrow.** The ↶ glyph rendered small and looked different per font; the undo button now draws its own arrow, curving over the top and ending pointed left.
-
-### Fixed
-- **Entering edit mode on note-heavy posts.** Notes were rendered one by one with a layout read each; on a throttled phone 1000 notes took about 9 s. They now render in one pass (about 0.35 s in the same test). Posts with more than 1000 notes (Danbooru allows 1200) now load all of them.
-- **Rate limits.** A batch now stops at the first 429 instead of firing every remaining request (which lengthens Danbooru's lockout); the rest are listed as `Skipped — rate limited` and the error modal says to wait about a minute before Retry.
-- **Old drafts piled up.** Drafts for posts you never reopened stayed in `localStorage` forever; expired and invalid ones are now swept once per page load.
-- **Dragging a box** read the image position three times per frame; it now reads it once per gesture.
-- **Scrolling that starts on the image** no longer waits on the script (its touch listener is now passive).
-- **iOS Safari zoomed in when a field got focus.** Safari zooms the page for any focused field under 16px; the note textarea, the link / ruby / HEX inputs and the Size / Font selects are now 16px. The popovers keep their size. (Not yet checked on an iPhone.)
-- **Remaining duplicate-note paths** found in final review: a POST whose outcome was unknown could be sent again after Cancel → Confirm, after a timeout the server finished late, after a draft restore (the stored copy loaded as an ordinary note and was never matched), or after editing the note. A temp note now remembers every state it sent without getting a refusal (network, timeout, 5xx) — kept across Cancel and in drafts — and every Confirm or Retry first looks those states up among the post's notes, including an unedited copy already loaded locally. A match is adopted and any later edit goes out as a PUT; if the server can't be asked, the POST is held back (`not re-sent`) under the ⏳ lock. A refused POST (4xx) is re-sent without a check.
-- **Pen input** now behaves like touch on boxes (tap to select, then drag): with a stylus the browser could take over a drag that started on an unselected box mid-gesture. A drag cancelled by the browser or OS now puts the box back instead of keeping a partial move.
-- Note bodies containing NEL (U+0085) now match the server's normalization when checking for a lost POST.
-
-## [5.1.0] - 2026-11-17
-
-Reliability, security and mobile-fit release from a mobile-focused audit. Every fix below was reproduced first in a Playwright mobile-emulation harness that now ships as the opt-in `npm run e2e` suite.
+- `npm run e2e` — opt-in Playwright scenarios against a mock post page (Pixel 7 emulation, all requests intercepted); each scenario names the task it guards.
 
 ### Changed
 - **Confirm always shows a send summary.** The Confirm popover now opens with `New 3 · Edited 2 · Moved 1 · Deleted 4` (zero buckets omitted, deletions in red) before anything is sent. A batch that only moved or resized boxes used to go out with no prompt; it now shows the summary with Submit / Cancel (no tag fetch, no toggles).
@@ -40,25 +20,33 @@ Reliability, security and mobile-fit release from a mobile-focused audit. Every 
 - **Switching boxes keeps a new box's text.** Tapping another box while a never-✔'d new box was active left it green but Confirm silently dropped it. Typed text is now committed as if ✔ was pressed (↶ still undoes it); an empty new box is removed.
 - **Smaller boxes stack above larger ones.** A note covering the whole image no longer swallows taps meant for the notes under it; the selected box sits on top.
 - **Preview links are display-only.** Tapping a link inside the Preview no longer navigates away from unsaved work.
+- **Popover buttons look like Danbooru's note dialog.** The action row is now text — **Commit** / **Cancel** / **Delete** / **History** — in the site's form-button colors (following your theme), instead of ✔ ✖ 🗑 📜 glyphs. It's "Commit", not "Save": the note is checkpointed locally and only sent on ✓ Confirm. The buttons stay 36 px tall (the native dialog's 24 px is too small for thumbs).
+- **Tag changes merge with other editors'.** The tag update now sends the tag string you saw as `old_tag_string`, the same way Danbooru's own edit form does, so a tag someone else changed in the meantime is kept — and the extra re-fetch before the update is gone.
+- **The touch-zone button has its own icon.** The side button you hold to see a box's touch zones was a plain 👁, easy to mistake for the note **Preview** toggle next to it. It is now a dashed box with a small eye on its top-right corner.
+- **Undo has a drawn arrow.** The ↶ glyph rendered small and looked different per font; the undo button now draws its own arrow, curving over the top and ending pointed left.
 
 ### Fixed
 - **Note popover ran off screen.** On 360 px phones the 343 px popover never met the clamp threshold, and under pinch zoom the clamp compared on-screen px with layout px and switched itself off — both popovers could lose their side buttons off either edge. Placement now works in visual px: always clamped, shrunk slightly when the screen is narrower than popover + padding, and the arrow slides to keep pointing at the box. This replaces v5.0.2's "let it overflow under extreme pinch zoom" behavior.
 - **"Leave" on the reload prompt didn't discard the draft.** Chromium fires `visibilitychange` after `pagehide`, which wrote the discarded draft straight back and produced a misleading Restore prompt. Saving after an explicit Leave is now off until a bfcache return; any input after the prompt counts as "Stay".
 - **Draft lost while the Confirm popover was open.** Confirm cleared the draft on entry and blocked saves, so backgrounding the tab at the tag popover and losing it to an OS kill threw the work away. The draft is now kept and saved until the first request actually goes out.
 - **A stalled request locked the UI for good.** Every request now times out after 20 s (response and body), which lands in the error modal with Retry.
-- **Retry duplicated notes.** A POST whose response was lost may have been stored; Retry re-sent it. (5.2.0 closes two remaining cases.) Failed POSTs are now matched against the post's live notes first (same rounded geometry, same body after Danbooru's normalization) and adopted when found; if the server can't be asked, Retry holds the POSTs back (`server state unverified`) while still re-sending PUT / DELETE / tags.
+- **Retry and re-sends duplicated notes.** A POST whose response was lost may have been stored, and Retry — or Cancel → Confirm, a draft restore, a timeout the server finished late, or editing the note afterwards — sent it again. A temp note now remembers every state it sent without getting a refusal (network, timeout, 5xx), kept across Cancel and in drafts, and every Confirm or Retry first looks those states up among the post's notes (same rounded geometry, same body after Danbooru's normalization, NEL included), including an unedited copy already loaded locally. A match is adopted and any later edit goes out as a PUT; if the server can't be asked, the POSTs are held back under the ⏳ lock while PUT / DELETE / tags still go out. A refused POST (4xx) is re-sent without a check.
 - **Previewed note markup could cover the popover.** Danbooru allows `position` / `inset` / `z-index` in notes; the Preview box now contains them.
 - **Floating button stuck in drag mode** after the OS cancelled a touch (notification shade, back gesture).
 - **Script failed to boot where `localStorage` is blocked** (legacy-key cleanup ran unguarded at import).
 - **Tag detection slowed on hostile note bodies.** The style popover's open-tag regex backtracked quadratically on long unterminated tags (~8 ms per call at the 5000-char body limit, twice per selection change); it is now linear.
+- **Entering edit mode on note-heavy posts.** Notes were rendered one by one with a layout read each; on a throttled phone 1000 notes took about 9 s. They now render in one pass (about 0.35 s in the same test). Posts with more than 1000 notes (Danbooru allows 1200) now load all of them.
+- **Rate limits.** A batch now stops at the first 429 instead of firing every remaining request (which lengthens Danbooru's lockout); the rest are listed as `Skipped — rate limited` and the error modal says to wait about a minute before Retry.
+- **Old drafts piled up.** Drafts for posts you never reopened stayed in `localStorage` forever; expired and invalid ones are now swept once per page load.
+- **Dragging a box** read the image position three times per frame; it now reads it once per gesture.
+- **Scrolling that starts on the image** no longer waits on the script (its touch listener is now passive).
+- **iOS Safari zoomed in when a field got focus.** Safari zooms the page for any focused field under 16px; the note textarea, the link / ruby / HEX inputs and the Size / Font selects are now 16px. The popovers keep their size. (Not yet checked on an iPhone.)
+- **Pen input** now behaves like touch on boxes (tap to select, then drag): with a stylus the browser could take over a drag that started on an unselected box mid-gesture. A drag cancelled by the browser or OS now puts the box back instead of keeping a partial move.
 
 ### Security
 - Draft note ids are validated (`digits` or `temp-<uuid>`, consistent with `isServerNote`) and PUT / DELETE refuse a non-numeric id, so a tampered `localStorage` draft can't point Confirm at another endpoint.
 - CI: the build job runs with a read-only token, no npm install scripts and no persisted git credentials; only the publish job (which installs nothing) holds the token that can push to `build`. A compromised dependency could still alter the bundle it builds, so branch protection on `main` and `build` (repository settings) remains necessary. Third-party actions are pinned to commit SHAs.
 - README names the `build` branch link as the only official copy and flags `testbuild` as unreviewed work in progress.
-
-### Added
-- `npm run e2e` — opt-in Playwright scenarios against a mock post page (Pixel 7 emulation, all requests intercepted); each scenario names the task it guards.
 
 ## [5.0.3] - 2026-05-15
 
