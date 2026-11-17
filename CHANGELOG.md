@@ -5,7 +5,9 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.1.3] - 2026-11-17
+
+Maintenance release: new build tooling and reorganized docs. The script behaves the same as 5.1.2.
 
 ### Changed
 - **Docs: the user manual moved to the wiki.** The README is now the front page (install, quick start, highlights, privacy, development) and links to the wiki for the manual. Corrected along the way: a Danbooru account is required (the README said "no login"), the error examples are real Danbooru messages, and the Development section matches the current modules, commands and tests.
@@ -341,6 +343,7 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.1.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.2]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
