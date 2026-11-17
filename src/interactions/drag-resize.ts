@@ -109,6 +109,9 @@ export function attachHandleListeners(
     // popover swap happens before the gesture begins.
     if (getActiveNoteId() !== noteId) {
       setActiveNote(noteId);
+      if (getActiveNoteId() !== noteId) {
+        return;
+      }
     }
     const isResize = corner === 'nw' || corner === 'se';
     const kind: DragState['kind'] = isResize
@@ -152,9 +155,13 @@ export function attachBodyDragListener(
       }
       return;
     }
-    // Mouse: activate and drag in one gesture.
+    // Mouse: activate and drag in one gesture. The switch can be
+    // refused (active note over the length limit).
     if (getActiveNoteId() !== noteId) {
       setActiveNote(noteId);
+      if (getActiveNoteId() !== noteId) {
+        return;
+      }
     }
     e.preventDefault();
     startInteraction(noteId, 'drag', e, bodyEl);

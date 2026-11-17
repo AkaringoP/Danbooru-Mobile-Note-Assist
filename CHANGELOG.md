@@ -5,6 +5,14 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.1] - 2026-11-17
+
+Follow-up polish to 5.1.0: clearer send state, and no way to commit or switch away from a note Danbooru would reject for length.
+
+### Changed
+- **Unsent changes are orange, sent is green.** The floating button's outline and badge and the arc menu's Confirm item are now orange while changes wait for ✓ Confirm — not on the server yet — and turn green once everything was sent, until the page reloads. The highlight is a soft glow, like the open-menu state, with a lightly rippled edge that slowly turns (held still under `prefers-reduced-motion`).
+- **Commit is off past 5000 characters.** Danbooru rejects a longer note whole (it does not truncate), which used to surface only at Confirm. While the counter is red, Commit and Ctrl/Cmd+Enter do nothing and tapping another box keeps the current one selected (with a warning) — switching used to commit a new box as-is, or leave an edited note's text for Confirm to send. Shorten it and Commit, or Cancel (back to the last committed text) / Delete. Typing is not blocked, so a long paste can be trimmed. The limit counts the note's markup too (`<b>`, `<span style=…>`), as Danbooru does.
+
 ## [5.1.0] - 2026-11-17
 
 Reliability, security and mobile-fit release from a mobile-focused audit: safer sending, clearer state at a glance, native-looking controls, and faster edit mode on note-heavy posts. Every fix below was reproduced first in a Playwright mobile-emulation harness that now ships as the opt-in `npm run e2e` suite.
@@ -319,6 +327,8 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
+[5.1.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.0.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.0.2]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.0.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main

@@ -70,12 +70,53 @@ describe('Popover action buttons (Task 4.7)', () => {
 });
 
 describe('Pending highlight (Task 4.8)', () => {
-  it('outlines the floating button and the Confirm item in green', () => {
+  it('outlines the floating button and the Confirm item in orange (not sent yet)', () => {
     expect(STYLES).toMatch(
-      /body\.dmna-has-pending:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*#43a047/,
+      /body\.dmna-has-pending:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*#ff9800/,
     );
     expect(STYLES).toMatch(
-      /body\.dmna-has-pending \.dmna-menu-item\[data-action="confirm"\][^{]*\{[^}]*#43a047/,
+      /body\.dmna-has-pending \.dmna-menu-item\[data-action="confirm"\][^{]*\{[^}]*#ff9800/,
+    );
+  });
+
+  it('turns them green once everything was sent', () => {
+    expect(STYLES).toMatch(
+      /body\.dmna-send-success:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*#43a047/,
+    );
+    expect(STYLES).toMatch(
+      /body\.dmna-send-success \.dmna-menu-item\[data-action="confirm"\][^{]*\{[^}]*#43a047/,
+    );
+  });
+
+  it('glows like the open-menu state instead of a hard ring', () => {
+    expect(STYLES).toMatch(
+      /body\.dmna-has-pending:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*box-shadow:\s*0 0 12px rgba\(255, 152, 0/,
+    );
+    expect(STYLES).toMatch(
+      /body\.dmna-send-success:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*box-shadow:\s*0 0 12px rgba\(67, 160, 71/,
+    );
+  });
+
+  it('adds a rippled ring that turns, on the button and the Confirm item', () => {
+    const ring = STYLES.match(
+      /#dmna-float-btn:not\(\.expanded\):not\(\.dragging\)::before,[^{]*\.dmna-menu-item\[data-action="confirm"\]::before\s*\{([^}]*)\}/,
+    );
+    expect(ring).not.toBeNull();
+    expect(ring![1]).toMatch(/mask:\s*url\("data:image\/svg\+xml,/);
+    expect(ring![1]).toMatch(/animation:\s*dmna-ripple 8\.6s linear infinite/);
+    const svg = decodeURIComponent(
+      ring![1].match(/mask:\s*url\("data:image\/svg\+xml,([^"]*)"\)/)![1],
+    );
+    // A filled band from the wavy edge in to the button border, no gaps.
+    expect(svg).toMatch(/fill-rule="evenodd"/);
+    expect(svg).not.toMatch(/fill="none"/);
+    expect(ring![1]).toMatch(/pointer-events:\s*none/);
+    expect(STYLES).toMatch(/@keyframes dmna-ripple/);
+  });
+
+  it('holds the ring still for prefers-reduced-motion', () => {
+    expect(STYLES).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*::before[^{]*\{[^}]*animation:\s*none/,
     );
   });
 

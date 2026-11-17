@@ -6,6 +6,29 @@ import {
 } from './config';
 
 /**
+ * A band with a rippled outer edge, as a CSS mask image. The pending /
+ * sent highlight paints its color through it and turns it, so the edge
+ * reads as moving water rather than a hard outline. The band is solid
+ * down to the button's border: its hole (r = 38 of 100) stays inside
+ * the border at both ends of the 1.05 scale pulse, so no gap shows.
+ */
+function rippledRingMask(): string {
+  const steps = 160;
+  const points = Array.from({length: steps}, (_, i) => {
+    const angle = (i / steps) * 2 * Math.PI;
+    const radius = 45.3 + 1.8 * Math.sin(angle * 16);
+    const x = 50 + radius * Math.cos(angle);
+    const y = 50 + radius * Math.sin(angle);
+    return `${x.toFixed(1)} ${y.toFixed(1)}`;
+  });
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+    `<path fill="#000" fill-rule="evenodd" d="M${points.join('L')}Z ` +
+    'M12 50A38 38 0 1 0 88 50A38 38 0 1 0 12 50Z"/></svg>';
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+/**
  * Inlined CSS for all MobileNoteAssist UI surfaces. Injected into a
  * <style> element by main.ts at boot.
  */
@@ -30,11 +53,20 @@ export const STYLES = `
       box-shadow: 0 0 12px rgba(0, 115, 255, 0.6);
     }
     #dmna-float-btn.dragging { background: #ff9800 !important; border-color: #ffe0b2 !important; transform: scale(1.2); }
-    /* Unsent changes (v5.1): green outline, same green as a dirty box.
-       Menu-open (blue), reposition (orange) and sending (⏳) win. */
+    /* Unsent changes (v5.1): orange glow — not on the server yet.
+       Glows like the menu-open state. Menu-open (blue), reposition
+       (orange fill) and sending (⏳) win. */
     body.dmna-has-pending:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
+      --dmna-highlight: #ff9800;
+      border-color: #ff9800;
+      box-shadow: 0 0 12px rgba(255, 152, 0, 0.75), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    /* Everything was sent: green until the page reloads. Same
+       specificity as the pending rule, later in source. */
+    body.dmna-send-success:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
+      --dmna-highlight: #43a047;
       border-color: #43a047;
-      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.55), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 12px rgba(67, 160, 71, 0.85), 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     /* Count of requests Confirm would send. */
     body:not(.dmna-sending) #dmna-float-btn[data-pending-count]:not(.dragging)::after {
@@ -47,8 +79,8 @@ export const STYLES = `
       padding: 0 4px;
       border-radius: 9px;
       box-sizing: border-box;
-      background: #43a047;
-      color: white;
+      background: #ff9800;
+      color: #1a1a1a;
       font-size: 11px;
       font-weight: bold;
       line-height: 18px;
@@ -92,8 +124,46 @@ export const STYLES = `
       pointer-events: auto;
     }
     body.dmna-has-pending .dmna-menu-item[data-action="confirm"] {
+      --dmna-highlight: #ff9800;
+      border-color: #ff9800;
+      box-shadow: 0 0 12px rgba(255, 152, 0, 0.75), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    body.dmna-send-success .dmna-menu-item[data-action="confirm"] {
+      --dmna-highlight: #43a047;
       border-color: #43a047;
-      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.55), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 12px rgba(67, 160, 71, 0.85), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    /* Rippled ring around the highlighted button. Only transform is
+       animated, so the turn stays on the compositor. */
+    body.dmna-has-pending:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging)::before,
+    body.dmna-send-success:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging)::before,
+    body.dmna-has-pending .dmna-menu-item[data-action="confirm"]::before,
+    body.dmna-send-success .dmna-menu-item[data-action="confirm"]::before {
+      content: '';
+      position: absolute;
+      /* Sits on the button's own border, so the edge itself ripples. */
+      inset: -5px;
+      background: var(--dmna-highlight);
+      -webkit-mask: ${rippledRingMask()} center / 100% 100% no-repeat;
+      mask: ${rippledRingMask()} center / 100% 100% no-repeat;
+      pointer-events: none;
+      animation: dmna-ripple 8.6s linear infinite;
+    }
+    /* The menu item's border is 0.5px thinner than the button's. */
+    body.dmna-has-pending .dmna-menu-item[data-action="confirm"]::before,
+    body.dmna-send-success .dmna-menu-item[data-action="confirm"]::before {
+      inset: -4.5px;
+    }
+    @keyframes dmna-ripple {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.05); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #dmna-float-btn::before,
+      .dmna-menu-item::before {
+        animation: none !important;
+      }
     }
     #dmna-menu.open .dmna-menu-item:active {
       transform: translate(var(--tx), var(--ty)) scale(0.88);
