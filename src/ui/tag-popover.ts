@@ -53,6 +53,7 @@ let tagPopoverElement: HTMLElement | null = null;
 let tagPopoverSummaryElement: HTMLElement | null = null;
 let tagPopoverTagsSection: HTMLElement[] = [];
 let tagPopoverInitialTags: Set<string> | null = null;
+let tagPopoverBaseTagString = '';
 let tagPopoverState: Record<string, boolean> | null = null;
 let pendingTagPopoverResolver: ((result: TagDelta | null) => void) | null =
   null;
@@ -81,19 +82,18 @@ export async function showTagPopover(
   summary: ChangeSummary,
   withTags: boolean,
 ): Promise<TagDelta | null> {
-  let initialTags = new Set<string>();
+  let tagString = '';
   if (withTags) {
-    let tagString: string;
     try {
       tagString = await fetchPostTagString();
     } catch (err) {
       showToast('⚠️ Failed to load post tags', 'error', err);
       return null;
     }
-    initialTags = new Set(
-      tagString.split(/\s+/).filter(t => TAG_OPTIONS.includes(t)),
-    );
   }
+  const initialTags = new Set(
+    tagString.split(/\s+/).filter(t => TAG_OPTIONS.includes(t)),
+  );
   return new Promise<TagDelta | null>(resolve => {
     // Defensive: if a previous popover somehow stayed open, cancel
     // it before opening a new one.
@@ -103,6 +103,7 @@ export async function showTagPopover(
       stale(null);
     }
     pendingTagPopoverResolver = resolve;
+    tagPopoverBaseTagString = tagString;
     openTagPopover(initialTags, summary, withTags);
   });
 }
@@ -446,7 +447,7 @@ function closeTagPopover(): void {
 /**
  * Resolves the in-flight `showTagPopover()` promise:
  *   - canceled=true  → null (caller aborts the Confirm flow)
- *   - canceled=false → {tagsToAdd, tagsToRemove} delta.
+ *   - canceled=false → {tagsToAdd, tagsToRemove, baseTagString} delta.
  */
 function submitTagPopover(canceled: boolean): void {
   const resolver = pendingTagPopoverResolver;
@@ -474,7 +475,7 @@ function submitTagPopover(canceled: boolean): void {
   });
   pendingTagPopoverResolver = null;
   closeTagPopover();
-  resolver({tagsToAdd, tagsToRemove});
+  resolver({tagsToAdd, tagsToRemove, baseTagString: tagPopoverBaseTagString});
 }
 
 /**

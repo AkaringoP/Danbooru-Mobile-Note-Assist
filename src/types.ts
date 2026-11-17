@@ -225,6 +225,12 @@ export type ToastLevel = 'info' | 'success' | 'warning' | 'error';
 export interface TagDelta {
   tagsToAdd: string[];
   tagsToRemove: string[];
+  /**
+   * The post's tag_string as the popover showed it ('' when no tags
+   * were fetched). Sent as `old_tag_string` so Danbooru applies only
+   * this delta on top of whatever the post has now (v5.1 Task 4.4).
+   */
+  baseTagString: string;
 }
 
 /**

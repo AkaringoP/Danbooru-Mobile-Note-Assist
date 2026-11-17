@@ -363,7 +363,7 @@ export async function sendBatch(
         result.failed.tagPatch = RATE_LIMIT_SKIP;
       } else {
         try {
-          await apiPatchPostTags(tagDelta.tagsToAdd, tagDelta.tagsToRemove);
+          await apiPatchPostTags(tagDelta);
         } catch (err) {
           result.failed.tagPatch = noteFailure('tag PATCH', err);
         }

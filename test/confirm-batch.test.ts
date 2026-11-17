@@ -106,7 +106,11 @@ function makeFlowHooks(): ConfirmFlowHooks {
     onNoteVisualsChanged: vi.fn(),
     onToast: vi.fn(),
     showTagPopover: vi.fn(() =>
-      Promise.resolve<TagDelta | null>({tagsToAdd: [], tagsToRemove: []}),
+      Promise.resolve<TagDelta | null>({
+        tagsToAdd: [],
+        tagsToRemove: [],
+        baseTagString: '',
+      }),
     ),
   };
 }
@@ -474,6 +478,7 @@ describe('runConfirmFlow — abort branches', () => {
     vi.mocked(flowHooks.showTagPopover).mockResolvedValueOnce({
       tagsToAdd: ['translated'],
       tagsToRemove: [],
+      baseTagString: '1girl translation_request',
     });
     vi.mocked(apiPostNote).mockResolvedValue({
       id: 700,
@@ -493,7 +498,11 @@ describe('runConfirmFlow — abort branches', () => {
     await runConfirmFlow();
 
     expect(apiPostNote).toHaveBeenCalledTimes(1);
-    expect(apiPatchPostTags).toHaveBeenCalledWith(['translated'], []);
+    expect(apiPatchPostTags).toHaveBeenCalledWith({
+      tagsToAdd: ['translated'],
+      tagsToRemove: [],
+      baseTagString: '1girl translation_request',
+    });
     expect(flowHooks.onToast).toHaveBeenCalledWith('✓ Saved', 'success');
     expect(notes.has(asServerNoteId(700))).toBe(true);
 
@@ -638,7 +647,7 @@ describe('runConfirmFlow — draft handoff', () => {
     expect(getIsDraftSaveBlocked()).toBe(false);
     expect(localStorage.getItem(KEY)).toBe('existing draft');
 
-    resolvePopover({tagsToAdd: [], tagsToRemove: []});
+    resolvePopover({tagsToAdd: [], tagsToRemove: [], baseTagString: ''});
     await flow;
 
     expect(atFirstRequest).toEqual({draft: null, blocked: true});
@@ -858,6 +867,7 @@ describe('sendBatch — rate limit', () => {
     const result = await sendBatch(classified, {
       tagsToAdd: ['translated'],
       tagsToRemove: [],
+      baseTagString: '',
     });
 
     expect(apiPostNote).toHaveBeenCalledTimes(2);
@@ -1023,6 +1033,7 @@ describe('handleSendResult', () => {
     const promise = handleSendResult(result, {
       tagsToAdd: ['translated'],
       tagsToRemove: [],
+      baseTagString: '1girl translation_request',
     });
     await waitForErrorModal();
     const retryBtn = document.querySelector(
@@ -1059,6 +1070,7 @@ describe('handleSendResult', () => {
     const promise = handleSendResult(result, {
       tagsToAdd: ['translated'],
       tagsToRemove: [],
+      baseTagString: '1girl translation_request',
     });
     await waitForErrorModal();
     const retryBtn = document.querySelector(
@@ -1073,7 +1085,11 @@ describe('handleSendResult', () => {
       configurable: true,
     });
     await promise;
-    expect(apiPatchPostTags).toHaveBeenCalledWith(['translated'], []);
+    expect(apiPatchPostTags).toHaveBeenCalledWith({
+      tagsToAdd: ['translated'],
+      tagsToRemove: [],
+      baseTagString: '1girl translation_request',
+    });
     vi.advanceTimersByTime(1000);
     expect(reloadSpy).toHaveBeenCalled();
   });

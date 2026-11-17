@@ -336,7 +336,11 @@ describe('showTagPopover — send summary', () => {
       document.getElementById('dmna-tag-popover-toggles')!.style.display,
     ).toBe('none');
     click('submit');
-    await expect(p).resolves.toEqual({tagsToAdd: [], tagsToRemove: []});
+    await expect(p).resolves.toEqual({
+      tagsToAdd: [],
+      tagsToRemove: [],
+      baseTagString: '',
+    });
   });
 
   it('tags come back after a move-only popover', async () => {
@@ -359,5 +363,35 @@ describe('showTagPopover — send summary', () => {
     ).toBe('');
     click('cancel');
     await withTags;
+  });
+});
+
+describe('showTagPopover — base tag string (Task 4.4)', () => {
+  it('returns the tag string it showed, for old_tag_string', async () => {
+    vi.mocked(fetchPostTagString)
+      .mockReset()
+      .mockResolvedValueOnce('1girl translation_request solo');
+    const p = showTagPopover(
+      {created: 1, textEdited: 0, movedOnly: 0, deleted: 0},
+      true,
+    );
+    await vi.waitFor(() =>
+      expect(document.querySelector('#dmna-tag-popover.show')).not.toBeNull(),
+    );
+    (
+      document.querySelector(
+        '#dmna-tag-popover .dmna-tag-row[data-tag="translated"] .dmna-tag-switch-btn',
+      ) as HTMLButtonElement
+    ).click();
+    (
+      document.querySelector(
+        '#dmna-tag-popover .dmna-tag-popover-btn[data-action="submit"]',
+      ) as HTMLButtonElement
+    ).click();
+    await expect(p).resolves.toEqual({
+      tagsToAdd: ['translated'],
+      tagsToRemove: ['translation_request'],
+      baseTagString: '1girl translation_request solo',
+    });
   });
 });
