@@ -24,6 +24,11 @@
 # persisted git credentials; only the `publish` job — which installs
 # nothing and runs no repo code — gets `contents: write`. Third-party
 # actions are pinned to commit SHAs (version in the trailing comment).
+# This protects the write token, not the bundle: dependency code still
+# runs in `build` and produces the published file. And any pushed
+# branch matching the triggers runs its own copy of this workflow, so
+# protecting `main` alone doesn't stop a branch from writing `build` —
+# restrict `build` with a ruleset or a protected environment.
 name: Publish build branch
 
 on:
@@ -69,8 +74,10 @@ jobs:
 
       - name: Determine publish target
         id: target
+        env:
+          REF: ${{ github.ref }}
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [ "$REF" = "refs/heads/main" ]; then
             echo "branch=build" >> "$GITHUB_OUTPUT"
             echo "mode=production" >> "$GITHUB_OUTPUT"
           else

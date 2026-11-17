@@ -93,7 +93,7 @@ export function fetchPostTagString(): Promise<string> {
  * (PostEdit, the same path as its own edit form) adds and removes only
  * what changed relative to it, so tags another editor changed in the
  * meantime are kept. Replaces the earlier re-fetch + overwrite, which
- * cost an extra GET and still raced with concurrent edits (v5.1).
+ * cost an extra GET and still raced with concurrent edits (v5.2).
  */
 export async function apiPatchPostTags({
   tagsToAdd,

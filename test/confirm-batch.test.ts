@@ -824,13 +824,12 @@ describe('runConfirmFlow — POST reconciliation', () => {
     await flow;
   });
 
-  it('a verified miss is re-sent on Retry', async () => {
+  it('a POST the server refused (4xx) is re-sent on Retry without a check', async () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     seedCommittedTemp('temp-lost-5');
     vi.mocked(apiPostNote)
-      .mockRejectedValueOnce(new Error('HTTP 500'))
+      .mockRejectedValueOnce(new ApiError('HTTP 422', 'http', 422))
       .mockResolvedValueOnce({...ON_SERVER, id: 778});
-    vi.mocked(fetchServerNotes).mockResolvedValue([]);
 
     const flow = runConfirmFlow();
     await modal();
@@ -838,8 +837,76 @@ describe('runConfirmFlow — POST reconciliation', () => {
     click('retry');
     await flow;
 
+    expect(fetchServerNotes).not.toHaveBeenCalled();
     expect(apiPostNote).toHaveBeenCalledTimes(2);
     expect(notes.has(asServerNoteId(778))).toBe(true);
+  });
+
+  it('Cancel, then Confirm again: an unverified POST is checked first, not re-sent (review #1)', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    seedCommittedTemp('temp-lost-6');
+    vi.mocked(apiPostNote).mockRejectedValueOnce(
+      new ApiError('Failed to fetch', 'network', null),
+    );
+    vi.mocked(fetchServerNotes)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce([ON_SERVER]);
+
+    const first = runConfirmFlow();
+    await modal();
+    expect(modalText()).toContain('(server state unverified)');
+    click('cancel');
+    await first;
+    expect(notes.get(asTempNoteId('temp-lost-6'))!.postOutcomeUnknown).toBe(
+      true,
+    );
+
+    await runConfirmFlow();
+
+    expect(apiPostNote).toHaveBeenCalledTimes(1);
+    expect(notes.has(asServerNoteId(777))).toBe(true);
+    expect(notes.has(asTempNoteId('temp-lost-6'))).toBe(false);
+  });
+
+  it('Confirm again while the server still cannot be asked: nothing is POSTed', async () => {
+    seedCommittedTemp('temp-lost-7');
+    vi.mocked(apiPostNote).mockRejectedValue(
+      new ApiError('Failed to fetch', 'network', null),
+    );
+    vi.mocked(fetchServerNotes).mockRejectedValue(new Error('offline'));
+
+    const first = runConfirmFlow();
+    await modal();
+    click('cancel');
+    await first;
+
+    const second = runConfirmFlow();
+    await modal();
+    expect(apiPostNote).toHaveBeenCalledTimes(1);
+    expect(modalText()).toContain('not re-sent');
+    expect(getIsSending()).toBe(false);
+    click('cancel');
+    await second;
+  });
+
+  it('a timed-out POST the server commits late is found on Retry (review #2)', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    seedCommittedTemp('temp-lost-8');
+    vi.mocked(apiPostNote).mockRejectedValueOnce(
+      new ApiError('Request timed out after 20 s', 'timeout', null),
+    );
+    vi.mocked(fetchServerNotes)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([ON_SERVER]);
+
+    const flow = runConfirmFlow();
+    await modal();
+    expect(modalText()).toContain('(server state unverified)');
+    click('retry');
+    await flow;
+
+    expect(apiPostNote).toHaveBeenCalledTimes(1);
+    expect(notes.has(asServerNoteId(777))).toBe(true);
   });
 });
 

@@ -671,3 +671,53 @@ describe('sweepExpiredDrafts', () => {
     }
   });
 });
+
+describe('loadDraft — postOutcomeUnknown (review #1)', () => {
+  const ST = {x: 1, y: 2, w: 30, h: 40, text: 't'};
+  function store(flag: unknown): void {
+    localStorage.setItem(
+      draftKey('123'),
+      JSON.stringify({
+        schemaVersion: DRAFT_SCHEMA_VERSION,
+        savedAt: Date.now(),
+        mode: 'active',
+        activeNoteId: null,
+        notes: [
+          [
+            'temp-abc',
+            {
+              current: ST,
+              initialState: ST,
+              confirmedState: ST,
+              isDeleted: false,
+              isServerNote: false,
+              everConfirmed: true,
+              postOutcomeUnknown: flag,
+            },
+          ],
+        ],
+        actionLog: [],
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    setPathname('/posts/123');
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    setPathname('/');
+  });
+
+  it('keeps the flag', () => {
+    store(true);
+    expect(loadDraft()!.notes[0][1].postOutcomeUnknown).toBe(true);
+  });
+
+  it('rejects a non-boolean flag', () => {
+    store('yes');
+    expect(loadDraft()).toBeNull();
+  });
+});

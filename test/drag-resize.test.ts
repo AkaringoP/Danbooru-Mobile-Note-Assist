@@ -184,3 +184,25 @@ describe('drag reads the image rect once per gesture (Task 3.2)', () => {
     expect(notes.get(ID)!.current).toEqual({...START, w: 300, h: 300});
   });
 });
+
+describe('pen and cancelled gestures (review #3)', () => {
+  it('a pen swipe on an unselected box neither moves nor selects it', () => {
+    const down = drag(el, 'pen');
+    expect(notes.get(ID)!.current).toEqual(START);
+    expect(getActiveNoteId()).toBeNull();
+    expect(down.defaultPrevented).toBe(false);
+  });
+
+  it('a pointercancel mid-drag puts the box back and records nothing', () => {
+    setActiveNote(ID);
+    el.dispatchEvent(pointer('pointerdown', 'touch', 50, 50));
+    for (let i = 1; i <= 5; i++) {
+      el.dispatchEvent(pointer('pointermove', 'touch', 50 + i * 5, 50));
+    }
+    expect(notes.get(ID)!.current.x).not.toBe(START.x);
+    el.dispatchEvent(pointer('pointercancel', 'touch', 75, 50));
+
+    expect(notes.get(ID)!.current).toEqual(START);
+    expect(actionLog.has(ID)).toBe(false);
+  });
+});

@@ -30,7 +30,7 @@ export const STYLES = `
       box-shadow: 0 0 12px rgba(0, 115, 255, 0.6);
     }
     #dmna-float-btn.dragging { background: #ff9800 !important; border-color: #ffe0b2 !important; transform: scale(1.2); }
-    /* Unsent changes (v5.1): green outline, same green as a dirty box.
+    /* Unsent changes (v5.2): green outline, same green as a dirty box.
        Menu-open (blue), reposition (orange) and sending (⏳) win. */
     body.dmna-has-pending:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
       border-color: #43a047;
@@ -577,7 +577,7 @@ export const STYLES = `
     /* Text buttons in Danbooru's form-button colors (follow the site
        theme; fallbacks are the light-theme values) so the popover reads
        like the native note dialog. Height stays a touch target — the
-       native 24 px buttons are too small for thumbs (v5.1). */
+       native 24 px buttons are too small for thumbs (v5.2). */
     .dmna-popover-btn {
       min-height: 36px;
       padding: 0;

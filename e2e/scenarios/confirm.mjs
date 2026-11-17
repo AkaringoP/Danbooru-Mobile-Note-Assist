@@ -84,12 +84,114 @@ export default [
             .waitForSelector('#dmna-error-modal.show', {timeout: 2500})
             .then(() => true)
             .catch(() => false);
-          if (modal) {
-            await page
-              .locator('.dmna-error-modal-btn[data-action="retry"]')
-              .tap();
-          }
+          assert.equal(modal, false, 'error modal for a POST the server has');
+          assert.equal(posts(log).length, 1, 'POST requests for one note');
+        },
+      );
+    },
+  },
+  {
+    name: 'unverified-cancel',
+    task: '1.4',
+    title: 'Cancel, then Confirm again: an unverified POST is not re-sent',
+    run: () => {
+      let count = 0;
+      const stored = [];
+      let getOk = true;
+      return withPage(
+        {
+          api: {
+            'GET /notes.json': route =>
+              getOk
+                ? route.fulfill({json: stored})
+                : route.abort('connectionreset'),
+            'POST /notes.json': async (route, req) => {
+              count++;
+              const n = JSON.parse(req.postData()).note;
+              const saved = {
+                id: 9000 + count,
+                x: n.x,
+                y: n.y,
+                width: n.width,
+                height: n.height,
+                body: n.body,
+              };
+              stored.push(saved);
+              if (count === 1) {
+                return route.abort('connectionreset');
+              }
+              return route.fulfill({status: 201, json: saved});
+            },
+          },
+        },
+        async ({page, log}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await createConfirmedNote(page, 'dup?');
+          getOk = false;
+          await tapArcConfirm(page);
+          await submitConfirmPopover(page);
+          await page.waitForSelector('#dmna-error-modal.show', {timeout: 4000});
+          await page.locator('.dmna-error-modal-btn[data-action="cancel"]').tap();
+          await page.waitForTimeout(300);
+          getOk = true;
+          await tapArcConfirm(page);
+          await submitConfirmPopover(page);
           await page.waitForTimeout(1500);
+          assert.equal(posts(log).length, 1, 'POST requests for one note');
+          assert.equal(stored.length, 1, 'notes stored server-side');
+        },
+      );
+    },
+  },
+  {
+    name: 'late-commit',
+    task: '1.4',
+    title: 'A timed-out POST the server stores late is found on Retry',
+    run: () => {
+      let count = 0;
+      const stored = [];
+      let late = null;
+      return withPage(
+        {
+          api: {
+            'GET /notes.json': route => route.fulfill({json: stored}),
+            'POST /notes.json': async (route, req) => {
+              count++;
+              const n = JSON.parse(req.postData()).note;
+              const saved = {
+                id: 9000 + count,
+                x: n.x,
+                y: n.y,
+                width: n.width,
+                height: n.height,
+                body: n.body,
+              };
+              if (count === 1) {
+                late = saved; // never answered; stored after the check
+                return;
+              }
+              stored.push(saved);
+              return route.fulfill({status: 201, json: saved});
+            },
+          },
+        },
+        async ({page, log}) => {
+          await page.clock.install();
+          await gotoPost(page);
+          await enterActive(page);
+          await createConfirmedNote(page, 'slow');
+          await tapArcConfirm(page);
+          await submitConfirmPopover(page);
+          await page.waitForFunction(() =>
+            document.body.classList.contains('dmna-sending'),
+          );
+          await page.clock.fastForward('00:25');
+          await page.waitForSelector('#dmna-error-modal.show', {timeout: 4000});
+          stored.push(late);
+          await page.locator('.dmna-error-modal-btn[data-action="retry"]').tap();
+          await page.clock.fastForward('00:02');
+          await page.waitForTimeout(800);
           assert.equal(posts(log).length, 1, 'POST requests for one note');
         },
       );

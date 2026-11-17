@@ -39,24 +39,34 @@ async function timedFetch<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timedOut = () =>
+    new ApiError(
+      `Request timed out after ${REQUEST_TIMEOUT_MS / 1000} s`,
+      'timeout',
+      null,
+    );
   try {
-    const r = await fetch(url, {...init, signal: controller.signal});
-    return await read(r);
-  } catch (err) {
-    if (err instanceof ApiError) {
+    let r: Response;
+    try {
+      r = await fetch(url, {...init, signal: controller.signal});
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw timedOut();
+      }
+      // fetch() itself rejects with TypeError on a network failure.
+      if (err instanceof TypeError) {
+        throw new ApiError(err.message || 'Network error', 'network', null);
+      }
       throw err;
     }
-    if (controller.signal.aborted) {
-      throw new ApiError(
-        `Request timed out after ${REQUEST_TIMEOUT_MS / 1000} s`,
-        'timeout',
-        null,
-      );
+    try {
+      return await read(r);
+    } catch (err) {
+      if (!(err instanceof ApiError) && controller.signal.aborted) {
+        throw timedOut();
+      }
+      throw err;
     }
-    if (err instanceof TypeError) {
-      throw new ApiError(err.message || 'Network error', 'network', null);
-    }
-    throw err;
   } finally {
     clearTimeout(timer);
   }

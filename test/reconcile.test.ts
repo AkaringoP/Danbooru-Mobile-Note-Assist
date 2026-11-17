@@ -28,6 +28,10 @@ describe('normalizeNoteBody', () => {
     expect(normalizeNoteBody('  a\r\nb\n\nc   d \t')).toBe('a b c d');
   });
 
+  it('treats NEL (U+0085) like the newline the server turns it into', () => {
+    expect(normalizeNoteBody('a\u0085b')).toBe(normalizeNoteBody('a\r\nb'));
+  });
+
   it('applies NFC', () => {
     // Decomposed Hangul jamo (U+1100 U+1161) composes to U+AC00.
     expect(normalizeNoteBody('\u1100\u1161')).toBe('\uAC00');

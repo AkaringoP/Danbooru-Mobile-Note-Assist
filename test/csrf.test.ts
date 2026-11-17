@@ -485,3 +485,24 @@ describe('request timeout + ApiError', () => {
     await assertion;
   });
 });
+
+describe('timedFetch — only fetch() failures count as network errors (review #6)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('a TypeError while handling the response is not relabelled', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => Promise.reject(new TypeError('body stream broke')),
+      })),
+    );
+    const err = await apiCall('POST', '/notes.json', {}).catch(e => e);
+    expect(err).toBeInstanceOf(TypeError);
+    expect(err).not.toBeInstanceOf(ApiError);
+  });
+});

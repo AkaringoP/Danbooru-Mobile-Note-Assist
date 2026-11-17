@@ -114,6 +114,13 @@ export interface Note {
    * "user ✔'d an empty box without editing" as fresh-new.
    */
   everConfirmed: boolean;
+  /**
+   * Temp notes only: a POST for this note failed without a server
+   * answer (network drop, timeout, 5xx), so the server may have stored
+   * it. Every later send looks for it among the post's live notes
+   * before POSTing again. Survives Cancel and drafts (v5.2).
+   */
+  postOutcomeUnknown?: boolean;
   /** The `.dmna-note-box` div, or `null` until first render. */
   domElement: HTMLElement | null;
 }
@@ -228,7 +235,7 @@ export interface TagDelta {
   /**
    * The post's tag_string as the popover showed it ('' when no tags
    * were fetched). Sent as `old_tag_string` so Danbooru applies only
-   * this delta on top of whatever the post has now (v5.1 Task 4.4).
+   * this delta on top of whatever the post has now (v5.2 Task 4.4).
    */
   baseTagString: string;
 }

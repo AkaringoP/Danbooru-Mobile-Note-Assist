@@ -22,6 +22,9 @@ Second batch of the mobile-focused audit: clearer state at a glance, native-look
 - **Old drafts piled up.** Drafts for posts you never reopened stayed in `localStorage` forever; expired and invalid ones are now swept once per page load.
 - **Dragging a box** read the image position three times per frame; it now reads it once per gesture.
 - **Scrolling that starts on the image** no longer waits on the script (its touch listener is now passive).
+- **Two remaining duplicate-note paths** found in final review: tapping Cancel on the error modal and later Confirm again re-sent a POST whose outcome was unknown, and a POST that timed out was checked only once, so a server that stored it late got a second copy on Retry. A temp note whose POST failed without a refusal (network, timeout, 5xx) is now flagged — the flag survives Cancel and drafts — and every later Confirm or Retry looks it up among the post's notes before POSTing; if the server can't be asked, it is held back (`not re-sent`). A refused POST (4xx) is re-sent without a check.
+- **Pen input** now behaves like touch on boxes (tap to select, then drag): with a stylus the browser could take over a drag that started on an unselected box mid-gesture. A drag cancelled by the browser or OS now puts the box back instead of keeping a partial move.
+- Note bodies containing NEL (U+0085) now match the server's normalization when checking for a lost POST.
 
 ## [5.1.0] - 2026-11-17
 
@@ -39,7 +42,7 @@ Reliability, security and mobile-fit release from a mobile-focused audit. Every 
 - **"Leave" on the reload prompt didn't discard the draft.** Chromium fires `visibilitychange` after `pagehide`, which wrote the discarded draft straight back and produced a misleading Restore prompt. Saving after an explicit Leave is now off until a bfcache return; any input after the prompt counts as "Stay".
 - **Draft lost while the Confirm popover was open.** Confirm cleared the draft on entry and blocked saves, so backgrounding the tab at the tag popover and losing it to an OS kill threw the work away. The draft is now kept and saved until the first request actually goes out.
 - **A stalled request locked the UI for good.** Every request now times out after 20 s (response and body), which lands in the error modal with Retry.
-- **Retry duplicated notes.** A POST whose response was lost may have been stored; Retry re-sent it. Failed POSTs are now matched against the post's live notes first (same rounded geometry, same body after Danbooru's normalization) and adopted when found; if the server can't be asked, Retry holds the POSTs back (`server state unverified`) while still re-sending PUT / DELETE / tags.
+- **Retry duplicated notes.** A POST whose response was lost may have been stored; Retry re-sent it. (5.2.0 closes two remaining cases.) Failed POSTs are now matched against the post's live notes first (same rounded geometry, same body after Danbooru's normalization) and adopted when found; if the server can't be asked, Retry holds the POSTs back (`server state unverified`) while still re-sending PUT / DELETE / tags.
 - **Previewed note markup could cover the popover.** Danbooru allows `position` / `inset` / `z-index` in notes; the Preview box now contains them.
 - **Floating button stuck in drag mode** after the OS cancelled a touch (notification shade, back gesture).
 - **Script failed to boot where `localStorage` is blocked** (legacy-key cleanup ran unguarded at import).
@@ -47,7 +50,7 @@ Reliability, security and mobile-fit release from a mobile-focused audit. Every 
 
 ### Security
 - Draft note ids are validated (`digits` or `temp-<uuid>`, consistent with `isServerNote`) and PUT / DELETE refuse a non-numeric id, so a tampered `localStorage` draft can't point Confirm at another endpoint.
-- CI: the build job runs with a read-only token, no npm install scripts and no persisted git credentials; only the publish job (which installs nothing) can push to `build`. Third-party actions are pinned to commit SHAs.
+- CI: the build job runs with a read-only token, no npm install scripts and no persisted git credentials; only the publish job (which installs nothing) holds the token that can push to `build`. A compromised dependency could still alter the bundle it builds, so branch protection on `main` and `build` (repository settings) remains necessary. Third-party actions are pinned to commit SHAs.
 - README names the `build` branch link as the only official copy and flags `testbuild` as unreviewed work in progress.
 
 ### Added

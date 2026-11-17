@@ -1184,6 +1184,25 @@ describe('serializeForDraft', () => {
   });
 });
 
+describe('draft round-trip of postOutcomeUnknown (review #1)', () => {
+  it('serializes the flag and restores it', async () => {
+    const id = createTempNote({...BASE, text: 'x'});
+    popoverConfirm(id);
+    notes.get(id)!.postOutcomeUnknown = true;
+    const snap = serializeForDraft();
+    expect(snap.notes[0][1].postOutcomeUnknown).toBe(true);
+
+    await applyDraftSnapshot(snap);
+
+    expect(notes.get(id)!.postOutcomeUnknown).toBe(true);
+  });
+
+  it('leaves the flag out when it is not set', () => {
+    popoverConfirm(createTempNote({...BASE, text: 'x'}));
+    expect('postOutcomeUnknown' in serializeForDraft().notes[0][1]).toBe(false);
+  });
+});
+
 describe('applyDraftSnapshot', () => {
   it('clears existing state before populating — onNoteRemoved fires for each prior note', async () => {
     const prior = asTempNoteId('temp-prior');

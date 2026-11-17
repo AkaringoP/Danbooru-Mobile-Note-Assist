@@ -17,11 +17,14 @@ import {NoteState} from '../types';
  * equal regardless of EOL style.
  */
 export function normalizeNoteBody(body: string): string {
-  return body
-    .normalize('NFC')
-    .replace(/[\u180E\u200B\u200C\u2060\uFEFF]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    body
+      .normalize('NFC')
+      .replace(/[\u180E\u200B\u200C\u2060\uFEFF]/g, '')
+      // \s doesn't cover NEL, which the server turns into a line break.
+      .replace(/[\s\u0085]+/g, ' ')
+      .trim()
+  );
 }
 
 function sameNote(state: NoteState, sn: ServerNoteDescriptor): boolean {

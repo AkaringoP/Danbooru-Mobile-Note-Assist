@@ -348,7 +348,7 @@ export function createPopover(): void {
 
   const buttons = document.createElement('div');
   buttons.id = 'dmna-popover-buttons';
-  // Text labels styled like Danbooru's own note dialog buttons (v5.1).
+  // Text labels styled like Danbooru's own note dialog buttons (v5.2).
   // "Commit", not "Save": it sets a local checkpoint; nothing reaches
   // the server until ✓ Confirm.
   const actions: Array<{

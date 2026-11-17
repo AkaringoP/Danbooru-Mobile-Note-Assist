@@ -76,9 +76,10 @@ export type SuccessfulPost = PendingPost & {
   serverResponse: ServerNoteResponse | null;
 };
 /**
- * `unverified`: the post's live notes couldn't be fetched after the
- * failure, so it's unknown whether the server stored this note anyway
- * (lost response). Retry holds such POSTs back until it can check.
+ * `unverified`: the POST failed without a refusal (network, timeout,
+ * 5xx), so the server may have stored the note anyway. The flag is
+ * copied to `Note.postOutcomeUnknown`, and every later send looks the
+ * note up before POSTing it again.
  */
 export type FailedPost = PendingPost & {
   error: string;
@@ -110,7 +111,7 @@ export interface SendBatchResult {
     deletes: FailedDelete[];
     tagPatch: string | null;
   };
-  /** A request got 429; everything after it was skipped (v5.1 Task 4.3). */
+  /** A request got 429; everything after it was skipped (v5.2 Task 4.3). */
   rateLimited?: boolean;
 }
 
@@ -282,13 +283,10 @@ export async function sendBatch(
   classified: ClassifiedChanges,
   tagDelta: TagDelta | null,
 ): Promise<SendBatchResult> {
-  const result: SendBatchResult = {
-    successful: {posts: [], puts: [], deletes: []},
-    failed: {posts: [], puts: [], deletes: [], tagPatch: null},
-  };
+  const result = emptyResult();
   // Once Danbooru answers 429, every further request deepens the
   // penalty (its limiter charges limited callers), so the rest of the
-  // batch is skipped and left for Retry (v5.1 Task 4.3).
+  // batch is skipped and left for Retry (v5.2 Task 4.3).
   let rateLimited = false;
   const noteFailure = (label: string, err: unknown): string => {
     // The error modal shows result.failed[...].error (a compact
@@ -352,7 +350,7 @@ export async function sendBatch(
         result.successful.posts.push({...item, serverResponse});
       } catch (err) {
         const error = noteFailure(`POST temp ${item.noteId}`, err);
-        result.failed.posts.push({...item, error});
+        result.failed.posts.push({...item, error, unverified: !isRefusal(err)});
       }
     }
     if (
@@ -512,7 +510,25 @@ export function countSendResult(result: SendBatchResult): {
   return {successCount, failureCount};
 }
 
+function emptyResult(): SendBatchResult {
+  return {
+    successful: {posts: [], puts: [], deletes: []},
+    failed: {posts: [], puts: [], deletes: [], tagPatch: null},
+  };
+}
+
+/** A 4xx answer: the server refused the request, so nothing was stored. */
+function isRefusal(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.kind === 'http' &&
+    err.status !== null &&
+    err.status < 500
+  );
+}
+
 const RATE_LIMIT_SKIP = 'Skipped — rate limited';
+const NOT_RESENT = 'not re-sent — the server could not be checked';
 const RATE_LIMIT_NOTE =
   'Rate limited by Danbooru — wait about a minute, then Retry.';
 
@@ -554,40 +570,88 @@ async function findCommittedPosts<T extends PendingPost>(
 }
 
 /**
- * Moves failed POSTs that the server stored anyway into `successful`,
- * and marks the rest verified (`unverified: false`) or, when the live
- * notes can't be fetched, `unverified: true`.
+ * Adopts failed POSTs that the server stored anyway (lost response) as
+ * successes. Only POSTs whose outcome is unknown are looked up; when the
+ * live notes can't be fetched they simply stay unverified.
  */
 async function reconcileFailedPosts(
   result: SendBatchResult,
 ): Promise<SendBatchResult> {
-  // Skipped POSTs were never sent, so there is nothing to look for.
-  const attempted = result.failed.posts.filter(p => !p.skipped);
-  if (attempted.length === 0) {
+  const uncertain = result.failed.posts.filter(p => p.unverified && !p.skipped);
+  if (uncertain.length === 0) {
     return result;
   }
-  const skipped = result.failed.posts.filter(p => p.skipped);
   const createdIds = result.successful.posts.flatMap(p =>
     typeof p.serverResponse?.id === 'number' ? [p.serverResponse.id] : [],
   );
-  const found = await findCommittedPosts(attempted, createdIds);
+  const found = await findCommittedPosts(uncertain, createdIds);
+  if (!found || found.committed.length === 0) {
+    return result;
+  }
+  const adopted = new Set(found.committed.map(c => c.noteId));
   return {
     ...result,
     successful: {
       ...result.successful,
-      posts: [...result.successful.posts, ...(found ? found.committed : [])],
+      posts: [...result.successful.posts, ...found.committed],
     },
     failed: {
       ...result.failed,
-      posts: [
-        ...(found ? found.rest : attempted).map(p => ({
-          ...p,
-          unverified: !found,
-        })),
-        ...skipped,
-      ],
+      posts: result.failed.posts.filter(p => !adopted.has(p.noteId)),
     },
   };
+}
+
+/**
+ * Sends a classified batch, checking first for any temp note whose
+ * earlier POST may have been stored (`Note.postOutcomeUnknown`): found
+ * → adopted without sending; the server can't be asked → held back
+ * (`skipped`, still unverified). PUT / DELETE / tags are always sent —
+ * only POST is not idempotent. Used by Confirm and by Retry, so a
+ * Cancel in between, or a draft restore, can't lead to a re-POST.
+ * Skips `sendBatch` entirely when nothing is left to send.
+ */
+async function sendChecked(
+  classified: ClassifiedChanges,
+  tagDelta: TagDelta | null,
+): Promise<SendBatchResult> {
+  const uncertain = classified.posts.filter(
+    p => notes.get(p.noteId)?.postOutcomeUnknown,
+  );
+  let posts = classified.posts;
+  let committed: SuccessfulPost[] = [];
+  let heldBack: FailedPost[] = [];
+  if (uncertain.length > 0) {
+    const certain = classified.posts.filter(p => !uncertain.includes(p));
+    const found = await findCommittedPosts(uncertain, []);
+    if (found) {
+      committed = found.committed;
+      posts = [...certain, ...found.rest];
+    } else {
+      hooks!.onToast(UNVERIFIED_TOAST, 'warning');
+      heldBack = uncertain.map(p => ({
+        ...p,
+        error: NOT_RESENT,
+        unverified: true,
+        skipped: true,
+      }));
+      posts = certain;
+    }
+  }
+  const hasTagChange =
+    !!tagDelta &&
+    (tagDelta.tagsToAdd.length > 0 || tagDelta.tagsToRemove.length > 0);
+  const hasRequests =
+    posts.length > 0 ||
+    classified.puts.length > 0 ||
+    classified.deletes.length > 0 ||
+    hasTagChange;
+  const result = hasRequests
+    ? await sendBatch({...classified, posts}, tagDelta)
+    : emptyResult();
+  result.successful.posts.push(...committed);
+  result.failed.posts.push(...heldBack);
+  return result;
 }
 
 /**
@@ -614,6 +678,14 @@ export async function handleSendResult(
 ): Promise<void> {
   const result = await reconcileFailedPosts(sent);
   applyServerStateToLocal(result);
+  // Remember, across Cancel and drafts, which temp notes may already
+  // exist server-side. POSTs not sent this round keep their flag.
+  for (const p of result.failed.posts) {
+    const note = notes.get(p.noteId);
+    if (note && !p.skipped) {
+      note.postOutcomeUnknown = p.unverified === true;
+    }
+  }
 
   const hasFailures =
     result.failed.posts.length > 0 ||
@@ -661,31 +733,7 @@ export async function handleSendResult(
     return;
   }
 
-  // POST is not idempotent: if the last check couldn't reach the
-  // server, ask again before re-sending, and hold the POSTs back if it
-  // still can't (PUT / DELETE / tags are safe to repeat).
-  let committed: SuccessfulPost[] = [];
-  let heldBack: FailedPost[] = [];
-  let posts = classified.posts;
-  if (posts.length > 0 && result.failed.posts.some(p => p.unverified)) {
-    const found = await findCommittedPosts(posts, []);
-    if (found) {
-      committed = found.committed;
-      posts = found.rest;
-    } else {
-      hooks!.onToast(UNVERIFIED_TOAST, 'warning');
-      heldBack = posts.map(p => ({
-        ...p,
-        error: 'not re-sent',
-        unverified: true,
-      }));
-      posts = [];
-    }
-  }
-
-  const retryResult = await sendBatch({...classified, posts}, retryTagDelta);
-  retryResult.successful.posts.push(...committed);
-  retryResult.failed.posts.push(...heldBack);
+  const retryResult = await sendChecked(classified, retryTagDelta);
   await handleSendResult(retryResult, retryTagDelta);
 }
 
@@ -885,7 +933,7 @@ export async function runConfirmFlow(): Promise<void> {
     // fetchServerNotes is the canonical recovery path (PLAN D4 + D6).
     clearDraft();
     draftSaveBlocked = true;
-    const result = await sendBatch(classified, tagDelta);
+    const result = await sendChecked(classified, tagDelta);
     await handleSendResult(result, tagDelta);
   } finally {
     isInConfirmPipeline = false;

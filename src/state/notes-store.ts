@@ -121,7 +121,7 @@ export interface NotesStoreHooks {
    * A batch of notes entered the collection without being rendered
    * (edit-mode entry, draft restore). Rendering them one by one read
    * the image rect per note between style writes — 9 s of layout for
-   * 1000 notes on a throttled phone (v5.1 Task 3.5). Subscribers:
+   * 1000 notes on a throttled phone (v5.2 Task 3.5). Subscribers:
    *   - ui/note-box: `updateAllNoteBoxPositions()` (one rect read)
    *   - ui/popover: `refreshActivePopover()`
    */
@@ -839,6 +839,7 @@ export function serializeForDraft(): DraftSnapshot {
         isDeleted: note.isDeleted,
         isServerNote: note.isServerNote,
         everConfirmed: note.everConfirmed,
+        ...(note.postOutcomeUnknown ? {postOutcomeUnknown: true} : {}),
       },
     ]);
   }
@@ -908,6 +909,7 @@ export async function applyDraftSnapshot(
       isDeleted: snote.isDeleted,
       isServerNote: snote.isServerNote,
       everConfirmed: snote.everConfirmed,
+      ...(snote.postOutcomeUnknown ? {postOutcomeUnknown: true} : {}),
       domElement: null,
     };
     notes.set(noteId, note);
