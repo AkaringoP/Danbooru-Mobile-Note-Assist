@@ -5,6 +5,36 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-11-17
+
+Reliability, security and mobile-fit release from a mobile-focused audit. Every fix below was reproduced first in a Playwright mobile-emulation harness that now ships as the opt-in `npm run e2e` suite.
+
+### Changed
+- **Confirm always shows a send summary.** The Confirm popover now opens with `New 3 · Edited 2 · Moved 1 · Deleted 4` (zero buckets omitted, deletions in red) before anything is sent. A batch that only moved or resized boxes used to go out with no prompt; it now shows the summary with Submit / Cancel (no tag fetch, no toggles).
+- **On touch, select a box before dragging it.** A swipe that starts on a box you haven't selected now scrolls the page instead of moving that box (previously a 200 px swipe moved someone's note 185 px and Confirm sent it). Tap selects as before; mouse press-and-drag is unchanged.
+- **Switching boxes keeps a new box's text.** Tapping another box while a never-✔'d new box was active left it green but Confirm silently dropped it. Typed text is now committed as if ✔ was pressed (↶ still undoes it); an empty new box is removed.
+- **Smaller boxes stack above larger ones.** A note covering the whole image no longer swallows taps meant for the notes under it; the selected box sits on top.
+- **Preview links are display-only.** Tapping a link inside the Preview no longer navigates away from unsaved work.
+
+### Fixed
+- **Note popover ran off screen.** On 360 px phones the 343 px popover never met the clamp threshold, and under pinch zoom the clamp compared on-screen px with layout px and switched itself off — both popovers could lose their side buttons off either edge. Placement now works in visual px: always clamped, shrunk slightly when the screen is narrower than popover + padding, and the arrow slides to keep pointing at the box. This replaces v5.0.2's "let it overflow under extreme pinch zoom" behavior.
+- **"Leave" on the reload prompt didn't discard the draft.** Chromium fires `visibilitychange` after `pagehide`, which wrote the discarded draft straight back and produced a misleading Restore prompt. Saving after an explicit Leave is now off until a bfcache return; any input after the prompt counts as "Stay".
+- **Draft lost while the Confirm popover was open.** Confirm cleared the draft on entry and blocked saves, so backgrounding the tab at the tag popover and losing it to an OS kill threw the work away. The draft is now kept and saved until the first request actually goes out.
+- **A stalled request locked the UI for good.** Every request now times out after 20 s (response and body), which lands in the error modal with Retry.
+- **Retry duplicated notes.** A POST whose response was lost may have been stored; Retry re-sent it. Failed POSTs are now matched against the post's live notes first (same rounded geometry, same body after Danbooru's normalization) and adopted when found; if the server can't be asked, Retry holds the POSTs back (`server state unverified`) while still re-sending PUT / DELETE / tags.
+- **Previewed note markup could cover the popover.** Danbooru allows `position` / `inset` / `z-index` in notes; the Preview box now contains them.
+- **Floating button stuck in drag mode** after the OS cancelled a touch (notification shade, back gesture).
+- **Script failed to boot where `localStorage` is blocked** (legacy-key cleanup ran unguarded at import).
+- **Tag detection slowed on hostile note bodies.** The style popover's open-tag regex backtracked quadratically on long unterminated tags (~8 ms per call at the 5000-char body limit, twice per selection change); it is now linear.
+
+### Security
+- Draft note ids are validated (`digits` or `temp-<uuid>`, consistent with `isServerNote`) and PUT / DELETE refuse a non-numeric id, so a tampered `localStorage` draft can't point Confirm at another endpoint.
+- CI: the build job runs with a read-only token, no npm install scripts and no persisted git credentials; only the publish job (which installs nothing) can push to `build`. Third-party actions are pinned to commit SHAs.
+- README names the `build` branch link as the only official copy and flags `testbuild` as unreviewed work in progress.
+
+### Added
+- `npm run e2e` — opt-in Playwright scenarios against a mock post page (Pixel 7 emulation, all requests intercepted); each scenario names the task it guards.
+
 ## [5.0.3] - 2026-05-15
 
 Patch release for popover header cascade and mode-toggle appearance regressions surfaced post-v5.0.2.
