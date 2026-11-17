@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Docs: the user manual moved to the wiki.** The README is now the front page (install, quick start, highlights, privacy, development) and links to the wiki for the manual. Corrected along the way: a Danbooru account is required (the README said "no login"), the error examples are real Danbooru messages, and the Development section matches the current modules, commands and tests.
 - **Build: vite 8 and vite-plugin-monkey 8** (replaces Dependabot PR #1). vite 8 bundles with rolldown, so esbuild is no longer installed; `tsconfig.json` moves to `moduleResolution: "bundler"`, which vite 8's export-only types need. The userscript header is unchanged and the bundle is about 8% smaller; no user-facing change.
 
 ## [5.1.2] - 2026-11-17
