@@ -1,6 +1,6 @@
 # Danbooru Mobile Note Assist
 
-A user manual for **Mobile Note Assist** — a UserScript that adds a touch-friendly note editor to [Danbooru](https://danbooru.donmai.us/) post pages. It lets you draw, edit, and submit translation notes on a phone with one thumb, and adds keyboard + drag-to-create on PC.
+**Mobile Note Assist** is a UserScript that adds a touch-friendly note editor to [Danbooru](https://danbooru.donmai.us/) post pages. It lets you draw, edit, and submit translation notes on a phone with one thumb, and adds keyboard + drag-to-create on PC.
 
 > Danbooru's built-in note tool was designed for a mouse on a wide screen, and it saves each note to the server the moment you press Save. On a phone — drawing a precise rectangle, picking tags, then waiting for the page to round-trip for every speech bubble — that flow falls apart. This script collapses translating a whole page into: enter Edit mode, drop boxes for every bubble at once, type each translation, then commit them all in a single ✓ Confirm.
 
@@ -15,7 +15,7 @@ A user manual for **Mobile Note Assist** — a UserScript that adds a touch-frie
 3. Confirm the installation in your manager when prompted.
 4. Open any post page (`https://danbooru.donmai.us/posts/{id}`). You should see a 📝 floating button in the bottom-right corner.
 
-No login or extra permissions required. The script makes no remote calls outside Danbooru itself.
+The script uses your existing Danbooru login — you need an account that can edit notes — and asks for no extra permissions. It makes no remote calls outside Danbooru itself.
 
 > **Official source.** The install link above — the `build` branch of this repository — is the only official copy. A script with the same name hosted anywhere else is not published by this project; it runs with your Danbooru session, so don't install it. The `testbuild` branch carries work-in-progress builds that are published automatically before review; use it only if you are testing a change on purpose.
 
@@ -33,229 +33,33 @@ The fastest way to learn the workflow. Open any post you want to translate and f
 6. The Confirm popover appears with a summary of what will be sent. Toggle the appropriate translation tags (most often `Translated`).
 7. Tap **Submit**. The page reloads with the note saved.
 
-That's the full loop. Everything below is detail on how each piece works.
+That's the full loop. The [wiki](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki) covers each piece in detail.
 
 ---
 
-## The Interface
+## What it does
 
-### The floating button
+- **Batch, then send.** Boxes you create, edit, move or delete stay on your device (green) until ✓ Confirm, which first shows a summary of what will be sent.
+- **Clear send state.** The floating button glows orange with a count while changes are unsent, and turns green once they are saved.
+- **Built for thumbs.** Tap to create, large invisible corner zones for moving and resizing, and controls that keep their size under pinch zoom.
+- **Markup tools.** Bold, color, size, font, links and ruby from a style panel, with a server-rendered Preview and a length counter against Danbooru's 5000-character limit.
+- **Safe sending.** Requests time out instead of hanging, a retry checks the server first so a note isn't created twice, and a batch stops at Danbooru's rate limit.
+- **Recovery.** If the browser closes the tab, unsent work on the post is offered back the next time you open it (kept 24 hours).
+- **Desktop too.** Keyboard shortcuts and drag-to-create with a mouse.
 
-The 📝 button in the bottom-right is the script's only entry point. It responds to four distinct gestures:
+## Documentation
 
-| Gesture | What it does |
+The user manual lives in the [wiki](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki):
+
+| Page | What's in it |
 |---|---|
-| **Single tap** | Opens the **arc menu** (see below). |
-| **Double-tap** (within ~300ms) | Toggles Edit mode on/off. Icon flips between 📝 (idle) and ✏️ (active). If the arc menu was already opening from the first tap, it closes automatically. |
-| **Long-press (~1.0s hold)** | Enters drag-to-reposition mode. The button turns orange; drag to move it, release to save its new position. (See [Customization](#customization).) |
-| **Auto-hide** | While a per-note popover is open, the button is hidden so it doesn't sit on top of the popover's Commit / Cancel / Delete buttons (which fall in the same screen region on mobile). |
-| **Unsent changes (v5.1+)** | While anything is waiting for ✓ Confirm — committed new boxes, edited or moved notes, deletions — the button glows orange with a lightly rippled edge and carries a badge with the number of changes; the glow turns green when a Confirm has sent everything, just before the page reloads. Nothing reaches the server until you Confirm. |
-
-The single-tap-opens-menu / double-tap-toggles design means the menu shows up instantly on every tap (no waiting for a long-press) but is canceled if your second tap arrives quickly enough — so you can use a fast double-tap as a quick toggle when you don't need the menu.
-
-### The arc menu
-
-Tap the floating button once to open a 2-item arc:
-
-<img width="392" height="383" alt="Image" src="https://github.com/user-attachments/assets/35170024-f938-4db1-99c6-8331f50e304b" />
-
-- **✏️ Edit** — toggle Edit mode on/off (same as double-tapping the floating button).
-- **✓ Confirm** — send all your local changes to the server (covered in [Sending your work to the server](#sending-your-work-to-the-server)). Outlined in green while there is something to send.
-
-### Idle vs Edit mode
-
-The script lives in two states:
-
-| State | What you see | What's interactive |
-|---|---|---|
-| **Idle** | 📝 floating button only | Nothing else; the script is invisible to the page. |
-| **Edit mode** | ✏️ button + every existing note appears as a colored box | Tap a box to edit it. Tap empty image space to drop a new box. |
-
-Entering Edit mode triggers two background fetches: image dimensions and existing notes. Existing notes appear as boxes you can move, edit, or delete.
-
----
-
-## Working with notes
-
-### Creating a note
-
-Once Edit mode is on:
-
-| Input | Result |
-|---|---|
-| **Tap on the image** (mobile or PC) | Drops a default-sized box at your tap point, clamped inside the image bounds. The box auto-opens its popover with the textarea focused. |
-| **Click and drag on the image** (PC mouse only) | Draws a custom-size rectangle from your drag start point. A dashed yellow ghost rectangle previews the size as you drag. Release to spawn. |
-| **Tap an existing box** | Opens that note's popover so you can edit it. |
-
-The default box size is 10% of the image's shorter dimension, clamped to 30–150 CSS px. To mark a small feature like a single eye or glyph, pinch-zoom in over it first — the resize floor is measured in on-screen device pixels (constant under pinch), so a zoomed-in view lets the box shrink to a much smaller image-space rect than the default minimum.
-
-### The per-note popover
-
-<img width="648" height="622" alt="Image" src="https://github.com/user-attachments/assets/ea03e8d4-ca79-4c8a-8309-688f1d25d640" />
-
-| Button | What it does |
-|---|---|
-| **Textarea** | Type or edit the note text. |
-| **👁 Preview** (header) | Toggle between Edit and Preview. Preview round-trips the body through Danbooru's own sanitizer and shows the rendered HTML in place of the textarea — exactly what other readers will see, including `<b>`/`<i>`/`<tn>`/wiki markup. Tap **✎ Edit** to flip back. |
-| **Length** (header, e.g. `54 / 5000`) | The note's length as Danbooru counts it against its 5000-character limit — a line break counts as 2, an emoji as 1. Turns red past the limit, before Confirm would fail on it. |
-| **view help** (header) | Opens Danbooru's notes wiki page in a new tab. |
-| **Aa Style** (side) | Opens the **style sub-popover** — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons + Text / Stroke / Background color pickers + Size / Font dropdowns. Enabled only while the textarea has selected text (the wrap target). |
-| **↶ Undo** (side) | Step back through this note's history. Each box has its own undo stack — independent from every other box. Reverts Commit checkpoints, drag/resize moves, Delete, and **individual style toggles** one at a time. |
-| **Touch zones** (side, dashed box with an eye) | Hold this button to temporarily reveal the box's invisible touch zones (red squares, see below). Useful for aiming on small boxes. |
-| **Commit** | Save the current text + geometry as the note's local checkpoint. The popover closes; the box stays green until ✓ Confirm sends it. **Does not** send to the server yet — that happens at ✓ Confirm time. |
-| **Cancel** | Discard uncommitted changes. On a brand-new box that was never committed, this hard-deletes it. On a committed or server-loaded box, this reverts text and geometry to the last checkpoint. |
-| **Delete** | Mark this note for deletion. New boxes are deleted immediately. Already-committed or server-loaded notes turn into a red dashed box (soft-deleted) — they aren't gone until ✓ Confirm runs, so you can ↶ to bring them back. |
-| **History** | Opens the server-side version log for this note in a new tab. Disabled for brand-new (not-yet-saved) boxes. |
-
-> The four translation tags (`Translated`, `Translation request`, `Check translation`, `Partially translated`) **don't appear in the per-note popover.** They're handled once per ✓ Confirm, in a separate tag popover.
-
-### Style markup (the Aa sub-popover)
-
-<img width="456" height="601" alt="Image" src="https://github.com/user-attachments/assets/bdfe998c-a04d-421f-b86f-1af4ef7cb062" />
-
-Select text in the textarea, then tap **Aa** to open the style sub-popover. Buttons mutate only the selected text and re-select it after each tap, so you can stack multiple styles by tapping in sequence (B then I, then a color, etc.). An already-applied style lights up its button, and tapping a lit button removes that one layer while leaving the others alone.
-
-| Group | Buttons | Output |
-|---|---|---|
-| **Weight / decoration** | B / I / U / S | `<b>` / `<i>` / `<u>` / `<s>` |
-| **Position** | sub / sup | `<sub>` / `<sup>` |
-| **Semantic** | tn / code | `<tn>` (translator note) / `<code>` |
-| **Link** | a | Opens a URL modal. Pasted Danbooru URLs auto-strip the host so internal links become relative paths. |
-| **Ruby** | ruby | Opens a reading modal. Wraps as `<ruby>{base}<rt>{reading}</rt></ruby>` and re-selects the whole thing so you can pile other styles on top. |
-| **Color** | Text / Strk / BG | 14 swatch palette (Material-tone) + HEX input. Stroke has an Advanced section with thickness (1/2/3 px) and per-side checkboxes; output is a `text-shadow` value. |
-| **Size** | dropdown | `−2 / −1 / Default / +1 / +2 / +3` (maps to `70%`/`85%`/normal/`125%`/`150%`/`200%`). |
-| **Font** | dropdown | The 12 Danbooru wiki fonts, each `<option>` styled in its own font so you preview the typeface inside the dropdown. |
-
-The transparent swatch (Strk and BG only) clears the property. For Text, tapping black does the same — black is the textarea's default ink, so applying it would just be dead markup.
-
-Per-style undo: every tap that mutates the textarea pushes a snapshot, so a single ↶ tap rewinds exactly one style toggle. Raw keystrokes are still under the browser's native textarea undo, so the per-note ↶ doesn't get spammed by character-by-character history.
-
-### Moving and resizing
-
-Each box has four invisible handle zones at its corners with generous touch padding:
-
-<img width="598" height="473" alt="Image" src="https://github.com/user-attachments/assets/d737e8ff-fb29-4e2c-8d1d-afcaf4a61bbc" />
-
-- **↖ / ↘ (top-left and bottom-right)** — Resize. ↖ grows up-left, ↘ grows down-right. Both stay clamped inside the image.
-- **✥ (top-right and bottom-left)** — Move. Drag from either corner to translate the whole box.
-- **The box body itself** — Also drag-to-move. Moves the same way as the ✥ corners.
-
-On a touch screen, **tap a box to select it first, then drag** (v5.1). A swipe that starts on a box you haven't selected scrolls the page instead of moving that box — so scrolling through a post full of notes can't shift someone's note by accident. With a mouse, press-and-drag works on any box in one gesture.
-
-Each drag and each resize is a single entry on the per-note undo stack, so a misjudged drag can be reverted with ↶ without losing the text.
-
-If you can't tell where the touch zones are on a small box, **hold the touch-zone button** (dashed box with an eye on its top-right corner) in the popover to highlight them.
-
-### Box colors at a glance
-
-<img width="1080" height="758" alt="Image" src="https://github.com/user-attachments/assets/d91334a6-0529-4d2e-8070-9db21b66521e" />
-
-| State | Color | Meaning |
-|---|---|---|
-| **Default** | solid blue | Loaded from the server, no local changes yet. |
-| **Dirty** | solid green | Has local edits (text or geometry) not yet sent to the server. |
-| **Deleted** | red, dashed | Soft-deleted via Delete — restorable with ↶ until ✓ Confirm runs. |
-| **Active** | solid orange | The box whose popover is currently open. |
-
-If a box has multiple states at once (e.g. a deleted box you've tapped to reveal its undo affordance), the higher-priority color wins: `active > deleted > dirty > default`. The one exception is `deleted + active` — it stays red dashed, so you can still see what you're being asked to undo.
-
----
-
-## Sending your work to the server
-
-<img width="278" height="308" alt="Image" src="https://github.com/user-attachments/assets/302dd6a5-3b84-4529-a2a7-531b4e413d41" />
-
-When you're done editing all the boxes, tap the floating button to open the arc menu, then tap **✓ Confirm**.
-
-1. The script collects your pending changes — new notes, edits, deletes — and decides what to send.
-2. A **Confirm popover** appears anchored to the Confirm button. Its first line summarizes what is about to be sent — for example `New 3 · Edited 2 · Moved 1 · Deleted 4`, with deletions in red — so a box you moved by accident or a deletion you didn't mean is visible before anything leaves your phone. If you've added or deleted notes or changed any text, the popover also shows the four translation tags as iOS-style pill switches:
-
-   | Tag | Behavior |
-   |---|---|
-   | **Translated** | When ON, automatically forces the other three OFF. (You can't be both translated and partially translated.) |
-   | **Translation request** | Independent — can stay ON on its own. |
-   | **Check translation** | When ON, forces `Translation request` ON too. |
-   | **Partially translated** | When ON, forces `Translation request` ON too. |
-
-   If you only moved or resized boxes, the popover shows just the summary with **Submit** / **Cancel**.
-3. Tap **Submit**. The script sends your changes in batch. **Cancel** sends nothing and leaves you in Edit mode.
-4. **On full success**: a `✓ Saved` toast flashes, and the page reloads with everything applied.
-5. **On partial failure**: an error modal lists which calls failed and Danbooru's actual error message (e.g. `Box overlaps existing note`). You can choose:
-   - **Retry** — re-classify what's left and try again.
-   - **Cancel** — stay in Edit mode with the partial state. Successful changes are kept locally; failed ones still show as pending so you can fix them.
-
-> Note: Confirm needs at least one note change — with nothing pending it just shows `No changes to confirm`. To change only the translation tags on a post, use Danbooru's own tag editor.
-
----
-
-## PC users
-
-### Keyboard shortcuts
-
-| Shortcut | Context | Action |
-|---|---|---|
-| `Ctrl/Cmd + Enter` | Cursor in the popover textarea | Commit the box (same as tapping **Commit**). The tag popover and error modal also accept `Ctrl/Cmd + Enter` for their primary action (Submit / Retry). |
-| `Esc` | Popover open | Dismiss the popover. Behaves like **Cancel**: hard-deletes brand-new boxes, reverts committed ones. |
-| `Shift + N` | No popover open, no input focused | Toggle Edit mode on/off. A toast confirms the new state. |
-| `Shift + Enter` | Edit mode on, no popover open, no input focused | Run ✓ Confirm — same as opening the arc menu and tapping ✓ Confirm. Skips the menu so you can flush a batch without lifting your hand from the keyboard. |
-
-`Shift + N` and `Shift + Enter` are intentionally disabled while the tag popover or error modal is open, so you don't accidentally lose your in-progress submission. Inside the textarea, bare `Enter` and `Shift + Enter` insert newlines as usual — only `Ctrl/Cmd + Enter` is consumed as the commit shortcut.
-
-### Drag-to-create
-
-In addition to tap-to-create, on PC you can **click and drag** on the image to draw a rectangle of any size. A dashed yellow ghost previews the result; release to spawn. Touch users always get tap-to-create plus drag-the-handles to resize, since drag-to-create on touch would conflict with pinch and pan gestures.
-
-A drag is registered when the pointer moves more than 5px during the press; below that threshold it's treated as a tap.
-
----
-
-## Mobile tips
-
-- **Pinch-zoom freely.** The popover, arc menu, floating button, and toasts all counter-scale, so they stay the same physical size on screen no matter how far you zoom in. Position your zoom on the bubble before tapping, and the box will land precisely.
-- **Hold the touch-zone button when aiming on a small box.** The corner touch zones extend ~30px past the visible box edge, which is invisible by default. Holding it shows you exactly where they are.
-- **Tap any box to switch focus.** No need to tap Commit before moving on — tapping a different box closes the current popover. A new box you typed into is committed for you (as if you'd tapped Commit, so ↶ can still undo it) and waits for ✓ Confirm; a new box you left empty is removed. Edits to existing notes stay as `dirty` (green) and wait for ✓ Confirm.
-- **Force-quit safe (v4.1+).** If the OS kills your tab while you have unsaved edits — phone went to sleep, you switched apps for too long, the browser crashed — your work is snapshotted on background-into and offered back as a Restore prompt the next time you open the same post. Drafts age out after 24 hours and are cleared automatically when you press ✓ Confirm or explicitly leave Edit mode.
-- **Plays nice with Danbooru's native note tool (v5.0+).** If you tap Danbooru's own `Translate` button or open a note's edit dialog, the floating button hides itself so the two UIs don't fight. `Shift+N` is gated symmetrically. Close the native tool and the button reappears.
-- **Preview before submit (v5.0+).** The header **👁 Preview** toggle round-trips the body through Danbooru's own renderer, so you can confirm `<b>` / `<tn>` / wiki markup looks right before ✓ Confirm flushes it. Nothing is committed until you tap **Commit**.
-- **Aa stacks below on narrow screens (v5.0.1+).** On wider screens the **Aa** style popover docks to the right of the note popover (or flips to the left when there's no room). When the screen is below ~600 px wide it slides up from beneath the note popover instead, so both panes stay on-screen together and the bottom-of-viewport region (where the soft keyboard lives) is exactly where you'd want a style picker.
-- **Scroll-friendly sub-pickers (v5.0.1+).** The color / stroke / link / ruby modals used to close on the first pointerdown of any swipe, so a scroll to reach a far-away swatch dismissed the picker mid-flick. Now only a deliberate tap (no scroll movement) closes them; you can freely scroll the page while a picker is open.
-
----
-
-## Customization
-
-### Moving the floating button
-
-The 📝 button defaults to the bottom-right corner. To reposition it:
-
-1. Press and hold the button for ~1.0 seconds. A short vibration (if your device supports it) and an `✥ Drag to reposition` toast confirm you're in drag mode. The button turns orange and scales up.
-2. Drag in any direction. Both axes are free; the button stays clamped inside the screen with margin.
-3. Release. The new position is saved to your browser and persists across pages and reloads.
-
-A regular short tap (no hold) opens the menu instead, so you won't accidentally trigger drag mode.
-
-### Auto-hide while typing
-
-When focus enters any text input on the page (the per-note textarea, the tag editor, comment forms, contenteditable fields, etc.), the floating button auto-hides so it doesn't cover the keyboard's UI on mobile. It reappears 100ms after focus leaves, unless focus moved straight to another text input.
-
----
-
-## Troubleshooting
-
-**The 📝 button isn't appearing.**
-Check that you're on a `/posts/{id}` page (the only place this script runs), and that your UserScript manager shows it as enabled for `danbooru.donmai.us`.
-
-**`No changes to confirm` when I tap ✓.**
-Nothing is pending: no new box has been committed and no existing note was moved, edited or deleted. Tap **Commit** on at least one box first. To change only the translation tags, use Danbooru's own tag editor.
-
-**`Image dimensions unknown` toast.**
-The post's image hadn't finished loading when you tried to drop a box. Wait a moment for the image to settle, or scroll to make sure the `<img>` is in view, and try again.
-
-**`HTTP 422` or `Box overlaps existing note` after Submit.**
-This is Danbooru's server response — the script just surfaces it. Move or resize your overlapping box and Retry. Successful boxes from the same submit are already saved; only the rejected ones come back for editing.
-
-**A misclick deleted a box I needed.**
-If the popover is still open, tap **↶**. If you've already closed it, tap the box (now red dashed) and tap **↶** to undo the delete. Hard-deleted brand-new boxes can't be recovered — but their undo stack lives until you leave Edit mode entirely.
+| [The Interface](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki/The-Interface) | The floating button and its gestures, the arc menu, Idle vs Edit mode. |
+| [Working with Notes](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki/Working-with-Notes) | Creating boxes, the note popover, the 5000-character limit, style markup, moving and resizing, box colors. |
+| [Confirm and Sending](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki/Confirm-and-Sending) | The send summary, translation tags, failures, Retry, rate limits. |
+| [Drafts and Recovery](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki/Drafts-and-Recovery) | What is kept if the tab is closed, and how to restore it. |
+| [Desktop and Mobile Tips](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki/Desktop-and-Mobile-Tips) | Keyboard shortcuts, drag-to-create, pinch zoom, Danbooru's own note tool. |
+| [Troubleshooting and FAQ](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki/Troubleshooting-and-FAQ) | What each message means; common questions. |
+| [Installing and Updating](https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/wiki/Installing-and-Updating) | Updates, the `build` and `testbuild` channels, checking your version. |
 
 ---
 
@@ -277,7 +81,7 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 - Tested with Tampermonkey on iOS Safari, desktop Safari, and Chrome.
 - Requires `visualViewport` (used for zoom-aware UI sizing). Falls back gracefully on older browsers.
-- Requires `fetch`, Pointer Events, and standard ES2017+ (`async`/`await`, optional chaining, default parameter values).
+- Requires `fetch`, Pointer Events, and ES2020 syntax (optional chaining, `??`).
 
 ---
 
@@ -285,9 +89,7 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v5.1.2** (2026-11-17), which fixes Preview after Danbooru began validating previewed notes. v5.1.1: Unsent changes glow orange on the floating button and turn green once Confirm has sent them, and a note over Danbooru's 5000-character limit can't be committed or left for another box until it is shortened, canceled or deleted. v5.1.0, the same day, came from a mobile-focused audit. Sending is safer — Confirm always shows what it is about to send, requests time out instead of hanging, Retry no longer duplicates a note whose response was lost, a batch stops at the first rate limit, and the force-quit draft survives the Confirm popover and honors "Leave". On the page, a swipe that starts on an unselected box scrolls instead of moving it, the note popover stays on screen at any width and pinch zoom, fields no longer trigger iOS focus zoom, and edit mode opens fast on posts with hundreds of notes. New: an unsent-changes badge on the floating button, a note length counter, native-style Commit / Cancel / Delete / History buttons, and tag updates that merge with other editors' changes. See [CHANGELOG.md](./CHANGELOG.md) for the full list.
-
-v4.1 added force-quit / OS-kill recovery: in-progress edits are snapshotted to `localStorage` on lifecycle events (tab close, app background, OS kill), and the next time you open the same post you get a Restore / Discard prompt. v4.0 was the TypeScript migration. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
+The current release is **v5.1.2** (2026-11-17). The 5.1 series came from a mobile-focused audit: safer sending, clearer send state, a length counter, and a Preview fix after a change on Danbooru's side. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 
 ---
 
@@ -297,36 +99,39 @@ The script is authored in TypeScript across `src/` and bundled to a single `.use
 
 ```
 src/
-├── main.ts                  Boot wire — calls init* on every layer at module-load.
-├── types.ts                 Domain types (NoteState, Note, NoteId, ActionLogEntry,
-│                            TextSnapshot, BoxState, …).
-├── config.ts                Constants (BTN_SIZE, LONG_PRESS_DURATION, TAG_OPTIONS, …).
-├── styles.ts                The single STYLES string injected into <head> at boot.
-├── version.ts               Auto-injected `__VERSION__` build constant.
-├── utils/                   Layer 1 — pure helpers (coords, dom, visual-viewport,
-│                            style-attr).
-├── api/                     Layer 2 — Danbooru API surface (csrf, posts, notes).
-├── state/                   Layer 2 — module-level state (image-state, notes-store,
-│                            draft, native-conflict).
-├── confirm/                 Layer 3 — Confirm-time orchestration (classify, batch).
-├── ui/                      Layer 3 — DOM modules (note-box, popover, style-popover,
-│                            color-picker, stroke-picker, link-popover, ruby-popover,
-│                            tag-popover, floating-button, arc-menu, toast).
-└── interactions/            Layer 4 — touch / pointer / keyboard handlers
-                             (image-pointer, drag-resize, keyboard, native-block).
+├── main.ts            Boot wire — calls init* on every layer at module load.
+├── types.ts           Domain types (NoteState, Note, NoteId, ActionLogEntry, …).
+├── config.ts          Constants (sizes, timings, limits, TAG_OPTIONS, …).
+├── styles.ts          The single STYLES string injected into <head> at boot.
+├── version.ts         APP_VERSION, the source of the userscript @version.
+├── utils/             Layer 1 — pure helpers (coords, dom, visual-viewport,
+│                      style-attr, pointer-tap, popover-placement, note-body).
+├── api/               Layer 2 — Danbooru API (csrf, posts, notes).
+├── state/             Layer 2 — module state (image-state, notes-store, draft,
+│                      native-conflict).
+├── confirm/           Layer 3 — Confirm orchestration (classify, batch, reconcile).
+├── ui/                Layer 3 — DOM modules (note-box, popover, style-popover,
+│                      color-picker, stroke-picker, link-popover, ruby-popover,
+│                      tag-popover, floating-button, arc-menu, toast).
+└── interactions/      Layer 4 — touch / pointer / keyboard / lifecycle handlers
+                       (image-pointer, drag-resize, keyboard, native-block,
+                       lifecycle, pending-indicator).
+test/                  Vitest unit tests + architecture fitness tests.
+e2e/                   Opt-in Playwright scenarios on a mock post page.
 ```
 
-Z5 layer rule: imports flow `utils ← state/api ← confirm/ui ← interactions ← main` only. Cross-imports between same-layer siblings (`confirm/ ↔ ui/`, `ui/ ↔ interactions/`) are forbidden — the layer graph is enforced by `test/architecture.test.ts`.
+Z5 layer rule: imports flow `utils ← state/api ← confirm/ui ← interactions ← main` only. `confirm/` and `ui/` are siblings and must not import each other; they are wired through hook bags in `main.ts`. The layer graph is enforced by `test/architecture.test.ts`. [CLAUDE.md](./CLAUDE.md) holds the full set of invariants.
 
 ### Local commands
 
 ```bash
-npm install         # install gts, vite, vitest, vite-plugin-monkey, happy-dom
+npm install         # install dependencies
 npm run dev         # vite dev server (HMR-served userscript at vite-plugin-monkey's local URL)
 npm run build       # full pipeline: vitest + tsc --noEmit + vite build → dist/MobileNoteAssist.user.js
 npm run test        # vitest run (unit + architecture fitness)
 npm run lint        # gts lint (eslint + prettier)
 npm run fix         # gts fix (auto-format)
+npm run e2e         # build, then Playwright scenarios (once: npx playwright install chromium)
 ```
 
 The `dist/` directory is `.gitignore`d on `main`; release artifacts live on the `build` branch.
@@ -336,13 +141,14 @@ The `dist/` directory is `.gitignore`d on `main`; release artifacts live on the 
 - `main` — source only (this branch). Direct commits not allowed; merges from `develop` only at release time.
 - `develop` — integration. Default merge target for feature work.
 - `feature/*`, `hotfix/*` — local-only working branches.
-- `build` — orphan-style branch carrying just the bundled `MobileNoteAssist.user.js` (the `@updateURL` / `@downloadURL` target).
+- `build` — orphan-style branch carrying just the bundled `MobileNoteAssist.user.js` (the `@updateURL` / `@downloadURL` target). CI publishes it on every push to `main`.
+- `testbuild` — the same, built from `develop` and working branches as "(dev)".
 
 ### Testing
 
-298 vitest cases across 11 files (10 unit + 1 architecture fitness). Architecture tests verify Z5 layer direction, hook-bag completeness at boot (NotesStore / ConfirmFlow / NoteBox / ArcMenu), and that type-only re-exports stay type-only. Unit tests cover coords, classify, csrf, tag-popover, notes-store, note-box, confirm/batch, draft, style-attr, and detect-outer-layers (the style-popover regex parser).
-
-For UI regressions that depend on real layout (pinch-zoom, viewport positioning, real `<img>` `getBoundingClientRect` values), manual verification on a Danbooru post page in Tampermonkey is the floor.
+- **Unit and architecture tests** (`npm run test`, Vitest + happy-dom). The architecture tests verify the layer direction, hook-bag completeness at boot, and that type-only re-exports stay type-only.
+- **End-to-end scenarios** (`npm run e2e`, Playwright, opt-in and not part of CI). They load the built userscript into a mock post page with phone emulation and cover what happy-dom can't: real touch input, page lifecycle events, layout under pinch zoom. See [e2e/README.md](./e2e/README.md).
+- **Manual check.** For UI, touch and coordinate changes, trying the change in a userscript manager on a real Danbooru post page is still the floor.
 
 ---
 
