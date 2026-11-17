@@ -10,6 +10,13 @@ export const SCRIPT_NAME = 'MobileNoteAssist';
  */
 export const SCRIPT_VERSION = APP_VERSION;
 
+/**
+ * Deadline (ms) for every Danbooru request, covering both the response
+ * and the body read. Without it a stalled request kept the ⏳ send lock
+ * up forever (v5.1).
+ */
+export const REQUEST_TIMEOUT_MS = 20_000;
+
 /** Key for local storage button vertical position. */
 export const POS_KEY = 'dmna_btn_margin_y';
 

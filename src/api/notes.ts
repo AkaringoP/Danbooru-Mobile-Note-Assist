@@ -15,7 +15,7 @@
 
 import {NoteState} from '../types';
 import {getPostId} from '../utils/coords';
-import {apiCall} from './csrf';
+import {apiCall, getJson} from './csrf';
 
 /**
  * Server-note descriptor as returned by GET `/notes.json?post_id=…`.
@@ -74,16 +74,9 @@ export function fetchServerNotes(): Promise<ServerNoteDescriptor[]> {
   const url =
     `/notes.json?search%5Bpost_id%5D=${id}` +
     '&search%5Bis_active%5D=true&limit=1000';
-  const p = fetch(url, {credentials: 'same-origin'})
-    .then(r => {
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}`);
-      }
-      return r.json() as Promise<ServerNoteDescriptor[]>;
-    })
-    .finally(() => {
-      serverNotesInFlight = null;
-    });
+  const p = getJson<ServerNoteDescriptor[]>(url).finally(() => {
+    serverNotesInFlight = null;
+  });
   serverNotesInFlight = p;
   return p;
 }

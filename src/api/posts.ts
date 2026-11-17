@@ -12,7 +12,7 @@
  *     remove delta, and PUTs back. Used by the Confirm-time tag modal.
  */
 
-import {apiCall} from './csrf';
+import {apiCall, getJson} from './csrf';
 import {
   getOriginalHeight,
   getOriginalWidth,
@@ -46,15 +46,9 @@ export function fetchPostMeta(): Promise<{width: number; height: number}> {
   if (!id) {
     return Promise.reject(new Error('No post id in URL'));
   }
-  const p = fetch(`/posts/${id}.json?only=image_width,image_height`, {
-    credentials: 'same-origin',
-  })
-    .then(r => {
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}`);
-      }
-      return r.json();
-    })
+  const p = getJson<{image_width?: unknown; image_height?: unknown}>(
+    `/posts/${id}.json?only=image_width,image_height`,
+  )
     .then(data => {
       const w = Number(data.image_width) || 0;
       const h = Number(data.image_height) || 0;
@@ -86,16 +80,9 @@ export function fetchPostTagString(): Promise<string> {
   if (!id) {
     return Promise.reject(new Error('No post id in URL'));
   }
-  return fetch(`/posts/${id}.json?only=tag_string`, {
-    credentials: 'same-origin',
-  })
-    .then(r => {
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}`);
-      }
-      return r.json();
-    })
-    .then(data => String(data.tag_string || ''));
+  return getJson<{tag_string?: unknown}>(
+    `/posts/${id}.json?only=tag_string`,
+  ).then(data => String(data.tag_string || ''));
 }
 
 /**
