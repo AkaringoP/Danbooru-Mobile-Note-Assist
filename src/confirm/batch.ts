@@ -168,18 +168,21 @@ let isSending = false;
 
 /**
  * `runConfirmFlow` re-entrancy guard, broader than `isSending`. Stays
- * latched across the whole pipeline — tag popover wait, sendBatch,
- * applyServerStateToLocal, error modal wait, retry recursion. The
- * narrower `isSending` only covers `sendBatch`'s try/finally (the
- * actual HTTP requests + UI lock CSS), and unlatches before the error
- * modal opens — leaving a window in `handleSendResult` where local
- * state already reflects partial server commits but the user might
- * still tap Retry. A force-quit `saveDraftIfNeeded` firing in that
- * window would persist a half-applied snapshot that double-sends on
- * the next page entry. `isInConfirmPipeline` closes the gap (Phase
- * 5-h Task 5.21). Read by main.ts's lifecycle save handlers.
+ * latched across the whole pipeline — Confirm popover wait, sendBatch,
+ * applyServerStateToLocal, error modal wait, retry recursion.
  */
 let isInConfirmPipeline = false;
+
+/**
+ * Lifecycle draft saves are off from the moment the first request is
+ * about to go out until the pipeline ends. Before that point nothing
+ * has reached the server, so the draft is still the only copy of the
+ * user's work and must keep being saved (v5.1 Task 1.2). After it,
+ * local state may mirror partial server commits; a snapshot taken
+ * there could double-send on the next page entry (Phase 5-h Task
+ * 5.21). Read by interactions/lifecycle.
+ */
+let draftSaveBlocked = false;
 
 let errorModalElement: HTMLElement | null = null;
 let errorModalBackdropElement: HTMLElement | null = null;
@@ -192,13 +195,17 @@ export function getIsSending(): boolean {
 }
 
 /**
- * Cross-module read of the broader Confirm-pipeline guard. True from
- * `runConfirmFlow` entry through error-modal dismissal / retry
- * resolution. Used by `main.ts#saveDraftIfNeeded` to skip lifecycle
- * draft saves while local state may be mid-transition.
+ * Cross-module read of the Confirm-pipeline re-entrancy guard. True
+ * from `runConfirmFlow` entry through error-modal dismissal / retry
+ * resolution.
  */
 export function getIsInConfirmPipeline(): boolean {
   return isInConfirmPipeline;
+}
+
+/** Whether lifecycle draft saves must be skipped (see `draftSaveBlocked`). */
+export function getIsDraftSaveBlocked(): boolean {
+  return draftSaveBlocked;
 }
 
 // ---------------------------------------------------------------------------
@@ -684,12 +691,6 @@ export async function runConfirmFlow(): Promise<void> {
   }
   isInConfirmPipeline = true;
   try {
-    // Clear any stale draft — entering the send pipeline transfers
-    // authority to the server. A force-quit mid-send shouldn't
-    // surface a "Restore?" prompt with mixed local/server state on
-    // next page entry; fetchServerNotes is the canonical recovery
-    // path in that case (PLAN D4 + D6, v4.1).
-    clearDraft();
     // Close any open popover before showing modals or starting sends —
     // the popover is positioned above boxes but below modals; leaving
     // it open would visually layer awkwardly behind a tag modal, and
@@ -712,9 +713,16 @@ export async function runConfirmFlow(): Promise<void> {
       }
     }
 
+    // The first request is about to go out: authority passes to the
+    // server. A force-quit from here on shouldn't surface a "Restore?"
+    // prompt with mixed local/server state on next page entry;
+    // fetchServerNotes is the canonical recovery path (PLAN D4 + D6).
+    clearDraft();
+    draftSaveBlocked = true;
     const result = await sendBatch(classified, tagDelta);
     await handleSendResult(result, tagDelta);
   } finally {
     isInConfirmPipeline = false;
+    draftSaveBlocked = false;
   }
 }

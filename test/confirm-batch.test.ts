@@ -49,6 +49,8 @@ import {
   applyServerStateToLocal,
   buildFailureLines,
   countSendResult,
+  getIsDraftSaveBlocked,
+  getIsInConfirmPipeline,
   getIsSending,
   handleSendResult,
   initConfirmFlow,
@@ -506,6 +508,97 @@ describe('runConfirmFlow — abort branches', () => {
 
     resolveDelete();
     await first;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runConfirmFlow — draft handoff (Task 1.2)
+// ---------------------------------------------------------------------------
+
+describe('runConfirmFlow — draft handoff', () => {
+  const KEY = 'dmna_draft_123';
+
+  beforeEach(() => {
+    window.history.pushState(null, '', '/posts/123');
+    localStorage.setItem(KEY, 'existing draft');
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  function seedCommittedTemp(id: string): void {
+    notes.set(
+      asTempNoteId(id),
+      makeNote({isServerNote: false, everConfirmed: true, isDeleted: false}),
+    );
+  }
+
+  it('keeps the draft and allows saves while the Confirm popover is open', async () => {
+    vi.useFakeTimers();
+    seedCommittedTemp('temp-handoff-1');
+    let resolvePopover!: (d: TagDelta | null) => void;
+    vi.mocked(flowHooks.showTagPopover).mockReturnValueOnce(
+      new Promise(r => {
+        resolvePopover = r;
+      }),
+    );
+    let atFirstRequest: {draft: string | null; blocked: boolean} | null = null;
+    vi.mocked(apiPostNote).mockImplementation(async () => {
+      atFirstRequest = {
+        draft: localStorage.getItem(KEY),
+        blocked: getIsDraftSaveBlocked(),
+      };
+      return {id: 701, x: 0, y: 0, width: 100, height: 100, body: ''};
+    });
+
+    const flow = runConfirmFlow();
+    await Promise.resolve();
+    expect(getIsInConfirmPipeline()).toBe(true);
+    expect(getIsDraftSaveBlocked()).toBe(false);
+    expect(localStorage.getItem(KEY)).toBe('existing draft');
+
+    resolvePopover({tagsToAdd: [], tagsToRemove: []});
+    await flow;
+
+    expect(atFirstRequest).toEqual({draft: null, blocked: true});
+    expect(getIsDraftSaveBlocked()).toBe(false);
+    expect(getIsInConfirmPipeline()).toBe(false);
+  });
+
+  it('keeps saves blocked while the error modal waits, then releases', async () => {
+    seedCommittedTemp('temp-handoff-2');
+    vi.mocked(apiPostNote).mockRejectedValue(new Error('boom'));
+
+    const flow = runConfirmFlow();
+    await vi.waitFor(() => {
+      expect(document.querySelector('#dmna-error-modal.show')).not.toBeNull();
+    });
+    expect(getIsDraftSaveBlocked()).toBe(true);
+    (
+      document.querySelector(
+        '#dmna-error-modal .dmna-error-modal-btn[data-action="cancel"]',
+      ) as HTMLButtonElement
+    ).click();
+    await flow;
+
+    expect(getIsDraftSaveBlocked()).toBe(false);
+  });
+
+  it('cancelling the Confirm popover never clears the draft', async () => {
+    seedCommittedTemp('temp-handoff-3');
+    vi.mocked(flowHooks.showTagPopover).mockResolvedValueOnce(null);
+
+    await runConfirmFlow();
+
+    expect(localStorage.getItem(KEY)).toBe('existing draft');
+    expect(getIsDraftSaveBlocked()).toBe(false);
+  });
+
+  it('"No changes to confirm" never clears the draft', async () => {
+    await runConfirmFlow();
+
+    expect(localStorage.getItem(KEY)).toBe('existing draft');
   });
 });
 

@@ -29,7 +29,6 @@ vi.mock('../src/confirm/classify', () => ({
 }));
 vi.mock('../src/confirm/batch', () => ({
   getIsSending: () => state.sending,
-  getIsInConfirmPipeline: () => state.draftSaveBlocked,
   getIsDraftSaveBlocked: () => state.draftSaveBlocked,
 }));
 

@@ -21,7 +21,7 @@
  *     Cleared only by a bfcache return (`pageshow` with `persisted`).
  */
 
-import {getIsInConfirmPipeline, getIsSending} from '../confirm/batch';
+import {getIsDraftSaveBlocked, getIsSending} from '../confirm/batch';
 import {hasPendingChanges} from '../confirm/classify';
 import {clearDraft, saveDraft} from '../state/draft';
 import {
@@ -35,11 +35,13 @@ let promptedDiscardOnLeave = false;
 let discardedOnLeave = false;
 
 /**
- * Writes the draft unless a send or the Confirm pipeline is running,
- * or there is nothing worth keeping.
+ * Writes the draft unless a send is running, the Confirm pipeline has
+ * handed authority to the server (`getIsDraftSaveBlocked`), or there
+ * is nothing worth keeping. An open Confirm popover alone does not
+ * block: nothing has been sent yet.
  */
 function saveDraftIfNeeded(): void {
-  if (getIsSending() || getIsInConfirmPipeline()) {
+  if (getIsSending() || getIsDraftSaveBlocked()) {
     return;
   }
   if (!hasContentToSave()) {
