@@ -49,7 +49,7 @@ The 📝 button in the bottom-right is the script's only entry point. It respond
 | **Double-tap** (within ~300ms) | Toggles Edit mode on/off. Icon flips between 📝 (idle) and ✏️ (active). If the arc menu was already opening from the first tap, it closes automatically. |
 | **Long-press (~1.0s hold)** | Enters drag-to-reposition mode. The button turns orange; drag to move it, release to save its new position. (See [Customization](#customization).) |
 | **Auto-hide** | While a per-note popover is open, the button is hidden so it doesn't sit on top of the popover's Commit / Cancel / Delete buttons (which fall in the same screen region on mobile). |
-| **Unsent changes (v5.1+)** | While anything is waiting for ✓ Confirm — committed new boxes, edited or moved notes, deletions — the button has an orange outline and a badge with the number of changes; the outline turns green when a Confirm has sent everything, just before the page reloads. Nothing reaches the server until you Confirm. |
+| **Unsent changes (v5.1+)** | While anything is waiting for ✓ Confirm — committed new boxes, edited or moved notes, deletions — the button glows orange with a lightly rippled edge and carries a badge with the number of changes; the glow turns green when a Confirm has sent everything, just before the page reloads. Nothing reaches the server until you Confirm. |
 
 The single-tap-opens-menu / double-tap-toggles design means the menu shows up instantly on every tap (no waiting for a long-press) but is canceled if your second tap arrives quickly enough — so you can use a fast double-tap as a quick toggle when you don't need the menu.
 

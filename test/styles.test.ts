@@ -88,6 +88,32 @@ describe('Pending highlight (Task 4.8)', () => {
     );
   });
 
+  it('glows like the open-menu state instead of a hard ring', () => {
+    expect(STYLES).toMatch(
+      /body\.dmna-has-pending:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*box-shadow:\s*0 0 12px rgba\(255, 152, 0/,
+    );
+    expect(STYLES).toMatch(
+      /body\.dmna-send-success:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*box-shadow:\s*0 0 12px rgba\(67, 160, 71/,
+    );
+  });
+
+  it('adds a rippled ring that turns, on the button and the Confirm item', () => {
+    const ring = STYLES.match(
+      /#dmna-float-btn:not\(\.expanded\):not\(\.dragging\)::before,[^{]*\.dmna-menu-item\[data-action="confirm"\]::before\s*\{([^}]*)\}/,
+    );
+    expect(ring).not.toBeNull();
+    expect(ring![1]).toMatch(/mask:\s*url\("data:image\/svg\+xml,/);
+    expect(ring![1]).toMatch(/animation:\s*dmna-ripple/);
+    expect(ring![1]).toMatch(/pointer-events:\s*none/);
+    expect(STYLES).toMatch(/@keyframes dmna-ripple/);
+  });
+
+  it('holds the ring still for prefers-reduced-motion', () => {
+    expect(STYLES).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*::before[^{]*\{[^}]*animation:\s*none/,
+    );
+  });
+
   it('draws the count badge from data-pending-count', () => {
     expect(STYLES).toMatch(/content:\s*attr\(data-pending-count\)/);
   });

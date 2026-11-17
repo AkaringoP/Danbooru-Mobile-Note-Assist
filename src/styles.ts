@@ -6,6 +6,27 @@ import {
 } from './config';
 
 /**
+ * A ring with a rippled edge, as a CSS mask image. The pending / sent
+ * highlight paints its color through it and turns it, so the edge
+ * reads as moving water rather than a hard outline.
+ */
+function rippledRingMask(): string {
+  const steps = 160;
+  const points = Array.from({length: steps}, (_, i) => {
+    const angle = (i / steps) * 2 * Math.PI;
+    const radius = 43.5 + 1.8 * Math.sin(angle * 16);
+    const x = 50 + radius * Math.cos(angle);
+    const y = 50 + radius * Math.sin(angle);
+    return `${x.toFixed(1)} ${y.toFixed(1)}`;
+  });
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+    `<path d="M${points.join('L')}Z" fill="none" stroke="#000" ` +
+    'stroke-width="3.6" stroke-linejoin="round"/></svg>';
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+/**
  * Inlined CSS for all MobileNoteAssist UI surfaces. Injected into a
  * <style> element by main.ts at boot.
  */
@@ -30,17 +51,20 @@ export const STYLES = `
       box-shadow: 0 0 12px rgba(0, 115, 255, 0.6);
     }
     #dmna-float-btn.dragging { background: #ff9800 !important; border-color: #ffe0b2 !important; transform: scale(1.2); }
-    /* Unsent changes (v5.1): orange outline — not on the server yet.
-       Menu-open (blue), reposition (orange fill) and sending (⏳) win. */
+    /* Unsent changes (v5.1): orange glow — not on the server yet.
+       Glows like the menu-open state. Menu-open (blue), reposition
+       (orange fill) and sending (⏳) win. */
     body.dmna-has-pending:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
+      --dmna-highlight: #ff9800;
       border-color: #ff9800;
-      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.6), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 12px rgba(255, 152, 0, 0.75), 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     /* Everything was sent: green until the page reloads. Same
        specificity as the pending rule, later in source. */
     body.dmna-send-success:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
+      --dmna-highlight: #43a047;
       border-color: #43a047;
-      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.7), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 12px rgba(67, 160, 71, 0.85), 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     /* Count of requests Confirm would send. */
     body:not(.dmna-sending) #dmna-float-btn[data-pending-count]:not(.dragging)::after {
@@ -98,12 +122,46 @@ export const STYLES = `
       pointer-events: auto;
     }
     body.dmna-has-pending .dmna-menu-item[data-action="confirm"] {
+      --dmna-highlight: #ff9800;
       border-color: #ff9800;
-      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.6), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 12px rgba(255, 152, 0, 0.75), 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     body.dmna-send-success .dmna-menu-item[data-action="confirm"] {
+      --dmna-highlight: #43a047;
       border-color: #43a047;
-      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.7), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 12px rgba(67, 160, 71, 0.85), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    /* Rippled ring around the highlighted button. Only transform is
+       animated, so the turn stays on the compositor. */
+    body.dmna-has-pending:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging)::before,
+    body.dmna-send-success:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging)::before,
+    body.dmna-has-pending .dmna-menu-item[data-action="confirm"]::before,
+    body.dmna-send-success .dmna-menu-item[data-action="confirm"]::before {
+      content: '';
+      position: absolute;
+      /* Sits on the button's own border, so the edge itself ripples. */
+      inset: -5px;
+      background: var(--dmna-highlight);
+      -webkit-mask: ${rippledRingMask()} center / 100% 100% no-repeat;
+      mask: ${rippledRingMask()} center / 100% 100% no-repeat;
+      pointer-events: none;
+      animation: dmna-ripple 6s linear infinite;
+    }
+    /* The menu item's border is 0.5px thinner than the button's. */
+    body.dmna-has-pending .dmna-menu-item[data-action="confirm"]::before,
+    body.dmna-send-success .dmna-menu-item[data-action="confirm"]::before {
+      inset: -4.5px;
+    }
+    @keyframes dmna-ripple {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.05); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #dmna-float-btn::before,
+      .dmna-menu-item::before {
+        animation: none !important;
+      }
     }
     #dmna-menu.open .dmna-menu-item:active {
       transform: translate(var(--tx), var(--ty)) scale(0.88);
