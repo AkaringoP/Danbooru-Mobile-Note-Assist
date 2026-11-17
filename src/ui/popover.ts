@@ -312,7 +312,7 @@ export function createPopover(): void {
   undoBtn.type = 'button';
   undoBtn.id = 'dmna-popover-undo';
   undoBtn.className = 'dmna-popover-side-btn';
-  undoBtn.textContent = '↶';
+  undoBtn.appendChild(createUndoIcon());
   undoBtn.setAttribute('aria-label', 'Undo last change to this note');
   undoBtn.title = 'Undo last change';
   undoBtn.addEventListener('click', e => {
@@ -659,6 +659,30 @@ function svgEl(
     el.setAttribute(k, String(v));
   }
   return el;
+}
+
+/**
+ * Undo icon: the line runs down the right side, curves over the top and
+ * ends in an arrowhead pointing left (9 o'clock). The ↶ glyph rendered
+ * small and differed per font.
+ */
+function createUndoIcon(): SVGElement {
+  const svg = svgEl('svg', {
+    class: 'dmna-undo-icon',
+    viewBox: '0 0 24 24',
+    width: 22,
+    height: 22,
+    'aria-hidden': 'true',
+    focusable: 'false',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': 2,
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+  });
+  svg.appendChild(svgEl('path', {d: 'M4.5 8 H11 A8 8 0 0 1 19 16 V19.5'}));
+  svg.appendChild(svgEl('path', {d: 'M8.5 4 L4.5 8 L8.5 12'}));
+  return svg;
 }
 
 /**

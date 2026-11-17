@@ -524,12 +524,12 @@ export const STYLES = `
     /* Generic press feedback for side-stack buttons (covers Aa; the
        eye and undo IDs below override with their own variants).
        Uses the popover's blue accent rather than a white tint so the
-       white "Aa" / "↶" glyphs stay legible at peak press. */
+       white "Aa" / undo icons stay legible at peak press. */
     .dmna-popover-side-btn:active {
       background: rgba(74, 158, 255, 0.26);
     }
     /* Hover / press text-color shift for the white-glyph side buttons
-       (Aa / ↶ / touch zones). Undo's highlighted
+       (Aa / undo / touch zones). Undo's highlighted
        state has its own hue rule (specificity wins below). */
     .dmna-popover-side-btn:hover,
     .dmna-popover-side-btn:active {
@@ -538,7 +538,8 @@ export const STYLES = `
     /* Eye uses pointer events for press-and-hold, so it overrides
        touch-action to disable scroll/zoom while held. */
     #dmna-popover-eye { touch-action: none; }
-    #dmna-popover-eye .dmna-zone-icon {
+    #dmna-popover-eye .dmna-zone-icon,
+    #dmna-popover-undo .dmna-undo-icon {
       display: block;
       margin: 0 auto;
       pointer-events: none;
@@ -551,7 +552,7 @@ export const STYLES = `
       background: rgba(74, 158, 255, 0.30);
     }
     /* Disabled state for the popover's interactive controls — used when
-       the active note is soft-deleted, leaving only ↶ (highlighted) live. */
+       the active note is soft-deleted, leaving only undo (highlighted) live. */
     #dmna-popover-input:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -573,7 +574,7 @@ export const STYLES = `
       cursor: not-allowed;
       box-shadow: none;
     }
-    /* Highlighted ↶ on a soft-deleted note — accents the only live
+    /* Highlighted undo on a soft-deleted note — accents the only live
        action so the user knows their next move is "undo to restore." */
     #dmna-popover-undo.is-highlighted {
       border-color: #ff9800;

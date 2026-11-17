@@ -153,6 +153,19 @@ describe('character counter (Task 4.5 follow-up)', () => {
   });
 });
 
+describe('undo button icon', () => {
+  it("draws an arrow that ends pointing left (9 o'clock), not the ↶ glyph", () => {
+    const btn = document.getElementById('dmna-popover-undo')!;
+    expect(btn.textContent).not.toContain('↶');
+    const svg = btn.querySelector('svg.dmna-undo-icon');
+    expect(svg).not.toBeNull();
+    expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    expect(btn.getAttribute('aria-label')).toBe(
+      'Undo last change to this note',
+    );
+  });
+});
+
 describe('touch-zone button icon (distinct from Preview)', () => {
   it('draws a dashed box with a small eye, not the 👁 glyph', () => {
     const btn = document.getElementById('dmna-popover-eye')!;
