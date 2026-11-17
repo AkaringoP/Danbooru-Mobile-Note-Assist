@@ -25,6 +25,7 @@
 import {SCRIPT_NAME} from '../config';
 import {
   asServerNoteId,
+  isServerNoteId,
   Note,
   NoteId,
   NoteState,
@@ -43,6 +44,7 @@ import {
   apiPostNote,
   apiPutNote,
   apiDeleteNote,
+  fetchServerNotes,
   ServerNoteResponse,
 } from '../api/notes';
 import {apiPatchPostTags} from '../api/posts';
@@ -54,6 +56,7 @@ import {
   PendingPut,
   PendingDelete,
 } from './classify';
+import {matchCommittedPosts} from './reconcile';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,7 +72,12 @@ export type {TagDelta};
 export type SuccessfulPost = PendingPost & {
   serverResponse: ServerNoteResponse | null;
 };
-export type FailedPost = PendingPost & {error: string};
+/**
+ * `unverified`: the post's live notes couldn't be fetched after the
+ * failure, so it's unknown whether the server stored this note anyway
+ * (lost response). Retry holds such POSTs back until it can check.
+ */
+export type FailedPost = PendingPost & {error: string; unverified?: boolean};
 export type FailedPut = PendingPut & {error: string};
 export type FailedDelete = PendingDelete & {error: string};
 
@@ -427,7 +435,8 @@ export function buildFailureLines(result: SendBatchResult): string[] {
     lines.push(`PUT note ${f.serverId}: ${f.error}`);
   }
   for (const f of result.failed.posts) {
-    lines.push(`POST new note: ${f.error}`);
+    const suffix = f.unverified ? ' (server state unverified)' : '';
+    lines.push(`POST new note: ${f.error}${suffix}`);
   }
   if (result.failed.tagPatch) {
     lines.push(`Tag PATCH: ${result.failed.tagPatch}`);
@@ -453,6 +462,73 @@ export function countSendResult(result: SendBatchResult): {
   return {successCount, failureCount};
 }
 
+const UNVERIFIED_TOAST =
+  "Can't verify what the server saved — check your connection and retry";
+
+/**
+ * Splits POSTs into the ones the server already stored (lost response)
+ * and the rest, by matching them against the post's live notes. Server
+ * ids already in the local collection or in `extraKnownIds` (created by
+ * this batch) are never candidates. Resolves `null` when the live notes
+ * can't be fetched.
+ */
+async function findCommittedPosts<T extends PendingPost>(
+  posts: T[],
+  extraKnownIds: number[],
+): Promise<{committed: SuccessfulPost[]; rest: T[]} | null> {
+  let serverNotes;
+  try {
+    serverNotes = await fetchServerNotes();
+  } catch (err) {
+    console.warn(`[${SCRIPT_NAME}] could not verify failed POSTs`, err);
+    return null;
+  }
+  const known = new Set<string>([
+    ...[...notes.keys()].filter(isServerNoteId),
+    ...extraKnownIds.map(String),
+  ]);
+  const pairs = matchCommittedPosts(posts, serverNotes, known);
+  const matched = new Set<PendingPost>(pairs.map(p => p.post));
+  return {
+    committed: pairs.map(({post, serverNote}) => ({
+      noteId: post.noteId,
+      state: post.state,
+      serverResponse: serverNote,
+    })),
+    rest: posts.filter(p => !matched.has(p)),
+  };
+}
+
+/**
+ * Moves failed POSTs that the server stored anyway into `successful`,
+ * and marks the rest verified (`unverified: false`) or, when the live
+ * notes can't be fetched, `unverified: true`.
+ */
+async function reconcileFailedPosts(
+  result: SendBatchResult,
+): Promise<SendBatchResult> {
+  if (result.failed.posts.length === 0) {
+    return result;
+  }
+  const createdIds = result.successful.posts.flatMap(p =>
+    typeof p.serverResponse?.id === 'number' ? [p.serverResponse.id] : [],
+  );
+  const found = await findCommittedPosts(result.failed.posts, createdIds);
+  return {
+    successful: {
+      ...result.successful,
+      posts: [...result.successful.posts, ...(found ? found.committed : [])],
+    },
+    failed: {
+      ...result.failed,
+      posts: (found ? found.rest : result.failed.posts).map(p => ({
+        ...p,
+        unverified: !found,
+      })),
+    },
+  };
+}
+
 /**
  * Post-sendBatch orchestration. Updates local state to mirror what
  * the server confirmed, then either:
@@ -472,9 +548,10 @@ export function countSendResult(result: SendBatchResult): {
  * Exported for unit tests; module-internal otherwise.
  */
 export async function handleSendResult(
-  result: SendBatchResult,
+  sent: SendBatchResult,
   tagDelta: TagDelta | null,
 ): Promise<void> {
+  const result = await reconcileFailedPosts(sent);
   applyServerStateToLocal(result);
 
   const hasFailures =
@@ -513,16 +590,41 @@ export async function handleSendResult(
     return;
   }
 
-  const newClassified = classifyChanges();
+  const classified = classifyChanges();
   const retryTagDelta = result.failed.tagPatch ? tagDelta : null;
-  if (!newClassified.hasChanges && !retryTagDelta) {
+  if (!classified.hasChanges && !retryTagDelta) {
     // Nothing left to retry — this is rare (would mean failures
     // self-resolved between modal and click), but bail cleanly
     // rather than spin sendBatch on an empty payload.
     hooks!.onToast('Nothing left to retry', 'info');
     return;
   }
-  const retryResult = await sendBatch(newClassified, retryTagDelta);
+
+  // POST is not idempotent: if the last check couldn't reach the
+  // server, ask again before re-sending, and hold the POSTs back if it
+  // still can't (PUT / DELETE / tags are safe to repeat).
+  let committed: SuccessfulPost[] = [];
+  let heldBack: FailedPost[] = [];
+  let posts = classified.posts;
+  if (posts.length > 0 && result.failed.posts.some(p => p.unverified)) {
+    const found = await findCommittedPosts(posts, []);
+    if (found) {
+      committed = found.committed;
+      posts = found.rest;
+    } else {
+      hooks!.onToast(UNVERIFIED_TOAST, 'warning');
+      heldBack = posts.map(p => ({
+        ...p,
+        error: 'not re-sent',
+        unverified: true,
+      }));
+      posts = [];
+    }
+  }
+
+  const retryResult = await sendBatch({...classified, posts}, retryTagDelta);
+  retryResult.successful.posts.push(...committed);
+  retryResult.failed.posts.push(...heldBack);
   await handleSendResult(retryResult, retryTagDelta);
 }
 

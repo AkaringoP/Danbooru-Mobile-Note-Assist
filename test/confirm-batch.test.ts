@@ -40,7 +40,12 @@ vi.mock('../src/api/posts', () => ({
   fetchPostMeta: vi.fn(() => Promise.resolve({width: 1000, height: 750})),
 }));
 
-import {apiDeleteNote, apiPostNote, apiPutNote} from '../src/api/notes';
+import {
+  apiDeleteNote,
+  apiPostNote,
+  apiPutNote,
+  fetchServerNotes,
+} from '../src/api/notes';
 import {apiPatchPostTags} from '../src/api/posts';
 
 import {
@@ -146,6 +151,7 @@ beforeEach(() => {
   vi.mocked(apiPutNote).mockReset();
   vi.mocked(apiDeleteNote).mockReset();
   vi.mocked(apiPatchPostTags).mockReset().mockResolvedValue(undefined);
+  vi.mocked(fetchServerNotes).mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -154,6 +160,13 @@ afterEach(() => {
   }
   vi.useRealTimers();
 });
+
+/** Resolves once the error modal is open (reconciliation awaits first). */
+async function waitForErrorModal(): Promise<void> {
+  await vi.waitFor(() => {
+    expect(document.querySelector('#dmna-error-modal.show')).not.toBeNull();
+  });
+}
 
 // ---------------------------------------------------------------------------
 // getIsSending — UI lock state across sendBatch
@@ -603,6 +616,158 @@ describe('runConfirmFlow — draft handoff', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST reconciliation before re-sending (Task 1.4)
+// ---------------------------------------------------------------------------
+
+describe('runConfirmFlow — POST reconciliation', () => {
+  const STATE: NoteState = {x: 10, y: 20, w: 100, h: 50, text: 'hello'};
+  const ON_SERVER = {
+    id: 777,
+    x: 10,
+    y: 20,
+    width: 100,
+    height: 50,
+    body: 'hello',
+  };
+
+  function seedCommittedTemp(id: string): void {
+    notes.set(
+      asTempNoteId(id),
+      makeNote({
+        current: {...STATE},
+        initialState: {...STATE},
+        confirmedState: {...STATE},
+        isServerNote: false,
+        everConfirmed: true,
+      }),
+    );
+  }
+
+  async function modal(): Promise<void> {
+    await vi.waitFor(() => {
+      expect(document.querySelector('#dmna-error-modal.show')).not.toBeNull();
+    });
+  }
+
+  function click(action: 'retry' | 'cancel'): void {
+    (
+      document.querySelector(
+        `#dmna-error-modal .dmna-error-modal-btn[data-action="${action}"]`,
+      ) as HTMLButtonElement
+    ).click();
+  }
+
+  function modalText(): string {
+    return document.querySelector('#dmna-error-modal-list')?.textContent ?? '';
+  }
+
+  it('a lost-response POST the server stored is adopted without an error modal', async () => {
+    vi.useFakeTimers();
+    seedCommittedTemp('temp-lost-1');
+    vi.mocked(apiPostNote).mockRejectedValueOnce(new Error('Failed to fetch'));
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce([ON_SERVER]);
+
+    await runConfirmFlow();
+
+    expect(apiPostNote).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('#dmna-error-modal.show')).toBeNull();
+    expect(notes.has(asTempNoteId('temp-lost-1'))).toBe(false);
+    const adopted = notes.get(asServerNoteId(777));
+    expect(adopted?.isServerNote).toBe(true);
+    expect(adopted?.current).toEqual(STATE);
+    expect(flowHooks.onToast).toHaveBeenCalledWith('✓ Saved', 'success');
+  });
+
+  it('server notes known before the send are not adopted', async () => {
+    seedCommittedTemp('temp-lost-2');
+    notes.set(
+      asServerNoteId(777),
+      makeNote({
+        current: {...STATE},
+        initialState: {...STATE},
+        confirmedState: {...STATE},
+        isServerNote: true,
+      }),
+    );
+    vi.mocked(apiPostNote).mockRejectedValueOnce(new Error('Failed to fetch'));
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce([ON_SERVER]);
+
+    const flow = runConfirmFlow();
+    await modal();
+    expect(notes.has(asTempNoteId('temp-lost-2'))).toBe(true);
+    click('cancel');
+    await flow;
+  });
+
+  it('when the server cannot be asked, Retry holds the POST back', async () => {
+    seedCommittedTemp('temp-lost-3');
+    vi.mocked(apiPostNote).mockRejectedValue(new Error('Failed to fetch'));
+    vi.mocked(fetchServerNotes).mockRejectedValue(new Error('offline'));
+
+    const flow = runConfirmFlow();
+    await modal();
+    expect(modalText()).toContain('(server state unverified)');
+    click('retry');
+    await modal();
+    expect(apiPostNote).toHaveBeenCalledTimes(1);
+    expect(flowHooks.onToast).toHaveBeenCalledWith(
+      "Can't verify what the server saved — check your connection and retry",
+      'warning',
+    );
+    expect(modalText()).toContain('(server state unverified)');
+    click('cancel');
+    await flow;
+    expect(notes.has(asTempNoteId('temp-lost-3'))).toBe(true);
+  });
+
+  it('Retry still re-sends PUT / DELETE while a POST is held back', async () => {
+    seedCommittedTemp('temp-lost-4');
+    const putId = asServerNoteId('321');
+    notes.set(
+      putId,
+      makeNote({
+        current: {...STATE, text: 'edited'},
+        initialState: {...STATE},
+        confirmedState: {...STATE, text: 'edited'},
+        isServerNote: true,
+      }),
+    );
+    vi.mocked(apiPostNote).mockRejectedValue(new Error('Failed to fetch'));
+    vi.mocked(apiPutNote)
+      .mockRejectedValueOnce(new Error('Failed to fetch'))
+      .mockResolvedValue(null);
+    vi.mocked(fetchServerNotes).mockRejectedValue(new Error('offline'));
+
+    const flow = runConfirmFlow();
+    await modal();
+    click('retry');
+    await modal();
+    expect(apiPutNote).toHaveBeenCalledTimes(2);
+    expect(apiPostNote).toHaveBeenCalledTimes(1);
+    click('cancel');
+    await flow;
+  });
+
+  it('a verified miss is re-sent on Retry', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    seedCommittedTemp('temp-lost-5');
+    vi.mocked(apiPostNote)
+      .mockRejectedValueOnce(new Error('HTTP 500'))
+      .mockResolvedValueOnce({...ON_SERVER, id: 778});
+    vi.mocked(fetchServerNotes).mockResolvedValue([]);
+
+    const flow = runConfirmFlow();
+    await modal();
+    expect(modalText()).not.toContain('unverified');
+    click('retry');
+    await flow;
+
+    expect(apiPostNote).toHaveBeenCalledTimes(2);
+    expect(notes.has(asServerNoteId(778))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // handleSendResult — success vs partial vs all-fail
 // ---------------------------------------------------------------------------
 
@@ -645,8 +810,7 @@ describe('handleSendResult', () => {
 
     // Schedule modal-cancel: as soon as the modal renders, click cancel.
     const promise = handleSendResult(result, null);
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitForErrorModal();
     const cancelBtn = document.querySelector(
       '#dmna-error-modal .dmna-error-modal-btn[data-action="cancel"]',
     ) as HTMLButtonElement | null;
@@ -694,8 +858,7 @@ describe('handleSendResult', () => {
       tagsToAdd: ['translated'],
       tagsToRemove: [],
     });
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitForErrorModal();
     const retryBtn = document.querySelector(
       '#dmna-error-modal .dmna-error-modal-btn[data-action="retry"]',
     ) as HTMLButtonElement | null;
@@ -731,8 +894,7 @@ describe('handleSendResult', () => {
       tagsToAdd: ['translated'],
       tagsToRemove: [],
     });
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitForErrorModal();
     const retryBtn = document.querySelector(
       '#dmna-error-modal .dmna-error-modal-btn[data-action="retry"]',
     ) as HTMLButtonElement | null;
@@ -758,8 +920,7 @@ describe('handleSendResult', () => {
     result.failed.tagPatch = 'tag boom';
 
     const promise = handleSendResult(result, null);
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitForErrorModal();
     const retryBtn = document.querySelector(
       '#dmna-error-modal .dmna-error-modal-btn[data-action="retry"]',
     ) as HTMLButtonElement | null;
