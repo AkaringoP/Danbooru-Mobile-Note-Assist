@@ -5,7 +5,7 @@
     "outDir": "build",
     "target": "ESNext",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "lib": [
       "DOM",
       "DOM.Iterable",
