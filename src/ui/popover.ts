@@ -31,7 +31,11 @@
 
 import {NoteId, TextSnapshot, isServerNoteId} from '../types';
 import {POPOVER_OFFSET, SCRIPT_NAME, SCRIPT_VERSION} from '../config';
-import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
+import {
+  DisplayRect,
+  getImageDisplayRect,
+  imageToScreenRect,
+} from '../utils/coords';
 import {computePopoverPlacement} from '../utils/popover-placement';
 import {apiPreviewNote} from '../api/notes';
 import {getOriginalWidth} from '../state/image-state';
@@ -505,7 +509,7 @@ export function updatePopoverForActiveNote(): void {
  * the real "should we be running this" check — activeNoteId and
  * popover-shown are kept in sync by setActiveNote.
  */
-export function updatePopoverPosition(): void {
+export function updatePopoverPosition(cachedRect?: DisplayRect): void {
   if (!popoverElement) {
     return;
   }
@@ -517,11 +521,11 @@ export function updatePopoverPosition(): void {
   if (!note) {
     return;
   }
-  const img = document.getElementById('image') as HTMLImageElement | null;
-  if (!img) {
-    return;
+  let displayRect = cachedRect ?? null;
+  if (!displayRect) {
+    const img = document.getElementById('image') as HTMLImageElement | null;
+    displayRect = img ? getImageDisplayRect(img) : null;
   }
-  const displayRect = getImageDisplayRect(img);
   if (!displayRect) {
     return;
   }

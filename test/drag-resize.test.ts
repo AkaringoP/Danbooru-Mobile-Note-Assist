@@ -36,7 +36,12 @@ vi.mock('../src/api/notes', () => ({
   fetchServerNotes: vi.fn(() => Promise.resolve([])),
 }));
 
-import {attachBodyDragListener} from '../src/interactions/drag-resize';
+import {
+  attachBodyDragListener,
+  attachHandleListeners,
+} from '../src/interactions/drag-resize';
+import {renderNoteBox} from '../src/ui/note-box';
+import {updatePopoverPosition} from '../src/ui/popover';
 import {
   NotesStoreHooks,
   actionLog,
@@ -155,5 +160,26 @@ describe('body drag — touch only drags the selected box (Task 2.5)', () => {
     drag(el, 'touch');
     drag(el, 'mouse');
     expect(notes.get(ID)!.current).toEqual(START);
+  });
+});
+
+describe('drag reads the image rect once per gesture (Task 3.2)', () => {
+  it('one getBoundingClientRect for the whole drag; render + popover reuse it', () => {
+    setActiveNote(ID);
+    drag(el, 'touch', 25);
+    expect(img.rectCalls).toBe(1);
+    const rect = {left: 0, top: 0, width: 1000, height: 1400};
+    expect(vi.mocked(renderNoteBox)).toHaveBeenLastCalledWith(ID, rect);
+    expect(vi.mocked(updatePopoverPosition)).toHaveBeenLastCalledWith(rect);
+  });
+
+  it('resize results are unchanged by the cache', () => {
+    setActiveNote(ID);
+    const handle = document.createElement('div');
+    el.appendChild(handle);
+    attachHandleListeners(handle, 'se', ID);
+    drag(handle, 'touch', 10);
+    // +50 display px → +100 image px on w and h.
+    expect(notes.get(ID)!.current).toEqual({...START, w: 300, h: 300});
   });
 });

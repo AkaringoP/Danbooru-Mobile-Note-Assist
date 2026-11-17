@@ -35,7 +35,7 @@ import {
   MIN_BOX_SIZE_IMG,
 } from '../config';
 import {NoteId, NoteState} from '../types';
-import {getImageDisplayRect} from '../utils/coords';
+import {DisplayRect, getImageDisplayRect} from '../utils/coords';
 import {getImageElement} from '../utils/dom';
 import {getOriginalHeight, getOriginalWidth} from '../state/image-state';
 import {
@@ -61,6 +61,12 @@ interface DragState {
   startState: NoteState;
   captureTarget: HTMLElement;
   moved: boolean;
+  /**
+   * Image page-coord rect, read once at gesture start and reused by
+   * every move, render and popover update — reading it per frame
+   * interleaved layout reads with style writes (v5.1 Task 3.2).
+   */
+  imageRect: DisplayRect;
 }
 
 let dragState: DragState | null = null;
@@ -186,6 +192,11 @@ function startInteraction(
   if (!note) {
     return;
   }
+  const img = getImageElement();
+  const imageRect = img ? getImageDisplayRect(img) : null;
+  if (!imageRect) {
+    return;
+  }
 
   dragState = {
     kind,
@@ -196,6 +207,7 @@ function startInteraction(
     startState: {...note.current},
     captureTarget,
     moved: false,
+    imageRect,
   };
 
   try {
@@ -247,14 +259,10 @@ function onInteractionMove(e: PointerEvent): void {
   }
 
   // Convert display-space delta to image-space.
-  const img = getImageElement();
-  if (!img) {
-    return;
-  }
-  const rect = getImageDisplayRect(img);
+  const rect = dragState.imageRect;
   const originalWidth = getOriginalWidth();
   const originalHeight = getOriginalHeight();
-  if (!rect || !originalWidth) {
+  if (!originalWidth) {
     return;
   }
   const scale = rect.width / originalWidth;
@@ -314,8 +322,8 @@ function onInteractionMove(e: PointerEvent): void {
   ny = Math.max(0, Math.min(originalHeight - nh, ny));
 
   note.current = {x: nx, y: ny, w: nw, h: nh, text: note.current.text};
-  renderNoteBox(dragState.noteId);
-  updatePopoverPosition();
+  renderNoteBox(dragState.noteId, rect);
+  updatePopoverPosition(rect);
 }
 
 /**
