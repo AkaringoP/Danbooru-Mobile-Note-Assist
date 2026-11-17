@@ -663,7 +663,7 @@ function svgEl(
 
 /**
  * Touch-zone button icon: a dashed box (the note box's zones) with a
- * small eye on its corner. The plain 👁 read as a second "Preview"
+ * small eye on its top-right corner. The plain 👁 read as a second "Preview"
  * next to the header toggle (v5.2). Built with DOM calls — the
  * Preview sink stays the only innerHTML write.
  */
@@ -680,7 +680,7 @@ function createZoneIcon(): SVGElement {
   // eye needs no fill and works on both the idle and the pressed color.
   svg.appendChild(
     svgEl('path', {
-      d: 'M16.5 10 V2.5 H2.5 V16.5 H9.5',
+      d: 'M9.5 7.5 H2.5 V21.5 H16.5 V14',
       fill: 'none',
       stroke: 'currentColor',
       'stroke-width': 1.6,
@@ -689,7 +689,7 @@ function createZoneIcon(): SVGElement {
   );
   svg.appendChild(
     svgEl('path', {
-      d: 'M10.5 17.5 Q16.5 11.8 22.5 17.5 Q16.5 23.2 10.5 17.5 Z',
+      d: 'M10.5 6.5 Q16.5 0.8 22.5 6.5 Q16.5 12.2 10.5 6.5 Z',
       fill: 'none',
       stroke: 'currentColor',
       'stroke-width': 1.5,
@@ -697,7 +697,7 @@ function createZoneIcon(): SVGElement {
     }),
   );
   svg.appendChild(
-    svgEl('circle', {cx: 16.5, cy: 17.5, r: 2.1, fill: 'currentColor'}),
+    svgEl('circle', {cx: 16.5, cy: 6.5, r: 2.1, fill: 'currentColor'}),
   );
   return svg;
 }

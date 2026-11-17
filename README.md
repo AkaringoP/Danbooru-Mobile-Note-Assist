@@ -144,7 +144,7 @@ On a touch screen, **tap a box to select it first, then drag** (v5.1). A swipe t
 
 Each drag and each resize is a single entry on the per-note undo stack, so a misjudged drag can be reverted with ↶ without losing the text.
 
-If you can't tell where the touch zones are on a small box, **hold the touch-zone button** (dashed box with an eye) in the popover to highlight them.
+If you can't tell where the touch zones are on a small box, **hold the touch-zone button** (dashed box with an eye on its top-right corner) in the popover to highlight them.
 
 ### Box colors at a glance
 
