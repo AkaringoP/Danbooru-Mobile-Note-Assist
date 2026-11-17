@@ -5,6 +5,24 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2026-11-17
+
+Second batch of the mobile-focused audit: clearer state at a glance, native-looking controls, and the remaining performance fixes.
+
+### Added
+- **Unsent-changes indicator.** While anything is waiting for ✓ Confirm, the floating button gets a green outline and a badge with the number of changes, and the arc menu's Confirm item is outlined. The count is exactly what Confirm would send — a new box you never committed doesn't count, a deletion does.
+
+### Changed
+- **Popover buttons look like Danbooru's note dialog.** The action row is now text — **Commit** / **Cancel** / **Delete** / **History** — in the site's form-button colors (following your theme), instead of ✔ ✖ 🗑 📜 glyphs. It's "Commit", not "Save": the note is checkpointed locally and only sent on ✓ Confirm. The buttons stay 36 px tall (the native dialog's 24 px is too small for thumbs).
+- **Tag changes merge with other editors'.** The tag update now sends the tag string you saw as `old_tag_string`, the same way Danbooru's own edit form does, so a tag someone else changed in the meantime is kept — and the extra re-fetch before the update is gone.
+
+### Fixed
+- **Entering edit mode on note-heavy posts.** Notes were rendered one by one with a layout read each; on a throttled phone 1000 notes took about 9 s. They now render in one pass (about 0.35 s in the same test). Posts with more than 1000 notes (Danbooru allows 1200) now load all of them.
+- **Rate limits.** A batch now stops at the first 429 instead of firing every remaining request (which lengthens Danbooru's lockout); the rest are listed as `Skipped — rate limited` and the error modal says to wait about a minute before Retry.
+- **Old drafts piled up.** Drafts for posts you never reopened stayed in `localStorage` forever; expired and invalid ones are now swept once per page load.
+- **Dragging a box** read the image position three times per frame; it now reads it once per gesture.
+- **Scrolling that starts on the image** no longer waits on the script (its touch listener is now passive).
+
 ## [5.1.0] - 2026-11-17
 
 Reliability, security and mobile-fit release from a mobile-focused audit. Every fix below was reproduced first in a Playwright mobile-emulation harness that now ships as the opt-in `npm run e2e` suite.
