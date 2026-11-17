@@ -640,6 +640,17 @@ export const STYLES = `
       pointer-events: none;
     }
 
+    /* Send summary (v5.1): what Confirm is about to do, above the tags. */
+    .dmna-tag-popover-summary {
+      font-size: 13px;
+      color: #dddddd;
+      margin-bottom: 10px;
+    }
+    .dmna-tag-popover-summary-deleted {
+      color: #ff8b8b;
+      font-weight: bold;
+    }
+
     .dmna-tag-popover-header {
       font-size: 14px;
       font-weight: bold;

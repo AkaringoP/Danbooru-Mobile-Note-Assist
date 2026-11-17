@@ -226,3 +226,16 @@ export interface TagDelta {
   tagsToAdd: string[];
   tagsToRemove: string[];
 }
+
+/**
+ * What Confirm is about to send, per bucket (v5.1 Task 2.4). Shown at
+ * the top of the Confirm popover so a stray move or a mass delete is
+ * visible before anything reaches the server. Lives here because
+ * confirm/classify builds it and ui/tag-popover renders it.
+ */
+export interface ChangeSummary {
+  created: number;
+  textEdited: number;
+  movedOnly: number;
+  deleted: number;
+}

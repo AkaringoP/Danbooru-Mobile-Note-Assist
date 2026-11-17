@@ -156,7 +156,7 @@ const confirmFlowHooks: ConfirmFlowHooks = {
   onNoteRenderRequested: id => renderNoteBox(id),
   onNoteVisualsChanged: id => updateNoteVisuals(id),
   onToast: (msg, level, err) => showToast(msg, level, err),
-  showTagPopover: () => showTagPopover(),
+  showTagPopover: (summary, withTags) => showTagPopover(summary, withTags),
 };
 
 const noteBoxHooks: NoteBoxHooks = {

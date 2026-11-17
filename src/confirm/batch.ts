@@ -25,6 +25,7 @@
 import {SCRIPT_NAME} from '../config';
 import {
   asServerNoteId,
+  ChangeSummary,
   isServerNoteId,
   Note,
   NoteId,
@@ -51,6 +52,7 @@ import {apiPatchPostTags} from '../api/posts';
 import {
   classifyChanges,
   needsTagPopover,
+  summarizeChanges,
   ClassifiedChanges,
   PendingPost,
   PendingPut,
@@ -148,11 +150,15 @@ export interface ConfirmFlowHooks {
   onToast: (message: string, level: ToastLevel, err?: unknown) => void;
 
   /**
-   * Opens the Confirm-time tag popover (D9). Resolves to the user's
-   * add/remove delta on submit, or `null` on cancel (which aborts
-   * the entire Confirm flow).
+   * Opens the Confirm popover: the send summary, plus the translation
+   * tag toggles (D9) when `withTags`. Resolves to the user's add/remove
+   * delta on submit (empty without tags), or `null` on cancel (which
+   * aborts the entire Confirm flow).
    */
-  showTagPopover: () => Promise<TagDelta | null>;
+  showTagPopover: (
+    summary: ChangeSummary,
+    withTags: boolean,
+  ) => Promise<TagDelta | null>;
 }
 
 let hooks: ConfirmFlowHooks | null = null;
@@ -805,14 +811,16 @@ export async function runConfirmFlow(): Promise<void> {
       return;
     }
 
-    let tagDelta: TagDelta | null = null;
-    if (needsTagPopover(classified)) {
-      tagDelta = await hooks!.showTagPopover();
-      if (tagDelta === null) {
-        // User canceled the tag modal — abort the entire Confirm
-        // flow. State unchanged, user back in active mode.
-        return;
-      }
+    // Always ask, even for a move-only batch: the summary is the last
+    // chance to notice a box moved by accident (v5.1 Task 2.4).
+    const tagDelta = await hooks!.showTagPopover(
+      summarizeChanges(classified),
+      needsTagPopover(classified),
+    );
+    if (tagDelta === null) {
+      // User canceled — abort the entire Confirm flow. State
+      // unchanged, user back in active mode.
+      return;
     }
 
     // The first request is about to go out: authority passes to the

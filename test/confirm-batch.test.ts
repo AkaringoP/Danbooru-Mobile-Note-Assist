@@ -525,6 +525,71 @@ describe('runConfirmFlow — abort branches', () => {
 });
 
 // ---------------------------------------------------------------------------
+// runConfirmFlow — send summary (Task 2.4)
+// ---------------------------------------------------------------------------
+
+describe('runConfirmFlow — send summary', () => {
+  it('a move-only batch still asks, with a summary and no tags', async () => {
+    const id = asServerNoteId('610');
+    notes.set(
+      id,
+      makeNote({
+        isServerNote: true,
+        current: {...BASE, x: 40},
+      }),
+    );
+    vi.mocked(flowHooks.showTagPopover).mockResolvedValueOnce(null);
+
+    await runConfirmFlow();
+
+    expect(flowHooks.showTagPopover).toHaveBeenCalledWith(
+      {created: 0, textEdited: 0, movedOnly: 1, deleted: 0},
+      false,
+    );
+    expect(apiPutNote).not.toHaveBeenCalled();
+  });
+
+  it('the summary counts every bucket the batch will send', async () => {
+    notes.set(
+      asTempNoteId('temp-sum-1'),
+      makeNote({isServerNote: false, everConfirmed: true}),
+    );
+    notes.set(
+      asTempNoteId('temp-sum-2'),
+      makeNote({isServerNote: false, everConfirmed: true}),
+    );
+    notes.set(
+      asTempNoteId('temp-sum-dropped'),
+      makeNote({isServerNote: false, everConfirmed: false}),
+    );
+    notes.set(
+      asServerNoteId('611'),
+      makeNote({isServerNote: true, current: {...BASE, text: 'new'}}),
+    );
+    notes.set(
+      asServerNoteId('612'),
+      makeNote({isServerNote: true, current: {...BASE, y: 9}}),
+    );
+    notes.set(
+      asServerNoteId('613'),
+      makeNote({isServerNote: true, isDeleted: true}),
+    );
+    notes.set(
+      asServerNoteId('614'),
+      makeNote({isServerNote: true, isDeleted: true}),
+    );
+    vi.mocked(flowHooks.showTagPopover).mockResolvedValueOnce(null);
+
+    await runConfirmFlow();
+
+    expect(flowHooks.showTagPopover).toHaveBeenCalledWith(
+      {created: 2, textEdited: 1, movedOnly: 1, deleted: 2},
+      true,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runConfirmFlow — draft handoff (Task 1.2)
 // ---------------------------------------------------------------------------
 

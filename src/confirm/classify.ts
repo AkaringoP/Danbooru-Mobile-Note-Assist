@@ -9,7 +9,13 @@
  * Shapes consumed by `confirm/batch.sendBatch` and the debug surface.
  */
 
-import {NoteId, NoteState, ServerNoteId, isServerNoteId} from '../types';
+import {
+  ChangeSummary,
+  NoteId,
+  NoteState,
+  ServerNoteId,
+  isServerNoteId,
+} from '../types';
 import {notes} from '../state/notes-store';
 
 /** A new temp note that will be POSTed. */
@@ -183,6 +189,17 @@ export function classifyChanges(): ClassifiedChanges {
   const hasChanges = posts.length > 0 || puts.length > 0 || deletes.length > 0;
 
   return {posts, puts, deletes, dropped, hasChanges};
+}
+
+/** Per-bucket counts for the Confirm popover's summary line. */
+export function summarizeChanges(c: ClassifiedChanges): ChangeSummary {
+  const textEdited = c.puts.filter(p => p.textChanged).length;
+  return {
+    created: c.posts.length,
+    textEdited,
+    movedOnly: c.puts.length - textEdited,
+    deleted: c.deletes.length,
+  };
 }
 
 /**

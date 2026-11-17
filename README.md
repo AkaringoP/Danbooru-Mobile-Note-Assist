@@ -164,7 +164,7 @@ If a box has multiple states at once (e.g. a deleted box you've tapped to reveal
 When you're done editing all the boxes, tap the floating button to open the arc menu, then tap **✓ Confirm**.
 
 1. The script collects your pending changes — new notes, edits, deletes — and decides what to send.
-2. If you've added notes or changed any text, a **tag popover** appears anchored to the Confirm button. Toggle the four translation tags as iOS-style pill switches:
+2. A **Confirm popover** appears anchored to the Confirm button. Its first line summarizes what is about to be sent — for example `New 3 · Edited 2 · Moved 1 · Deleted 4`, with deletions in red — so a box you moved by accident or a deletion you didn't mean is visible before anything leaves your phone. If you've added or deleted notes or changed any text, the popover also shows the four translation tags as iOS-style pill switches:
 
    | Tag | Behavior |
    |---|---|
@@ -173,13 +173,14 @@ When you're done editing all the boxes, tap the floating button to open the arc 
    | **Check translation** | When ON, forces `Translation request` ON too. |
    | **Partially translated** | When ON, forces `Translation request` ON too. |
 
-3. Tap **Submit** in the tag popover. The script sends your changes in batch.
+   If you only moved or resized boxes, the popover shows just the summary with **Submit** / **Cancel**.
+3. Tap **Submit**. The script sends your changes in batch. **Cancel** sends nothing and leaves you in Edit mode.
 4. **On full success**: a `✓ Saved` toast flashes, and the page reloads with everything applied.
 5. **On partial failure**: an error modal lists which calls failed and Danbooru's actual error message (e.g. `Box overlaps existing note`). You can choose:
    - **Retry** — re-classify what's left and try again.
    - **Cancel** — stay in Edit mode with the partial state. Successful changes are kept locally; failed ones still show as pending so you can fix them.
 
-> Tip: if you want to update **only** the translation tags on a post (e.g. flip from `translation_request` to `translated` because someone else translated already), just enter Edit mode and tap ✓ Confirm directly without touching any boxes. The tag popover still opens.
+> Note: Confirm needs at least one note change — with nothing pending it just shows `No changes to confirm`. To change only the translation tags on a post, use Danbooru's own tag editor.
 
 ---
 
