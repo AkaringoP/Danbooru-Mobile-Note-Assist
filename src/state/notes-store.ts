@@ -839,7 +839,9 @@ export function serializeForDraft(): DraftSnapshot {
         isDeleted: note.isDeleted,
         isServerNote: note.isServerNote,
         everConfirmed: note.everConfirmed,
-        ...(note.postOutcomeUnknown ? {postOutcomeUnknown: true} : {}),
+        ...(note.uncertainPosts?.length
+          ? {uncertainPosts: note.uncertainPosts.map(s => ({...s}))}
+          : {}),
       },
     ]);
   }
@@ -909,7 +911,9 @@ export async function applyDraftSnapshot(
       isDeleted: snote.isDeleted,
       isServerNote: snote.isServerNote,
       everConfirmed: snote.everConfirmed,
-      ...(snote.postOutcomeUnknown ? {postOutcomeUnknown: true} : {}),
+      ...(snote.uncertainPosts?.length
+        ? {uncertainPosts: snote.uncertainPosts.map(s => ({...s}))}
+        : {}),
       domElement: null,
     };
     notes.set(noteId, note);

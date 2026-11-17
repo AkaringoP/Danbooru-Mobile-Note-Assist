@@ -857,9 +857,9 @@ describe('runConfirmFlow — POST reconciliation', () => {
     expect(modalText()).toContain('(server state unverified)');
     click('cancel');
     await first;
-    expect(notes.get(asTempNoteId('temp-lost-6'))!.postOutcomeUnknown).toBe(
-      true,
-    );
+    expect(notes.get(asTempNoteId('temp-lost-6'))!.uncertainPosts).toEqual([
+      STATE,
+    ]);
 
     await runConfirmFlow();
 
@@ -887,6 +887,96 @@ describe('runConfirmFlow — POST reconciliation', () => {
     expect(getIsSending()).toBe(false);
     click('cancel');
     await second;
+  });
+
+  function seedUncertainTemp(id: string, current: NoteState): void {
+    notes.set(
+      asTempNoteId(id),
+      makeNote({
+        current: {...current},
+        initialState: {...STATE},
+        confirmedState: {...current},
+        isServerNote: false,
+        everConfirmed: true,
+        uncertainPosts: [{...STATE}],
+      }),
+    );
+  }
+
+  it('a restored copy already loaded as a server note is adopted, not re-POSTed (review A)', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    seedUncertainTemp('temp-lost-9', STATE);
+    notes.set(
+      asServerNoteId(777),
+      makeNote({
+        current: {...STATE, text: 'hello'},
+        initialState: {...STATE, text: 'hello'},
+        confirmedState: {...STATE, text: 'hello'},
+        isServerNote: true,
+      }),
+    );
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce([ON_SERVER]);
+
+    await runConfirmFlow();
+
+    expect(apiPostNote).not.toHaveBeenCalled();
+    expect(apiPutNote).not.toHaveBeenCalled();
+    expect(notes.has(asTempNoteId('temp-lost-9'))).toBe(false);
+    expect(notes.has(asServerNoteId(777))).toBe(true);
+  });
+
+  it('an edited local copy of that server note is not a candidate', async () => {
+    seedUncertainTemp('temp-lost-10', STATE);
+    notes.set(
+      asServerNoteId(777),
+      makeNote({
+        current: {...STATE, text: 'mine now'},
+        initialState: {...STATE},
+        confirmedState: {...STATE, text: 'mine now'},
+        isServerNote: true,
+      }),
+    );
+    vi.mocked(fetchServerNotes).mockResolvedValue([ON_SERVER]);
+    vi.mocked(apiPostNote).mockRejectedValue(
+      new ApiError('HTTP 422', 'http', 422),
+    );
+    vi.mocked(apiPutNote).mockResolvedValue(null);
+
+    const flow = runConfirmFlow();
+    await modal();
+    expect(apiPostNote).toHaveBeenCalledTimes(1);
+    click('cancel');
+    await flow;
+  });
+
+  it('edits made after the lost POST go out as a PUT on the stored note (review B)', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    seedUncertainTemp('temp-lost-11', {...STATE, text: 'hello, fixed'});
+    vi.mocked(fetchServerNotes).mockResolvedValueOnce([ON_SERVER]);
+    vi.mocked(apiPutNote).mockResolvedValue(null);
+
+    await runConfirmFlow();
+
+    expect(apiPostNote).not.toHaveBeenCalled();
+    expect(apiPutNote).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiPutNote).mock.calls[0][0]).toBe('777');
+    expect(vi.mocked(apiPutNote).mock.calls[0][1].text).toBe('hello, fixed');
+  });
+
+  it('the pre-send check holds the send lock (review C)', async () => {
+    seedUncertainTemp('temp-lost-12', STATE);
+    let lockedDuringCheck = false;
+    vi.mocked(fetchServerNotes).mockImplementationOnce(async () => {
+      lockedDuringCheck = getIsSending();
+      throw new Error('offline');
+    });
+
+    const flow = runConfirmFlow();
+    await modal();
+    expect(lockedDuringCheck).toBe(true);
+    expect(getIsSending()).toBe(false);
+    click('cancel');
+    await flow;
   });
 
   it('a timed-out POST the server commits late is found on Retry (review #2)', async () => {

@@ -672,7 +672,7 @@ describe('sweepExpiredDrafts', () => {
   });
 });
 
-describe('loadDraft — postOutcomeUnknown (review #1)', () => {
+describe('loadDraft — uncertainPosts (review #1)', () => {
   const ST = {x: 1, y: 2, w: 30, h: 40, text: 't'};
   function store(flag: unknown): void {
     localStorage.setItem(
@@ -692,7 +692,7 @@ describe('loadDraft — postOutcomeUnknown (review #1)', () => {
               isDeleted: false,
               isServerNote: false,
               everConfirmed: true,
-              postOutcomeUnknown: flag,
+              uncertainPosts: flag,
             },
           ],
         ],
@@ -711,13 +711,15 @@ describe('loadDraft — postOutcomeUnknown (review #1)', () => {
     setPathname('/');
   });
 
-  it('keeps the flag', () => {
-    store(true);
-    expect(loadDraft()!.notes[0][1].postOutcomeUnknown).toBe(true);
+  it('keeps the sent states', () => {
+    store([ST]);
+    expect(loadDraft()!.notes[0][1].uncertainPosts).toEqual([ST]);
   });
 
-  it('rejects a non-boolean flag', () => {
-    store('yes');
+  it('rejects anything but an array of note states', () => {
+    store(true);
+    expect(loadDraft()).toBeNull();
+    store([{x: 'a'}]);
     expect(loadDraft()).toBeNull();
   });
 });

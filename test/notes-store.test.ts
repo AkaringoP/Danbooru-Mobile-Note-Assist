@@ -1184,22 +1184,22 @@ describe('serializeForDraft', () => {
   });
 });
 
-describe('draft round-trip of postOutcomeUnknown (review #1)', () => {
-  it('serializes the flag and restores it', async () => {
+describe('draft round-trip of uncertainPosts (review #1)', () => {
+  it('serializes the sent states and restores them', async () => {
     const id = createTempNote({...BASE, text: 'x'});
     popoverConfirm(id);
-    notes.get(id)!.postOutcomeUnknown = true;
+    notes.get(id)!.uncertainPosts = [{...BASE, text: 'x'}];
     const snap = serializeForDraft();
-    expect(snap.notes[0][1].postOutcomeUnknown).toBe(true);
+    expect(snap.notes[0][1].uncertainPosts).toEqual([{...BASE, text: 'x'}]);
 
     await applyDraftSnapshot(snap);
 
-    expect(notes.get(id)!.postOutcomeUnknown).toBe(true);
+    expect(notes.get(id)!.uncertainPosts).toEqual([{...BASE, text: 'x'}]);
   });
 
-  it('leaves the flag out when it is not set', () => {
+  it('leaves the field out when there is nothing uncertain', () => {
     popoverConfirm(createTempNote({...BASE, text: 'x'}));
-    expect('postOutcomeUnknown' in serializeForDraft().notes[0][1]).toBe(false);
+    expect('uncertainPosts' in serializeForDraft().notes[0][1]).toBe(false);
   });
 });
 

@@ -115,12 +115,13 @@ export interface Note {
    */
   everConfirmed: boolean;
   /**
-   * Temp notes only: a POST for this note failed without a server
-   * answer (network drop, timeout, 5xx), so the server may have stored
-   * it. Every later send looks for it among the post's live notes
-   * before POSTing again. Survives Cancel and drafts (v5.2).
+   * Temp notes only: the states sent by POSTs that failed without a
+   * refusal (network drop, timeout, 5xx) — the server may have stored
+   * any of them. Every later send looks for them among the post's
+   * notes before POSTing again; a match is adopted and edits made since
+   * go out as a PUT. Survives Cancel and drafts (v5.2).
    */
-  postOutcomeUnknown?: boolean;
+  uncertainPosts?: NoteState[];
   /** The `.dmna-note-box` div, or `null` until first render. */
   domElement: HTMLElement | null;
 }

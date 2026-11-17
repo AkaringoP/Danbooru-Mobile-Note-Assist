@@ -343,8 +343,8 @@ function isSerializedNote(v: unknown): boolean {
     typeof o.isDeleted === 'boolean' &&
     typeof o.isServerNote === 'boolean' &&
     typeof o.everConfirmed === 'boolean' &&
-    (o.postOutcomeUnknown === undefined ||
-      typeof o.postOutcomeUnknown === 'boolean')
+    (o.uncertainPosts === undefined ||
+      (Array.isArray(o.uncertainPosts) && o.uncertainPosts.every(isNoteState)))
   );
 }
 

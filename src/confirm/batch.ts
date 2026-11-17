@@ -38,6 +38,7 @@ import {
   notes,
   actionLog,
   hardDeleteNote,
+  isDirty,
   setMode,
   setActiveNote,
 } from '../state/notes-store';
@@ -46,6 +47,7 @@ import {
   apiPutNote,
   apiDeleteNote,
   fetchServerNotes,
+  ServerNoteDescriptor,
   ServerNoteResponse,
 } from '../api/notes';
 import {apiPatchPostTags} from '../api/posts';
@@ -77,9 +79,9 @@ export type SuccessfulPost = PendingPost & {
 };
 /**
  * `unverified`: the POST failed without a refusal (network, timeout,
- * 5xx), so the server may have stored the note anyway. The flag is
- * copied to `Note.postOutcomeUnknown`, and every later send looks the
- * note up before POSTing it again.
+ * 5xx), so the server may have stored the note anyway. The sent state
+ * is added to `Note.uncertainPosts`, and every later send looks for it
+ * before POSTing the note again.
  */
 export type FailedPost = PendingPost & {
   error: string;
@@ -602,54 +604,154 @@ async function reconcileFailedPosts(
   };
 }
 
+function sameState(a: NoteState, b: NoteState): boolean {
+  return (
+    a.x === b.x &&
+    a.y === b.y &&
+    a.w === b.w &&
+    a.h === b.h &&
+    a.text === b.text
+  );
+}
+
+interface StoredPost {
+  noteId: NoteId;
+  sent: NoteState;
+  serverNote: ServerNoteDescriptor;
+}
+
 /**
- * Sends a classified batch, checking first for any temp note whose
- * earlier POST may have been stored (`Note.postOutcomeUnknown`): found
- * → adopted without sending; the server can't be asked → held back
- * (`skipped`, still unverified). PUT / DELETE / tags are always sent —
- * only POST is not idempotent. Used by Confirm and by Retry, so a
- * Cancel in between, or a draft restore, can't lead to a re-POST.
- * Skips `sendBatch` entirely when nothing is left to send.
+ * Looks for the notes that `uncertainPosts` may have created. A stored
+ * copy can already be loaded locally as an ordinary server note (a
+ * draft restore loads it), so clean local server notes are candidates
+ * too; edited or soft-deleted ones are not. One match per temp note.
+ * Resolves `null` when the live notes can't be fetched.
+ */
+async function findStoredPosts(
+  flagged: PendingPost[],
+): Promise<StoredPost[] | null> {
+  let serverNotes;
+  try {
+    serverNotes = await fetchServerNotes();
+  } catch (err) {
+    console.warn(`[${SCRIPT_NAME}] could not check unverified POSTs`, err);
+    return null;
+  }
+  const excluded = new Set<string>(
+    [...notes.entries()]
+      .filter(([id, n]) => isServerNoteId(id) && (n.isDeleted || isDirty(n)))
+      .map(([id]) => id),
+  );
+  const attempts = flagged.flatMap(p =>
+    (notes.get(p.noteId)?.uncertainPosts ?? []).map(state => ({
+      noteId: p.noteId,
+      state,
+    })),
+  );
+  const pairs = matchCommittedPosts(attempts, serverNotes, excluded);
+  return pairs
+    .filter(
+      (m, i) => pairs.findIndex(o => o.post.noteId === m.post.noteId) === i,
+    )
+    .map(({post, serverNote}) => ({
+      noteId: post.noteId,
+      sent: post.state,
+      serverNote,
+    }));
+}
+
+/**
+ * Replaces a temp note with the server note its lost POST created — or
+ * folds it into that note when it is already loaded. Edits made after
+ * the POST stay on the note, so the next classification sends them as
+ * a PUT; an unedited note takes the server's (normalized) values.
+ */
+function adoptStoredPost({noteId, sent, serverNote: sn}: StoredPost): void {
+  const temp = notes.get(noteId);
+  if (!temp) {
+    return;
+  }
+  const serverId = asServerNoteId(sn.id);
+  const stored: NoteState = {
+    x: sn.x,
+    y: sn.y,
+    w: sn.width,
+    h: sn.height,
+    text: sn.body ?? '',
+  };
+  const edited = !sameState(temp.current, sent);
+  const note: Note = notes.get(serverId) ?? {
+    current: {...stored},
+    initialState: {...stored},
+    confirmedState: {...stored},
+    isDeleted: false,
+    isServerNote: true,
+    everConfirmed: true,
+    domElement: null,
+  };
+  if (edited) {
+    note.current = {...temp.current};
+    note.confirmedState = {...temp.current};
+    note.everConfirmed = true;
+  }
+  hardDeleteNote(noteId);
+  notes.set(serverId, note);
+  hooks!.onNoteRenderRequested(serverId);
+}
+
+/**
+ * Sends a classified batch, first looking up any temp note whose
+ * earlier POST may have been stored (`Note.uncertainPosts`): found →
+ * adopted (later edits become a PUT) and the batch is re-classified;
+ * the server can't be asked → those POSTs are held back (`skipped`,
+ * still unverified). PUT / DELETE / tags are always sent — only POST is
+ * not idempotent. Used by Confirm and by Retry, so neither a Cancel in
+ * between nor a draft restore leads to a re-POST. The send lock covers
+ * the check. Skips `sendBatch` entirely when nothing is left to send.
  */
 async function sendChecked(
   classified: ClassifiedChanges,
   tagDelta: TagDelta | null,
 ): Promise<SendBatchResult> {
-  const uncertain = classified.posts.filter(
-    p => notes.get(p.noteId)?.postOutcomeUnknown,
+  const flagged = classified.posts.filter(
+    p => notes.get(p.noteId)?.uncertainPosts?.length,
   );
-  let posts = classified.posts;
-  let committed: SuccessfulPost[] = [];
+  let batch = classified;
   let heldBack: FailedPost[] = [];
-  if (uncertain.length > 0) {
-    const certain = classified.posts.filter(p => !uncertain.includes(p));
-    const found = await findCommittedPosts(uncertain, []);
-    if (found) {
-      committed = found.committed;
-      posts = [...certain, ...found.rest];
-    } else {
+  if (flagged.length > 0) {
+    startSendingUI();
+    let found: StoredPost[] | null;
+    try {
+      found = await findStoredPosts(flagged);
+    } finally {
+      endSendingUI();
+    }
+    if (!found) {
       hooks!.onToast(UNVERIFIED_TOAST, 'warning');
-      heldBack = uncertain.map(p => ({
+      heldBack = flagged.map(p => ({
         ...p,
         error: NOT_RESENT,
         unverified: true,
         skipped: true,
       }));
-      posts = certain;
+      batch = {
+        ...classified,
+        posts: classified.posts.filter(p => !flagged.includes(p)),
+      };
+    } else if (found.length > 0) {
+      found.forEach(adoptStoredPost);
+      batch = classifyChanges();
     }
   }
   const hasTagChange =
     !!tagDelta &&
     (tagDelta.tagsToAdd.length > 0 || tagDelta.tagsToRemove.length > 0);
   const hasRequests =
-    posts.length > 0 ||
-    classified.puts.length > 0 ||
-    classified.deletes.length > 0 ||
+    batch.posts.length > 0 ||
+    batch.puts.length > 0 ||
+    batch.deletes.length > 0 ||
     hasTagChange;
-  const result = hasRequests
-    ? await sendBatch({...classified, posts}, tagDelta)
-    : emptyResult();
-  result.successful.posts.push(...committed);
+  const result = hasRequests ? await sendBatch(batch, tagDelta) : emptyResult();
   result.failed.posts.push(...heldBack);
   return result;
 }
@@ -678,12 +780,16 @@ export async function handleSendResult(
 ): Promise<void> {
   const result = await reconcileFailedPosts(sent);
   applyServerStateToLocal(result);
-  // Remember, across Cancel and drafts, which temp notes may already
-  // exist server-side. POSTs not sent this round keep their flag.
+  // Remember, across Cancel and drafts, what each temp note sent with
+  // an unknown outcome. Never cleared until the note is adopted or
+  // posted: a later refusal doesn't prove an earlier POST wasn't stored.
   for (const p of result.failed.posts) {
     const note = notes.get(p.noteId);
-    if (note && !p.skipped) {
-      note.postOutcomeUnknown = p.unverified === true;
+    if (note && p.unverified && !p.skipped) {
+      const known = note.uncertainPosts ?? [];
+      if (!known.some(s => sameState(s, p.state))) {
+        note.uncertainPosts = [...known, {...p.state}];
+      }
     }
   }
 
