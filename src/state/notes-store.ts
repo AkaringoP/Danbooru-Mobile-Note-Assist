@@ -464,14 +464,46 @@ function tryDeactivate(): void {
  * to clear. Fires `onActiveChanged` with both the previous and new id
  * so subscribers can update visuals on each side and show/hide the
  * popover in one step.
+ *
+ * Switching straight from a fresh new box (never ✔'d) to another note
+ * settles that box first, so no un-committed new box is left behind
+ * without its popover — Confirm would silently drop it (v5.1 Task
+ * 1.6). Clearing the selection (`null`) is left to the callers, which
+ * already route fresh new boxes (✔ / ✖ / 🗑 / outside tap / Esc).
  */
 export function setActiveNote(noteId: NoteId | null): void {
   if (activeNoteId === noteId) {
     return;
   }
+  if (activeNoteId !== null && noteId !== null) {
+    settleFreshNoteOnSwitch(activeNoteId);
+  }
   const prev = activeNoteId;
   activeNoteId = noteId;
   hooks!.onActiveChanged(prev, noteId);
+}
+
+/**
+ * Typed text → checkpoint it exactly like ✔ (undoable with ↶). Blank →
+ * remove the box, the same as an outside tap.
+ */
+function settleFreshNoteOnSwitch(id: NoteId): void {
+  const note = notes.get(id);
+  if (!note || note.isServerNote || note.everConfirmed) {
+    return;
+  }
+  if (note.current.text.trim()) {
+    commitCheckpoint(id, note);
+  } else {
+    hardDeleteNote(id);
+  }
+}
+
+/** ✔ semantics without the selection change. */
+function commitCheckpoint(noteId: NoteId, note: Note): void {
+  pushAction(noteId, 'edit', {...note.confirmedState});
+  note.confirmedState = {...note.current};
+  note.everConfirmed = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -566,9 +598,7 @@ export function popoverConfirm(noteId: NoteId): void {
   if (!note) {
     return;
   }
-  pushAction(noteId, 'edit', {...note.confirmedState});
-  note.confirmedState = {...note.current};
-  note.everConfirmed = true;
+  commitCheckpoint(noteId, note);
   // setActiveNote(null) fires onActiveChanged(prev=noteId, null),
   // whose main.ts subscriber refreshes the prev box's visuals.
   // v3.1.1 had a redundant `onNoteVisualsChanged(noteId)` here too —

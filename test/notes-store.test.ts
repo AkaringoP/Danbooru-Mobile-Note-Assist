@@ -305,6 +305,85 @@ describe('setActiveNote', () => {
   });
 });
 
+describe('setActiveNote — leaving a fresh new box (Task 1.6)', () => {
+  it('switching to another note checkpoints typed text like ✔', () => {
+    const a = createTempNote({...BASE, text: ''});
+    const b = createTempNote({...BASE, x: 200});
+    popoverConfirm(b);
+    setActiveNote(a);
+    notes.get(a)!.current.text = 'typed, no ✔';
+
+    setActiveNote(b);
+
+    const note = notes.get(a)!;
+    expect(note.everConfirmed).toBe(true);
+    expect(note.confirmedState.text).toBe('typed, no ✔');
+    expect(actionLog.get(a)!.map(e => e.type)).toEqual(['create', 'edit']);
+    expect(getActiveNoteId()).toBe(b);
+    expect(hooks.onActiveChanged).toHaveBeenLastCalledWith(a, b);
+  });
+
+  it('the auto-checkpoint can be undone with ↶', () => {
+    const a = createTempNote({...BASE});
+    const b = createTempNote({...BASE, x: 200});
+    setActiveNote(a);
+    notes.get(a)!.current.text = 'typed';
+    setActiveNote(b);
+
+    popoverUndo(a);
+
+    expect(notes.get(a)!.current.text).toBe('');
+    expect(notes.get(a)!.confirmedState.text).toBe('');
+  });
+
+  it('a blank new box is removed on switch', () => {
+    const a = createTempNote({...BASE});
+    const b = createTempNote({...BASE, x: 200});
+    setActiveNote(a);
+    notes.get(a)!.current.text = '   ';
+    vi.mocked(hooks.onActiveChanged).mockClear();
+
+    setActiveNote(b);
+
+    expect(notes.has(a)).toBe(false);
+    expect(actionLog.has(a)).toBe(false);
+    expect(hooks.onNoteRemoved).toHaveBeenCalledWith(a);
+    expect(getActiveNoteId()).toBe(b);
+    expect(hooks.onActiveChanged).toHaveBeenLastCalledWith(null, b);
+  });
+
+  it('committed temps and server notes switch unchanged', () => {
+    const temp = createTempNote({...BASE, text: 'x'});
+    popoverConfirm(temp);
+    const server = asServerNoteId('42');
+    notes.set(server, makeNote({isServerNote: true}));
+    const other = createTempNote({...BASE, x: 300});
+    popoverConfirm(other);
+
+    setActiveNote(temp);
+    notes.get(temp)!.current.text = 'edited';
+    setActiveNote(server);
+    expect(notes.get(temp)!.confirmedState.text).toBe('x');
+    expect(actionLog.get(temp)!.map(e => e.type)).toEqual(['create', 'edit']);
+
+    notes.get(server)!.current.text = 'edited';
+    setActiveNote(other);
+    expect(notes.get(server)!.everConfirmed).toBe(false);
+    expect(actionLog.has(server)).toBe(false);
+  });
+
+  it('clearing the selection (null) leaves a fresh new box as it was', () => {
+    const a = createTempNote({...BASE});
+    setActiveNote(a);
+    notes.get(a)!.current.text = 'typed';
+
+    setActiveNote(null);
+
+    expect(notes.get(a)!.everConfirmed).toBe(false);
+    expect(actionLog.get(a)!.map(e => e.type)).toEqual(['create']);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // discardAll
 // ---------------------------------------------------------------------------
