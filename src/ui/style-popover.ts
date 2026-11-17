@@ -260,7 +260,10 @@ export function detectOuterLayers(before: string, after: string): OuterLayer[] {
   let consumedAfter = 0;
   while (true) {
     const slice = before.slice(0, bLen);
-    const openMatch = slice.match(/<([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)>$/);
+    // `\s[^<>]*`, not `\s+[^<>]*`: both accept the same strings, but
+    // the overlapping quantifiers backtracked quadratically on a long
+    // unterminated tag in a note body (v5.1 Task 2.7).
+    const openMatch = slice.match(/<([a-zA-Z][a-zA-Z0-9]*)((?:\s[^<>]*)?)>$/);
     if (!openMatch) {
       break;
     }
