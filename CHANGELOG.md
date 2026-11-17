@@ -5,7 +5,9 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.1.2] - 2026-11-17
+
+Hotfix: Preview works again after Danbooru's preview validation change.
 
 ### Fixed
 - **Preview always failed.** Danbooru now validates a previewed note like a new one before sanitizing it (post, position, size, length), and the script sent only the body, so every Preview came back 422 (`⚠️ Preview failed`). It now sends the note's post, position and size too, the same way Danbooru's own editor does.
@@ -333,6 +335,7 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.1.2]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.0]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.0.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
