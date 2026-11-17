@@ -2,7 +2,7 @@
 
 A user manual for **Mobile Note Assist** — a UserScript that adds a touch-friendly note editor to [Danbooru](https://danbooru.donmai.us/) post pages. It lets you draw, edit, and submit translation notes on a phone with one thumb, and adds keyboard + drag-to-create on PC.
 
-> Danbooru's built-in note tool was designed for a mouse on a wide screen, and it saves each note to the server the moment you press ✔. On a phone — drawing a precise rectangle, picking tags, then waiting for the page to round-trip for every speech bubble — that flow falls apart. This script collapses translating a whole page into: enter Edit mode, drop boxes for every bubble at once, type each translation, then commit them all in a single ✓ Confirm.
+> Danbooru's built-in note tool was designed for a mouse on a wide screen, and it saves each note to the server the moment you press Save. On a phone — drawing a precise rectangle, picking tags, then waiting for the page to round-trip for every speech bubble — that flow falls apart. This script collapses translating a whole page into: enter Edit mode, drop boxes for every bubble at once, type each translation, then commit them all in a single ✓ Confirm.
 
 ---
 
@@ -28,9 +28,9 @@ The fastest way to learn the workflow. Open any post you want to translate and f
 1. **Double-tap** the **📝** floating button. Its icon flips to **✏️** — you're now in **Edit mode**.
 2. Tap directly on the speech bubble. A green box drops onto the bubble and a popover opens with the textarea focused.
 3. Type your translation.
-4. Tap **✔** in the popover. The popover closes and the box turns blue (committed locally — not sent to the server yet).
+4. Tap **Commit** in the popover. The popover closes and the box stays green — committed locally, not sent to the server yet.
 5. Tap the floating button **once** to open the arc menu, then tap **✓ Confirm**.
-6. The tag popover appears. Toggle the appropriate translation tags (most often `Translated`).
+6. The Confirm popover appears with a summary of what will be sent. Toggle the appropriate translation tags (most often `Translated`).
 7. Tap **Submit**. The page reloads with the note saved.
 
 That's the full loop. Everything below is detail on how each piece works.
@@ -48,7 +48,7 @@ The 📝 button in the bottom-right is the script's only entry point. It respond
 | **Single tap** | Opens the **arc menu** (see below). |
 | **Double-tap** (within ~300ms) | Toggles Edit mode on/off. Icon flips between 📝 (idle) and ✏️ (active). If the arc menu was already opening from the first tap, it closes automatically. |
 | **Long-press (~1.0s hold)** | Enters drag-to-reposition mode. The button turns orange; drag to move it, release to save its new position. (See [Customization](#customization).) |
-| **Auto-hide** | While a per-note popover is open, the button is hidden so it doesn't sit on top of the popover's ✔ / ✖ / 🗑 buttons (which fall in the same screen region on mobile). |
+| **Auto-hide** | While a per-note popover is open, the button is hidden so it doesn't sit on top of the popover's Commit / Cancel / Delete buttons (which fall in the same screen region on mobile). |
 
 The single-tap-opens-menu / double-tap-toggles design means the menu shows up instantly on every tap (no waiting for a long-press) but is canceled if your second tap arrives quickly enough — so you can use a fast double-tap as a quick toggle when you don't need the menu.
 
@@ -98,12 +98,12 @@ The default box size is 10% of the image's shorter dimension, clamped to 30–15
 | **👁 Preview** (header) | Toggle between Edit and Preview. Preview round-trips the body through Danbooru's own sanitizer and shows the rendered HTML in place of the textarea — exactly what other readers will see, including `<b>`/`<i>`/`<tn>`/wiki markup. Tap **✎ Edit** to flip back. |
 | **view help** (header) | Opens Danbooru's notes wiki page in a new tab. |
 | **Aa Style** (side) | Opens the **style sub-popover** — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons + Text / Stroke / Background color pickers + Size / Font dropdowns. Enabled only while the textarea has selected text (the wrap target). |
-| **↶ Undo** (side) | Step back through this note's history. Each box has its own undo stack — independent from every other box. Reverts ✔ commits, drag/resize moves, 🗑 deletes, and **individual style toggles** one at a time. |
+| **↶ Undo** (side) | Step back through this note's history. Each box has its own undo stack — independent from every other box. Reverts Commit checkpoints, drag/resize moves, Delete, and **individual style toggles** one at a time. |
 | **👁 Peek** (side) | Hold this button to temporarily reveal the box's invisible touch zones (red squares, see below). Useful for aiming on small boxes. |
-| **✔ Commit** | Save the current text + geometry as the note's local checkpoint. The popover closes and the box turns blue. **Does not** send to the server yet — that happens at ✓ Confirm time. |
-| **✖ Cancel** | Discard uncommitted changes. On a brand-new box that was never ✔'d, this hard-deletes it. On a ✔'d or server-loaded box, this reverts text and geometry to the last checkpoint. |
-| **🗑 Delete** | Mark this note for deletion. New boxes are deleted immediately. Already-✔'d or server-loaded notes turn into a red dashed box (soft-deleted) — they aren't gone until ✓ Confirm runs, so you can ↶ to bring them back. |
-| **📜 History** | Opens the server-side version log for this note in a new tab. Disabled for brand-new (not-yet-saved) boxes. |
+| **Commit** | Save the current text + geometry as the note's local checkpoint. The popover closes; the box stays green until ✓ Confirm sends it. **Does not** send to the server yet — that happens at ✓ Confirm time. |
+| **Cancel** | Discard uncommitted changes. On a brand-new box that was never committed, this hard-deletes it. On a committed or server-loaded box, this reverts text and geometry to the last checkpoint. |
+| **Delete** | Mark this note for deletion. New boxes are deleted immediately. Already-committed or server-loaded notes turn into a red dashed box (soft-deleted) — they aren't gone until ✓ Confirm runs, so you can ↶ to bring them back. |
+| **History** | Opens the server-side version log for this note in a new tab. Disabled for brand-new (not-yet-saved) boxes. |
 
 > The four translation tags (`Translated`, `Translation request`, `Check translation`, `Partially translated`) **don't appear in the per-note popover.** They're handled once per ✓ Confirm, in a separate tag popover.
 
@@ -152,7 +152,7 @@ If you can't tell where the touch zones are on a small box, **hold 👁** in the
 |---|---|---|
 | **Default** | solid blue | Loaded from the server, no local changes yet. |
 | **Dirty** | solid green | Has local edits (text or geometry) not yet sent to the server. |
-| **Deleted** | red, dashed | Soft-deleted via 🗑 — restorable with ↶ until ✓ Confirm runs. |
+| **Deleted** | red, dashed | Soft-deleted via Delete — restorable with ↶ until ✓ Confirm runs. |
 | **Active** | solid orange | The box whose popover is currently open. |
 
 If a box has multiple states at once (e.g. a deleted box you've tapped to reveal its undo affordance), the higher-priority color wins: `active > deleted > dirty > default`. The one exception is `deleted + active` — it stays red dashed, so you can still see what you're being asked to undo.
@@ -192,8 +192,8 @@ When you're done editing all the boxes, tap the floating button to open the arc 
 
 | Shortcut | Context | Action |
 |---|---|---|
-| `Ctrl/Cmd + Enter` | Cursor in the popover textarea | ✔ Commit box (same as clicking ✔). The tag popover and error modal also accept `Ctrl/Cmd + Enter` for their primary action (Submit / Retry). |
-| `Esc` | Popover open | Dismiss the popover. Behaves like ✖: hard-deletes brand-new boxes, reverts ✔'d ones. |
+| `Ctrl/Cmd + Enter` | Cursor in the popover textarea | Commit the box (same as tapping **Commit**). The tag popover and error modal also accept `Ctrl/Cmd + Enter` for their primary action (Submit / Retry). |
+| `Esc` | Popover open | Dismiss the popover. Behaves like **Cancel**: hard-deletes brand-new boxes, reverts committed ones. |
 | `Shift + N` | No popover open, no input focused | Toggle Edit mode on/off. A toast confirms the new state. |
 | `Shift + Enter` | Edit mode on, no popover open, no input focused | Run ✓ Confirm — same as opening the arc menu and tapping ✓ Confirm. Skips the menu so you can flush a batch without lifting your hand from the keyboard. |
 
@@ -211,10 +211,10 @@ A drag is registered when the pointer moves more than 5px during the press; belo
 
 - **Pinch-zoom freely.** The popover, arc menu, floating button, and toasts all counter-scale, so they stay the same physical size on screen no matter how far you zoom in. Position your zoom on the bubble before tapping, and the box will land precisely.
 - **Hold 👁 when aiming on a small box.** The corner touch zones extend ~30px past the visible box edge, which is invisible by default. Holding 👁 shows you exactly where they are.
-- **Tap any box to switch focus.** No need to ✔ before moving on — tapping a different box closes the current popover. A new box you typed into is committed for you (as if you'd pressed ✔, so ↶ can still undo it) and waits for ✓ Confirm; a new box you left empty is removed. Edits to existing notes stay as `dirty` (green) and wait for ✓ Confirm.
+- **Tap any box to switch focus.** No need to tap Commit before moving on — tapping a different box closes the current popover. A new box you typed into is committed for you (as if you'd tapped Commit, so ↶ can still undo it) and waits for ✓ Confirm; a new box you left empty is removed. Edits to existing notes stay as `dirty` (green) and wait for ✓ Confirm.
 - **Force-quit safe (v4.1+).** If the OS kills your tab while you have unsaved edits — phone went to sleep, you switched apps for too long, the browser crashed — your work is snapshotted on background-into and offered back as a Restore prompt the next time you open the same post. Drafts age out after 24 hours and are cleared automatically when you press ✓ Confirm or explicitly leave Edit mode.
 - **Plays nice with Danbooru's native note tool (v5.0+).** If you tap Danbooru's own `Translate` button or open a note's edit dialog, the floating button hides itself so the two UIs don't fight. `Shift+N` is gated symmetrically. Close the native tool and the button reappears.
-- **Preview before submit (v5.0+).** The header **👁 Preview** toggle round-trips the body through Danbooru's own renderer, so you can confirm `<b>` / `<tn>` / wiki markup looks right before ✓ Confirm flushes it. No commit until you tap ✔.
+- **Preview before submit (v5.0+).** The header **👁 Preview** toggle round-trips the body through Danbooru's own renderer, so you can confirm `<b>` / `<tn>` / wiki markup looks right before ✓ Confirm flushes it. Nothing is committed until you tap **Commit**.
 - **Aa stacks below on narrow screens (v5.0.1+).** On wider screens the **Aa** style popover docks to the right of the note popover (or flips to the left when there's no room). When the screen is below ~600 px wide it slides up from beneath the note popover instead, so both panes stay on-screen together and the bottom-of-viewport region (where the soft keyboard lives) is exactly where you'd want a style picker.
 - **Scroll-friendly sub-pickers (v5.0.1+).** The color / stroke / link / ruby modals used to close on the first pointerdown of any swipe, so a scroll to reach a far-away swatch dismissed the picker mid-flick. Now only a deliberate tap (no scroll movement) closes them; you can freely scroll the page while a picker is open.
 
@@ -244,7 +244,7 @@ When focus enters any text input on the page (the per-note textarea, the tag edi
 Check that you're on a `/posts/{id}` page (the only place this script runs), and that your UserScript manager shows it as enabled for `danbooru.donmai.us`.
 
 **`No changes to confirm` when I tap ✓.**
-You haven't ✔'d any local changes. Either tap ✔ on at least one box, or — if you only meant to update tags — make sure you're triggering the tag-only path (enter Edit mode, then tap ✓ Confirm without changing any boxes).
+Nothing is pending: no new box has been committed and no existing note was moved, edited or deleted. Tap **Commit** on at least one box first. To change only the translation tags, use Danbooru's own tag editor.
 
 **`Image dimensions unknown` toast.**
 The post's image hadn't finished loading when you tried to drop a box. Wait a moment for the image to settle, or scroll to make sure the `<img>` is in view, and try again.

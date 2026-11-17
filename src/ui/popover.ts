@@ -344,31 +344,31 @@ export function createPopover(): void {
 
   const buttons = document.createElement('div');
   buttons.id = 'dmna-popover-buttons';
-  // ✔ / ✖ have dual presentation: text glyph (CSS color applies) or
-  // emoji (system color, CSS ignored). On Safari/iOS the default
-  // falls back to emoji, which made the buttons look uniformly dark
-  // in the user's screenshot. Appending ︎ (Variation Selector-15)
-  // forces the text presentation. 🗑 has no text variant so it stays
-  // as a system emoji — its CSS color is a visual hint that may be
-  // ignored.
+  // Text labels styled like Danbooru's own note dialog buttons (v5.1).
+  // "Commit", not "Save": it sets a local checkpoint; nothing reaches
+  // the server until ✓ Confirm.
   const actions: Array<{
     action: 'confirm' | 'cancel' | 'delete' | 'history';
-    icon: string;
     label: string;
+    title: string;
   }> = [
-    {action: 'confirm', icon: '✔︎', label: 'Confirm'},
-    {action: 'cancel', icon: '✖︎', label: 'Cancel'},
-    {action: 'delete', icon: '🗑', label: 'Delete'},
-    {action: 'history', icon: '📜', label: 'History'},
+    {
+      action: 'confirm',
+      label: 'Commit',
+      title: 'Commit this note locally (sent on ✓ Confirm)',
+    },
+    {action: 'cancel', label: 'Cancel', title: 'Discard uncommitted edits'},
+    {action: 'delete', label: 'Delete', title: 'Delete this note'},
+    {action: 'history', label: 'History', title: 'Open the version history'},
   ];
-  actions.forEach(({action, icon, label}) => {
+  actions.forEach(({action, label, title}) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'dmna-popover-btn';
     b.dataset.action = action;
     b.setAttribute('aria-label', label);
-    b.title = label;
-    b.textContent = icon;
+    b.title = title;
+    b.textContent = label;
     b.addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();

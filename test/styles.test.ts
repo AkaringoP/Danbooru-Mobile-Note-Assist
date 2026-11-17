@@ -54,3 +54,17 @@ describe('Box stacking (Task 2.6)', () => {
     expect(ruleBody('.dmna-note-box.is-active')).toMatch(/z-index:\s*10495/);
   });
 });
+
+describe('Popover action buttons (Task 4.7)', () => {
+  it('stay a touch-sized target (min-height ≥ 34px)', () => {
+    const m = ruleBody('.dmna-popover-btn').match(/min-height:\s*(\d+)px/);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeGreaterThanOrEqual(34);
+  });
+
+  it('use Danbooru form-button colors with fallbacks', () => {
+    const body = ruleBody('.dmna-popover-btn');
+    expect(body).toMatch(/var\(--form-button-background,\s*#[0-9a-f]{6}\)/i);
+    expect(body).toMatch(/var\(--form-button-text-color,\s*#[0-9a-f]{6}\)/i);
+  });
+});

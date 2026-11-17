@@ -512,14 +512,22 @@ export const STYLES = `
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .dmna-popover-side-btn:disabled,
-    .dmna-popover-btn:disabled {
+    .dmna-popover-side-btn:disabled {
       opacity: 0.4;
       cursor: not-allowed;
     }
-    .dmna-popover-side-btn:disabled:active,
-    .dmna-popover-btn:disabled:active {
+    .dmna-popover-side-btn:disabled:active {
       background: rgba(255, 255, 255, 0.06);
+    }
+    /* Overrides Danbooru's global button:disabled (cursor: wait + hover
+       background), which would read as "busy" rather than "unavailable". */
+    .dmna-popover-btn:disabled,
+    .dmna-popover-btn:disabled:active {
+      background: var(--form-button-background, #e8e8ec);
+      color: var(--form-button-disabled-text-color, #777892);
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
     }
     /* Highlighted ↶ on a soft-deleted note — accents the only live
        action so the user knows their next move is "undo to restore." */
@@ -537,25 +545,27 @@ export const STYLES = `
       gap: 8px;
       margin-top: 10px;
     }
+    /* Text buttons in Danbooru's form-button colors (follow the site
+       theme; fallbacks are the light-theme values) so the popover reads
+       like the native note dialog. Height stays a touch target — the
+       native 24 px buttons are too small for thumbs (v5.1). */
     .dmna-popover-btn {
-      padding: 10px 0;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.32);
-      background: rgba(255, 255, 255, 0.13);
-      color: white;
-      font-size: 20px;
+      min-height: 36px;
+      padding: 0;
+      border-radius: 3px;
+      border: 1px solid var(--form-button-border-color, #d1d1da);
+      background: var(--form-button-background, #e8e8ec);
+      color: var(--form-button-text-color, #1e1e2c);
+      font-size: 13px;
+      font-family: inherit;
+      white-space: nowrap;
       cursor: pointer;
       user-select: none;
       touch-action: manipulation;
     }
     .dmna-popover-btn:active {
-      background: rgba(74, 158, 255, 0.36);
+      background: var(--form-button-active-background, #d1d1da);
     }
-    /* Light/white character color for ✔ / ✖ (text-glyph presentation
-       forced via VS-15 in createPopover). 🗑 ignores this — it renders
-       as a system emoji with its own colors. */
-    .dmna-popover-btn[data-action="confirm"],
-    .dmna-popover-btn[data-action="cancel"] { color: #f0f0f0; }
 
     /* Footer credit line — script identity at popover bottom. 10px is
        intentionally below typical body-text minimums; this is glance-
@@ -571,16 +581,10 @@ export const STYLES = `
       user-select: none;
       pointer-events: none;
     }
-    .dmna-popover-btn[data-action="delete"] { color: #ff8b8b; }
-    /* Hover / press text-color shift for the all-white glyphs (✔ / ✖)
-       so they stay legible when the background lifts. 🗑 / 📜 are
-       emoji and ignore the color property; delete's red and undo's
-       highlighted orange keep their per-state hues. */
-    .dmna-popover-btn[data-action="confirm"]:hover,
-    .dmna-popover-btn[data-action="confirm"]:active,
-    .dmna-popover-btn[data-action="cancel"]:hover,
-    .dmna-popover-btn[data-action="cancel"]:active {
-      color: #1a1a1a;
+    /* Delete sits next to Cancel; a dark red label (≥ 4.5:1 on both
+       theme button greys) marks the destructive one. */
+    .dmna-popover-btn[data-action="delete"]:not(:disabled) {
+      color: #b71c1c;
     }
 
     /* Phase 4 (D11): Confirm in-flight UI lock. Pointer events off on
