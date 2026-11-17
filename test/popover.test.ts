@@ -18,7 +18,11 @@ import {
   setActiveNote,
 } from '../src/state/notes-store';
 import {NoteState, asServerNoteId, asTempNoteId} from '../src/types';
-import {createPopover, updatePopoverForActiveNote} from '../src/ui/popover';
+import {
+  createPopover,
+  showPopover,
+  updatePopoverForActiveNote,
+} from '../src/ui/popover';
 
 const ST: NoteState = {x: 0, y: 0, w: 10, h: 10, text: ''};
 
@@ -102,5 +106,49 @@ describe('popover action buttons — native-style labels (Task 4.7)', () => {
     setActiveNote(id);
     updatePopoverForActiveNote();
     expect(buttons().map(b => b.disabled)).toEqual([true, true, true, false]);
+  });
+});
+
+describe('character counter (Task 4.5 follow-up)', () => {
+  function counter(): HTMLElement {
+    return document.querySelector('#dmna-popover-header .dmna-popover-count')!;
+  }
+
+  function type(text: string): void {
+    const ta = document.getElementById(
+      'dmna-popover-input',
+    ) as HTMLTextAreaElement;
+    ta.value = text;
+    ta.dispatchEvent(new Event('input', {bubbles: true}));
+  }
+
+  it('sits in the header, left of "view help"', () => {
+    const el = counter();
+    expect(el).not.toBeNull();
+    expect(el.nextElementSibling?.id).toBe('dmna-popover-help-link');
+  });
+
+  it('shows the server-side length against 5000 and updates on input', () => {
+    const id = asTempNoteId('temp-count-1');
+    notes.set(id, {
+      current: {...ST, text: 'abc'},
+      initialState: {...ST},
+      confirmedState: {...ST},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+    setActiveNote(id);
+    showPopover(id);
+    expect(counter().textContent).toBe('3 / 5000');
+
+    type('line one\nline two');
+    expect(counter().textContent).toBe('18 / 5000');
+    expect(counter().classList.contains('is-over')).toBe(false);
+
+    type('x'.repeat(5001));
+    expect(counter().textContent).toBe('5001 / 5000');
+    expect(counter().classList.contains('is-over')).toBe(true);
   });
 });

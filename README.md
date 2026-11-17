@@ -97,6 +97,7 @@ The default box size is 10% of the image's shorter dimension, clamped to 30–15
 |---|---|
 | **Textarea** | Type or edit the note text. |
 | **👁 Preview** (header) | Toggle between Edit and Preview. Preview round-trips the body through Danbooru's own sanitizer and shows the rendered HTML in place of the textarea — exactly what other readers will see, including `<b>`/`<i>`/`<tn>`/wiki markup. Tap **✎ Edit** to flip back. |
+| **Length** (header, e.g. `54 / 5000`) | The note's length as Danbooru counts it against its 5000-character limit — a line break counts as 2, an emoji as 1. Turns red past the limit, before Confirm would fail on it. |
 | **view help** (header) | Opens Danbooru's notes wiki page in a new tab. |
 | **Aa Style** (side) | Opens the **style sub-popover** — Bold / Italic / Underline / Strike / sub / sup / tn / code / `<a>` / ruby tag buttons + Text / Stroke / Background color pickers + Size / Font dropdowns. Enabled only while the textarea has selected text (the wrap target). |
 | **↶ Undo** (side) | Step back through this note's history. Each box has its own undo stack — independent from every other box. Reverts Commit checkpoints, drag/resize moves, Delete, and **individual style toggles** one at a time. |

@@ -30,12 +30,18 @@
  */
 
 import {NoteId, TextSnapshot, isServerNoteId} from '../types';
-import {POPOVER_OFFSET, SCRIPT_NAME, SCRIPT_VERSION} from '../config';
+import {
+  NOTE_BODY_MAX_LENGTH,
+  POPOVER_OFFSET,
+  SCRIPT_NAME,
+  SCRIPT_VERSION,
+} from '../config';
 import {
   DisplayRect,
   getImageDisplayRect,
   imageToScreenRect,
 } from '../utils/coords';
+import {serverNoteBodyLength} from '../utils/note-body';
 import {computePopoverPlacement} from '../utils/popover-placement';
 import {apiPreviewNote} from '../api/notes';
 import {getOriginalWidth} from '../state/image-state';
@@ -81,6 +87,7 @@ let popoverArrowElement: HTMLElement | null = null;
 let popoverPreviewElement: HTMLElement | null = null;
 let popoverModeToggleElement: HTMLButtonElement | null = null;
 let popoverStyleToggleElement: HTMLButtonElement | null = null;
+let popoverCountElement: HTMLElement | null = null;
 let isPreviewMode = false;
 
 /**
@@ -177,6 +184,14 @@ export function createPopover(): void {
   });
   header.appendChild(modeToggle);
 
+  // "123 / 5000" — the body length as the server will count it, so a
+  // translation that is too long shows up before Confirm fails on it.
+  const count = document.createElement('span');
+  count.className = 'dmna-popover-count';
+  count.setAttribute('aria-live', 'polite');
+  header.appendChild(count);
+  popoverCountElement = count;
+
   const helpLink = document.createElement('a');
   helpLink.id = 'dmna-popover-help-link';
   helpLink.className = 'dmna-popover-help-link';
@@ -211,6 +226,7 @@ export function createPopover(): void {
       note.current.text = input.value;
       updateNoteVisuals(activeId);
     }
+    updateCharCount();
   });
   // Ctrl/Cmd+Enter inside the textarea = ✔. Bare Enter still inserts
   // a newline. Esc is handled at document level
@@ -411,6 +427,7 @@ export function showPopover(noteId: NoteId): void {
   if (popoverInputElement.dataset.boundNoteId !== noteId) {
     popoverInputElement.value = note.current.text || '';
     popoverInputElement.dataset.boundNoteId = noteId;
+    updateCharCount();
     // Note swap (or first show) drops any leftover Preview mode from
     // the previous note. v4.2 Phase 3.
     resetPreviewMode();
@@ -589,6 +606,7 @@ export function refreshActivePopover(): void {
   }
   if (popoverInputElement.dataset.boundNoteId === activeId) {
     popoverInputElement.value = note.current.text || '';
+    updateCharCount();
   }
   updatePopoverForActiveNote();
   updatePopoverPosition();
@@ -628,6 +646,19 @@ export function applyTextUndoSnapshot(
     snapshot.selectionEnd,
   );
   popoverInputElement.dispatchEvent(new Event('input', {bubbles: true}));
+}
+
+/** Refreshes the header's "length / limit" label from the textarea. */
+function updateCharCount(): void {
+  if (!popoverCountElement || !popoverInputElement) {
+    return;
+  }
+  const length = serverNoteBodyLength(popoverInputElement.value);
+  popoverCountElement.textContent = `${length} / ${NOTE_BODY_MAX_LENGTH}`;
+  popoverCountElement.classList.toggle(
+    'is-over',
+    length > NOTE_BODY_MAX_LENGTH,
+  );
 }
 
 /**

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Second batch of the mobile-focused audit: clearer state at a glance, native-looking controls, and the remaining performance fixes.
 
 ### Added
+- **Note length counter.** The popover header shows the body length as Danbooru counts it — `54 / 5000` — and turns red past the server's 5000-character limit. It follows the server's normalization (a line break is stored as CRLF and counts 2; an emoji counts 1), so it matches what Confirm will be judged on.
 - **Unsent-changes indicator.** While anything is waiting for ✓ Confirm, the floating button gets a green outline and a badge with the number of changes, and the arc menu's Confirm item is outlined. The count is exactly what Confirm would send — a new box you never committed doesn't count, a deletion does.
 
 ### Changed
@@ -22,6 +23,7 @@ Second batch of the mobile-focused audit: clearer state at a glance, native-look
 - **Old drafts piled up.** Drafts for posts you never reopened stayed in `localStorage` forever; expired and invalid ones are now swept once per page load.
 - **Dragging a box** read the image position three times per frame; it now reads it once per gesture.
 - **Scrolling that starts on the image** no longer waits on the script (its touch listener is now passive).
+- **iOS Safari zoomed in when a field got focus.** Safari zooms the page for any focused field under 16px; the note textarea, the link / ruby / HEX inputs and the Size / Font selects are now 16px. The popovers keep their size. (Not yet checked on an iPhone.)
 - **Remaining duplicate-note paths** found in final review: a POST whose outcome was unknown could be sent again after Cancel → Confirm, after a timeout the server finished late, after a draft restore (the stored copy loaded as an ordinary note and was never matched), or after editing the note. A temp note now remembers every state it sent without getting a refusal (network, timeout, 5xx) — kept across Cancel and in drafts — and every Confirm or Retry first looks those states up among the post's notes, including an unedited copy already loaded locally. A match is adopted and any later edit goes out as a PUT; if the server can't be asked, the POST is held back (`not re-sent`) under the ⏳ lock. A refused POST (4xx) is re-sent without a check.
 - **Pen input** now behaves like touch on boxes (tap to select, then drag): with a stylus the browser could take over a drag that started on an unselected box mid-gesture. A drag cancelled by the browser or OS now puts the box back instead of keeping a partial move.
 - Note bodies containing NEL (U+0085) now match the server's normalization when checking for a lost POST.

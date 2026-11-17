@@ -83,3 +83,18 @@ describe('Pending highlight (Task 4.8)', () => {
     expect(STYLES).toMatch(/content:\s*attr\(data-pending-count\)/);
   });
 });
+
+describe('iOS focus zoom: text inputs are at least 16px (Task 4.5)', () => {
+  it.each([
+    '#dmna-popover-input',
+    '#dmna-link-modal-input',
+    '#dmna-ruby-modal-input',
+    '#dmna-color-hex',
+    '#dmna-stroke-hex',
+    '.dmna-style-select',
+  ])('%s', selector => {
+    const m = ruleBody(selector).match(/font-size:\s*(\d+)px/);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeGreaterThanOrEqual(16);
+  });
+});

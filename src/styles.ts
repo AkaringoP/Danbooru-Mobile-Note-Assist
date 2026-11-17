@@ -352,7 +352,20 @@ export const STYLES = `
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       margin-bottom: 8px;
+    }
+    /* Body length vs Danbooru's 5000 limit, left of "view help". */
+    #dmna-popover-header .dmna-popover-count {
+      margin-left: auto;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      user-select: none;
+    }
+    #dmna-popover-header .dmna-popover-count.is-over {
+      color: #ff8b8b;
     }
     /* Mode toggle + "view help" wiki link styled as inline text-links
        rather than chips — mirrors Danbooru's own Editing-note header
@@ -420,12 +433,9 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      /* Matches Danbooru's note-edit-dialog inner font scale
-         (notes.scss: div.note-edit-dialog { font-size: 0.8em }).
-         13px ≈ 0.8 × 16px body default, putting our textarea in the
-         same visual range as the native dialog's textarea so users
-         coming from the native flow don't perceive a size jump. */
-      font-size: 13px;
+      /* 16px: iOS Safari zooms the page when a focused field is
+         smaller. Applies to every text field and select (v5.2). */
+      font-size: 16px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;
@@ -1196,7 +1206,10 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.32);
       background: rgba(255, 255, 255, 0.13);
       color: white;
-      font-size: 14px;
+      font-size: 16px;
+      /* Height pinned so the 16px text (iOS zoom fix) doesn't grow
+         the style popover. */
+      height: 38px;
       font-family: inherit;
       cursor: pointer;
       box-sizing: border-box;
@@ -1281,7 +1294,7 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      font-size: 13px;
+      font-size: 16px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;
@@ -1399,7 +1412,7 @@ export const STYLES = `
       background: rgba(0, 0, 0, 0.4);
       color: white;
       font-family: ui-monospace, Menlo, Consolas, monospace;
-      font-size: 13px;
+      font-size: 16px;
       line-height: 1.4;
       box-sizing: border-box;
       outline: none;
@@ -1494,7 +1507,7 @@ export const STYLES = `
       background: rgba(0, 0, 0, 0.4);
       color: white;
       font-family: ui-monospace, Menlo, Consolas, monospace;
-      font-size: 13px;
+      font-size: 16px;
       line-height: 1.4;
       box-sizing: border-box;
       outline: none;
@@ -1660,7 +1673,7 @@ export const STYLES = `
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(0, 0, 0, 0.4);
       color: white;
-      font-size: 13px;
+      font-size: 16px;
       font-family: inherit;
       line-height: 1.4;
       box-sizing: border-box;

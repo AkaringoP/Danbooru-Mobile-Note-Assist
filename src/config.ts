@@ -17,6 +17,13 @@ export const SCRIPT_VERSION = APP_VERSION;
  */
 export const REQUEST_TIMEOUT_MS = 20_000;
 
+/**
+ * Danbooru's note body limit (`Note`: `validates :body, length:
+ * {maximum: 5000}`), checked after its whitespace normalization — see
+ * `utils/note-body.serverNoteBodyLength`.
+ */
+export const NOTE_BODY_MAX_LENGTH = 5000;
+
 /** Key for local storage button vertical position. */
 export const POS_KEY = 'dmna_btn_margin_y';
 
