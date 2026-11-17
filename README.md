@@ -17,6 +17,8 @@ A user manual for **Mobile Note Assist** — a UserScript that adds a touch-frie
 
 No login or extra permissions required. The script makes no remote calls outside Danbooru itself.
 
+> **Official source.** The install link above — the `build` branch of this repository — is the only official copy. A script with the same name hosted anywhere else is not published by this project; it runs with your Danbooru session, so don't install it. The `testbuild` branch carries work-in-progress builds that are published automatically before review; use it only if you are testing a change on purpose.
+
 ---
 
 ## Quick Start — translate one speech bubble
