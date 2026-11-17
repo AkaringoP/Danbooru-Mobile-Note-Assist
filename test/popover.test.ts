@@ -13,6 +13,7 @@ vi.mock('../src/api/notes', () => ({
 
 import {
   NotesStoreHooks,
+  getActiveNoteId,
   initNotesStore,
   notes,
   setActiveNote,
@@ -150,6 +151,69 @@ describe('character counter (Task 4.5 follow-up)', () => {
     type('x'.repeat(5001));
     expect(counter().textContent).toBe('5001 / 5000');
     expect(counter().classList.contains('is-over')).toBe(true);
+  });
+});
+
+describe('over the 5000 limit, Commit is off', () => {
+  const commit = () =>
+    document.querySelector<HTMLButtonElement>(
+      '#dmna-popover .dmna-popover-btn[data-action="confirm"]',
+    )!;
+  const textarea = () =>
+    document.getElementById('dmna-popover-input') as HTMLTextAreaElement;
+
+  function type(text: string): void {
+    textarea().value = text;
+    textarea().dispatchEvent(new Event('input', {bubbles: true}));
+  }
+
+  function open(id: ReturnType<typeof asTempNoteId>, text: string): void {
+    notes.set(id, {
+      current: {...ST, text},
+      initialState: {...ST},
+      confirmedState: {...ST},
+      isDeleted: false,
+      isServerNote: false,
+      everConfirmed: false,
+      domElement: null,
+    });
+    setActiveNote(id);
+    showPopover(id);
+    updatePopoverForActiveNote();
+  }
+
+  it('typing past the limit disables Commit; trimming re-enables it', () => {
+    open(asTempNoteId('temp-over-1'), 'ok');
+    expect(commit().disabled).toBe(false);
+
+    type('x'.repeat(5001));
+    expect(commit().disabled).toBe(true);
+    expect(commit().title).toMatch(/5000/);
+
+    type('x'.repeat(5000));
+    expect(commit().disabled).toBe(false);
+    expect(commit().title).not.toMatch(/5000/);
+  });
+
+  it('a note opened already over the limit starts with Commit off', () => {
+    open(asTempNoteId('temp-over-2'), 'x'.repeat(5001));
+    expect(commit().disabled).toBe(true);
+  });
+
+  it('Ctrl+Enter does not commit past the limit', () => {
+    const id = asTempNoteId('temp-over-3');
+    open(id, 'ok');
+    type('x'.repeat(5001));
+    textarea().dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(getActiveNoteId()).toBe(id);
+    expect(notes.get(id)!.confirmedState.text).toBe('');
   });
 });
 

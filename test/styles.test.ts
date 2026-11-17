@@ -70,12 +70,21 @@ describe('Popover action buttons (Task 4.7)', () => {
 });
 
 describe('Pending highlight (Task 4.8)', () => {
-  it('outlines the floating button and the Confirm item in green', () => {
+  it('outlines the floating button and the Confirm item in orange (not sent yet)', () => {
     expect(STYLES).toMatch(
-      /body\.dmna-has-pending:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*#43a047/,
+      /body\.dmna-has-pending:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*#ff9800/,
     );
     expect(STYLES).toMatch(
-      /body\.dmna-has-pending \.dmna-menu-item\[data-action="confirm"\][^{]*\{[^}]*#43a047/,
+      /body\.dmna-has-pending \.dmna-menu-item\[data-action="confirm"\][^{]*\{[^}]*#ff9800/,
+    );
+  });
+
+  it('turns them green once everything was sent', () => {
+    expect(STYLES).toMatch(
+      /body\.dmna-send-success:not\(\.dmna-sending\) #dmna-float-btn:not\(\.expanded\):not\(\.dragging\)[^{]*\{[^}]*#43a047/,
+    );
+    expect(STYLES).toMatch(
+      /body\.dmna-send-success \.dmna-menu-item\[data-action="confirm"\][^{]*\{[^}]*#43a047/,
     );
   });
 

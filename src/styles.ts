@@ -30,11 +30,17 @@ export const STYLES = `
       box-shadow: 0 0 12px rgba(0, 115, 255, 0.6);
     }
     #dmna-float-btn.dragging { background: #ff9800 !important; border-color: #ffe0b2 !important; transform: scale(1.2); }
-    /* Unsent changes (v5.1): green outline, same green as a dirty box.
-       Menu-open (blue), reposition (orange) and sending (⏳) win. */
+    /* Unsent changes (v5.1): orange outline — not on the server yet.
+       Menu-open (blue), reposition (orange fill) and sending (⏳) win. */
     body.dmna-has-pending:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
+      border-color: #ff9800;
+      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.6), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    /* Everything was sent: green until the page reloads. Same
+       specificity as the pending rule, later in source. */
+    body.dmna-send-success:not(.dmna-sending) #dmna-float-btn:not(.expanded):not(.dragging) {
       border-color: #43a047;
-      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.55), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.7), 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     /* Count of requests Confirm would send. */
     body:not(.dmna-sending) #dmna-float-btn[data-pending-count]:not(.dragging)::after {
@@ -47,8 +53,8 @@ export const STYLES = `
       padding: 0 4px;
       border-radius: 9px;
       box-sizing: border-box;
-      background: #43a047;
-      color: white;
+      background: #ff9800;
+      color: #1a1a1a;
       font-size: 11px;
       font-weight: bold;
       line-height: 18px;
@@ -92,8 +98,12 @@ export const STYLES = `
       pointer-events: auto;
     }
     body.dmna-has-pending .dmna-menu-item[data-action="confirm"] {
+      border-color: #ff9800;
+      box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.6), 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    body.dmna-send-success .dmna-menu-item[data-action="confirm"] {
       border-color: #43a047;
-      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.55), 0 4px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.7), 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     #dmna-menu.open .dmna-menu-item:active {
       transform: translate(var(--tx), var(--ty)) scale(0.88);

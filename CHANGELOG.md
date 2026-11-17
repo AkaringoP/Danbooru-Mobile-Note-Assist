@@ -5,6 +5,12 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Unsent changes are orange, sent is green.** The floating button's outline and badge and the arc menu's Confirm item are now orange while changes wait for ✓ Confirm — not on the server yet — and turn green once everything was sent, until the page reloads.
+- **Commit is off past 5000 characters.** Danbooru rejects a longer note whole (it does not truncate), which used to surface only at Confirm. While the counter is red, Commit and Ctrl/Cmd+Enter do nothing; typing is not blocked, so a long paste can be trimmed.
+
 ## [5.1.0] - 2026-11-17
 
 Reliability, security and mobile-fit release from a mobile-focused audit: safer sending, clearer state at a glance, native-looking controls, and faster edit mode on note-heavy posts. Every fix below was reproduced first in a Playwright mobile-emulation harness that now ships as the opt-in `npm run e2e` suite.

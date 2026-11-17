@@ -372,11 +372,7 @@ export function createPopover(): void {
     label: string;
     title: string;
   }> = [
-    {
-      action: 'confirm',
-      label: 'Commit',
-      title: 'Commit this note locally (sent on ✓ Confirm)',
-    },
+    {action: 'confirm', label: 'Commit', title: COMMIT_TITLE},
     {action: 'cancel', label: 'Cancel', title: 'Discard uncommitted edits'},
     {action: 'delete', label: 'Delete', title: 'Delete this note'},
     {action: 'history', label: 'History', title: 'Open the version history'},
@@ -505,6 +501,7 @@ export function updatePopoverForActiveNote(): void {
   if (eyeBtn instanceof HTMLButtonElement) {
     eyeBtn.disabled = isDeleted;
   }
+  refreshCommitButton();
   const undoBtn = popoverElement.querySelector('#dmna-popover-undo');
   if (undoBtn) {
     undoBtn.classList.toggle('is-highlighted', isDeleted);
@@ -737,6 +734,35 @@ function updateCharCount(): void {
     'is-over',
     length > NOTE_BODY_MAX_LENGTH,
   );
+  refreshCommitButton();
+}
+
+const COMMIT_TITLE = 'Commit this note locally (sent on ✓ Confirm)';
+const COMMIT_OVER_TITLE = `Over Danbooru's ${NOTE_BODY_MAX_LENGTH}-character limit — shorten the note to commit`;
+
+function isBodyOverLimit(): boolean {
+  return (
+    !!popoverInputElement &&
+    serverNoteBodyLength(popoverInputElement.value) > NOTE_BODY_MAX_LENGTH
+  );
+}
+
+/**
+ * Commit is off for a soft-deleted note and while the body is over the
+ * server's limit: Danbooru rejects such a note whole, so letting it be
+ * committed only moves the failure to Confirm.
+ */
+function refreshCommitButton(): void {
+  const btn = popoverElement?.querySelector<HTMLButtonElement>(
+    '.dmna-popover-btn[data-action="confirm"]',
+  );
+  if (!btn) {
+    return;
+  }
+  const activeId = getActiveNoteId();
+  const over = isBodyOverLimit();
+  btn.disabled = over || !!(activeId && notes.get(activeId)?.isDeleted);
+  btn.title = over ? COMMIT_OVER_TITLE : COMMIT_TITLE;
 }
 
 /**
@@ -915,6 +941,10 @@ function handlePopoverAction(
     return;
   }
   if (action === 'confirm') {
+    // Ctrl/Cmd+Enter reaches here without the (disabled) button.
+    if (isBodyOverLimit()) {
+      return;
+    }
     popoverConfirm(activeId);
   } else if (action === 'cancel') {
     popoverCancel(activeId);

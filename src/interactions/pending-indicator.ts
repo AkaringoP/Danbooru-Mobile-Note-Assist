@@ -4,8 +4,9 @@
  * Changes only reach the server through ✓ Confirm, and a green box
  * that is scrolled off screen says nothing. While edit mode has
  * anything Confirm would send, `body.dmna-has-pending` outlines the
- * floating button and the arc menu's Confirm item, and the button
- * carries a count badge (v5.1 Task 4.8).
+ * floating button and the arc menu's Confirm item in orange, and the
+ * button carries a count badge (v5.1 Task 4.8). `confirm/batch` turns
+ * the outline green (`body.dmna-send-success`) after a full send.
  *
  * The count is exactly what Confirm would send (`classifyChanges`):
  * a never-committed new box doesn't count, a soft-deleted server note
