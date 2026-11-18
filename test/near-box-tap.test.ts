@@ -29,6 +29,7 @@ vi.mock('../src/api/notes', () => ({
 }));
 
 import {
+  MIN_BOX_SIZE_DISPLAY,
   MIN_BOX_SIZE_IMG,
   NEAR_BOX_AMBIGUITY_PX,
   NEAR_BOX_TAP_RADIUS,
@@ -407,6 +408,28 @@ describe('the default new box keeps its on-screen size under pinch zoom', () => 
     expect(s.h).toBeCloseTo(40, 5);
     expect(s.x + s.w / 2).toBeCloseTo(1400, 5);
     expect(s.y + s.h / 2).toBeCloseTo(1800, 5);
+  });
+
+  it('is never smaller than the resize floor, so a first resize does not jump', () => {
+    // A phone-width image: 10% of the shorter side is 39.3 px, below
+    // the 48 px resize floor.
+    const img = imgEl.current!;
+    const original = img.getBoundingClientRect;
+    img.getBoundingClientRect = () =>
+      ({left: 0, top: 0, width: 393, height: 550}) as DOMRect;
+    try {
+      const s = createdAt(200, 300);
+      // 48 page px at 393 / 2000 page px per image px.
+      expect(s.w).toBeCloseTo((MIN_BOX_SIZE_DISPLAY * 2000) / 393, 5);
+
+      setZoom(4);
+      hideCreateHint();
+      setActiveNote(null);
+      const z = createdAt(100, 100);
+      expect(z.w).toBeCloseTo((MIN_BOX_SIZE_DISPLAY / 4) * (2000 / 393), 5);
+    } finally {
+      img.getBoundingClientRect = original;
+    }
   });
 
   it('never goes below the smallest box the image allows', () => {

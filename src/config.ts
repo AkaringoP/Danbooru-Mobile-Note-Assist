@@ -57,13 +57,6 @@ export const TOAST_MARGIN_BOTTOM = 20;
  */
 export const INITIAL_SIZE_RATIO = 0.1;
 
-/**
- * Lower clamp for the default new-box display size (px). This and the
- * upper clamp are on-screen sizes: `defaultBoxRectAt` divides the
- * result by the pinch scale.
- */
-export const MIN_INITIAL_SIZE = 30;
-
 /** Upper clamp for the default new-box display size (px). */
 export const MAX_INITIAL_SIZE = 150;
 
@@ -138,6 +131,16 @@ export const MIN_BOX_SIZE_IMG = 8;
  * `MIN_BOX_SIZE_IMG` is the absolute safety floor in image space.
  */
 export const MIN_BOX_SIZE_DISPLAY = 48;
+
+/**
+ * Lower clamp for the default new-box size, in on-screen px like the
+ * upper clamp (`defaultBoxRectAt` divides the result by the pinch
+ * scale). It is the resize floor: a new box smaller than that jumped
+ * to it on the first touch of a resize handle (38 → 48 px on a phone),
+ * and the create hint showed a box that wasn't the one you'd end up
+ * with.
+ */
+export const MIN_INITIAL_SIZE = MIN_BOX_SIZE_DISPLAY;
 
 /**
  * PC-only drag-to-create threshold in CSS pixels.
