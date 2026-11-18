@@ -5,7 +5,9 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.1.4] - 2026-11-18
+
+Touch precision: taps that just miss a small box, taps between packed notes, and new boxes made while zoomed in.
 
 ### Changed
 - **A tap that just misses a box selects it.** A box's touch area was exactly its outline, so on a narrow box (a vertical speech bubble can be about 10 px wide) a tap one pixel off dropped a new box on top of it. A touch tap within 24 px of a box (on screen, so less of the image as you zoom in) now selects the nearest one. In case you did mean a new box, a dashed outline with a **+** marks where it would have gone: tap the **+** and the new box is created there. The outline never gets in the way of other boxes, so on a post packed with small notes you can still tap any neighbour to select it.
@@ -353,6 +355,7 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.1.4]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.2]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
