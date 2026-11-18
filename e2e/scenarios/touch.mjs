@@ -321,6 +321,136 @@ export default [
     },
   },
   {
+    name: 'ambiguous-tap-chooser',
+    task: '5.1.4',
+    title: 'A tap between two boxes asks which note; a row takes two taps',
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            // Two narrow bubbles about 14 px apart on screen.
+            {id: 77, x: 1000, y: 1000, width: 50, height: 800, body: 'left one'},
+            {
+              id: 78,
+              x: 1120,
+              y: 1000,
+              width: 50,
+              height: 800,
+              body: '<b>right</b> one',
+            },
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 2,
+          );
+          const rects = await page.evaluate(() =>
+            [...document.querySelectorAll('.dmna-note-box')]
+              .map(el => el.getBoundingClientRect())
+              .map(r => ({x: r.left, y: r.top, w: r.width, h: r.height}))
+              .sort((a, b) => a.x - b.x),
+          );
+          const [left, right] = rects;
+          const midX = (left.x + left.w + right.x) / 2;
+          const midY = left.y + left.h / 2;
+          const chooserShown = () =>
+            page.evaluate(() => {
+              const el = document.getElementById('dmna-note-chooser');
+              return !!el && getComputedStyle(el).display !== 'none';
+            });
+          const popoverShown = () =>
+            page.locator('#dmna-popover.show').count().then(n => n === 1);
+          const rows = page.locator(
+            '#dmna-note-chooser .dmna-chooser-item:not(.dmna-chooser-new)',
+          );
+          const boxes = () => page.locator('.dmna-note-box').count();
+
+          // Between the two: nothing is selected, the chooser lists both.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && getComputedStyle(el).display !== 'none';
+          });
+          assert.equal(await popoverShown(), false, 'no popover yet');
+          assert.deepEqual(
+            (await rows.locator('.dmna-chooser-text').allTextContents()).sort(),
+            ['left one', 'right one'],
+          );
+
+          // First tap on a row marks its box; the popover stays closed.
+          const rightRow = rows.filter({hasText: 'right one'});
+          await rightRow.tap();
+          assert.equal(await popoverShown(), false, 'still no popover');
+          const marked = await page.evaluate(() => {
+            const el = document.querySelector('.dmna-note-box.is-chooser-pick');
+            return el ? el.getBoundingClientRect().left : null;
+          });
+          assert.ok(
+            marked !== null && Math.abs(marked - right.x) < 1,
+            'the right box is marked',
+          );
+
+          // Second tap on the same row opens that note.
+          await rightRow.tap();
+          await page.waitForSelector('#dmna-popover.show');
+          assert.equal(
+            await page.locator('#dmna-popover-input').inputValue(),
+            '<b>right</b> one',
+          );
+          assert.equal(await chooserShown(), false, 'chooser closed');
+          assert.equal(
+            await page.locator('.dmna-note-box.is-chooser-pick').count(),
+            0,
+            'mark removed',
+          );
+          await page.locator('.dmna-popover-btn[data-action="cancel"]').tap();
+          await page.waitForFunction(
+            () => !document.querySelector('#dmna-popover.show'),
+          );
+
+          // A tap elsewhere closes the chooser and does nothing else.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && getComputedStyle(el).display !== 'none';
+          });
+          await page.touchscreen.tap(60, left.y - 80);
+          await page.waitForTimeout(300);
+          assert.equal(await chooserShown(), false, 'closed by outside tap');
+          assert.equal(await boxes(), 2, 'outside tap creates nothing');
+          assert.equal(await popoverShown(), false);
+
+          // Esc closes it too.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && getComputedStyle(el).display !== 'none';
+          });
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(200);
+          assert.equal(await chooserShown(), false, 'closed by Esc');
+          assert.equal(await boxes(), 2);
+
+          // The last row creates the new box.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && getComputedStyle(el).display !== 'none';
+          });
+          await page.locator('#dmna-note-chooser .dmna-chooser-new').tap();
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 3,
+          );
+          assert.equal(
+            await page.locator('#dmna-popover-input').inputValue(),
+            '',
+          );
+        },
+      ),
+  },
+  {
     name: 'far-tap-creates',
     task: '5.1.4',
     title: 'A tap away from every box still creates a box at once',

@@ -28,7 +28,11 @@ vi.mock('../src/api/notes', () => ({
   fetchServerNotes: vi.fn(() => Promise.resolve([])),
 }));
 
-import {NEAR_BOX_TAP_RADIUS} from '../src/config';
+import {
+  NEAR_BOX_AMBIGUITY_PX,
+  NEAR_BOX_TAP_RADIUS,
+  NOTE_CHOOSER_MAX_ITEMS,
+} from '../src/config';
 import {bindImageHandlers} from '../src/interactions/image-pointer';
 import {
   NotesStoreHooks,
@@ -41,6 +45,7 @@ import {
 } from '../src/state/notes-store';
 import {NoteId, NoteState, asServerNoteId} from '../src/types';
 import {hideCreateHint} from '../src/ui/create-hint';
+import {hideNoteChooser, noteSnippet} from '../src/ui/note-chooser';
 
 // Image shown at half size: 1 display px = 2 image px.
 const NARROW: NoteState = {x: 400, y: 400, w: 20, h: 600, text: 'narrow'};
@@ -48,8 +53,11 @@ const NARROW_ID = asServerNoteId('7');
 
 function hooks(): NotesStoreHooks {
   return {
-    // Mirrors main.ts: any selection change drops the hint.
-    onActiveChanged: vi.fn(() => hideCreateHint()),
+    // Mirrors main.ts: any selection change drops the hint and chooser.
+    onActiveChanged: vi.fn(() => {
+      hideCreateHint();
+      hideNoteChooser();
+    }),
     onNoteRenderRequested: vi.fn(),
     onNoteVisualsChanged: vi.fn(),
     onNoteRemoved: vi.fn(),
@@ -70,7 +78,7 @@ function addServerNote(id: NoteId, state: NoteState): void {
     isDeleted: false,
     isServerNote: true,
     everConfirmed: false,
-    domElement: null,
+    domElement: document.createElement('div'),
   });
 }
 
@@ -84,6 +92,18 @@ const hint = () => document.getElementById('dmna-create-hint');
 const hintTarget = () =>
   hint()!.querySelector<HTMLElement>('.dmna-create-hint-target')!;
 const hintShown = () => !!hint() && !hint()!.hidden;
+const chooser = () => document.getElementById('dmna-note-chooser');
+const chooserShown = () => !!chooser() && !chooser()!.hidden;
+const rows = () => [
+  ...chooser()!.querySelectorAll<HTMLElement>(
+    '.dmna-chooser-item:not(.dmna-chooser-new)',
+  ),
+];
+const rowTexts = () =>
+  rows().map(r => r.querySelector('.dmna-chooser-text')!.textContent);
+const newRow = () =>
+  chooser()!.querySelector<HTMLElement>('.dmna-chooser-new')!;
+const boxEl = (id: NoteId) => notes.get(id)!.domElement!;
 
 let storeHooks: NotesStoreHooks;
 
@@ -104,6 +124,7 @@ beforeEach(() => {
   setActiveNote(null);
   setMode('active');
   hideCreateHint();
+  hideNoteChooser();
   // NARROW on screen: x 200–210, y 200–500.
   addServerNote(NARROW_ID, NARROW);
 });
@@ -133,14 +154,126 @@ describe('a tap just outside a box', () => {
     expect(getActiveNoteId()).toBe(NARROW_ID);
   });
 
-  it('picks the nearest of two boxes in range', () => {
+  it('picks the clearly nearer of two boxes in range', () => {
     const other = asServerNoteId('8');
     // On screen: x 230–330, y 200–500. The gap to NARROW is 20 px.
     addServerNote(other, {x: 460, y: 400, w: 200, h: 600, text: 'other'});
 
-    tapImage(210 + 14, 300);
+    // 16 px from NARROW, 4 px from the other: 12 px apart, not close.
+    tapImage(210 + 16, 300);
 
     expect(getActiveNoteId()).toBe(other);
+    expect(chooserShown()).toBe(false);
+  });
+});
+
+describe('a tap about as close to two boxes', () => {
+  const OTHER = asServerNoteId('8');
+
+  beforeEach(() => {
+    // On screen: x 230–330, y 200–500. The gap to NARROW is 20 px.
+    addServerNote(OTHER, {
+      x: 460,
+      y: 400,
+      w: 200,
+      h: 600,
+      text: '<b>Other</b>\nline two',
+    });
+  });
+
+  it('asks instead of guessing: nothing is selected, the chooser lists both', () => {
+    // 11 px from NARROW, 9 px from the other.
+    tapImage(210 + 11, 300);
+
+    expect(getActiveNoteId()).toBeNull();
+    expect(notes.size).toBe(2);
+    expect(hintShown()).toBe(false);
+    expect(chooserShown()).toBe(true);
+    // Nearest first, then the row that creates a new note.
+    expect(rowTexts()).toEqual(['Other line two', 'narrow']);
+    expect(newRow().textContent).toContain('New note here');
+  });
+
+  it('is ambiguous up to the configured gap and not past it', () => {
+    // Distances 10 + g/2 and 10 - g/2 from the two boxes.
+    const half = NEAR_BOX_AMBIGUITY_PX / 2;
+    tapImage(220 + half, 300);
+    expect(chooserShown()).toBe(true);
+
+    hideNoteChooser();
+    tapImage(220 + half + 1, 300);
+    expect(chooserShown()).toBe(false);
+    expect(getActiveNoteId()).toBe(OTHER);
+  });
+
+  it('first tap on a row marks its box, second tap opens it', () => {
+    tapImage(221, 300);
+    const [otherRow, narrowRow] = rows();
+
+    narrowRow.click();
+    expect(getActiveNoteId()).toBeNull();
+    expect(chooserShown()).toBe(true);
+    expect(narrowRow.classList.contains('is-picked')).toBe(true);
+    expect(boxEl(NARROW_ID).classList.contains('is-chooser-pick')).toBe(true);
+
+    // Picking another row moves the mark.
+    otherRow.click();
+    expect(boxEl(NARROW_ID).classList.contains('is-chooser-pick')).toBe(false);
+    expect(boxEl(OTHER).classList.contains('is-chooser-pick')).toBe(true);
+    expect(getActiveNoteId()).toBeNull();
+
+    otherRow.click();
+    expect(getActiveNoteId()).toBe(OTHER);
+    expect(chooserShown()).toBe(false);
+    expect(boxEl(OTHER).classList.contains('is-chooser-pick')).toBe(false);
+  });
+
+  it('"New note here" creates the box where the tap landed', () => {
+    tapImage(221, 300);
+    newRow().click();
+
+    expect(notes.size).toBe(3);
+    const s = notes.get(getActiveNoteId()!)!.current;
+    expect(s.x + s.w / 2).toBeCloseTo(442, 0);
+    expect(s.y + s.h / 2).toBeCloseTo(600, 0);
+    expect(chooserShown()).toBe(false);
+  });
+
+  it('a tap outside closes it without selecting or creating', () => {
+    tapImage(221, 300);
+    tapImage(700, 900);
+
+    expect(chooserShown()).toBe(false);
+    expect(getActiveNoteId()).toBeNull();
+    expect(notes.size).toBe(2);
+  });
+
+  it('lists at most the configured number of notes, nearest first', () => {
+    // A column of small boxes right of the tap, each 1 px farther.
+    for (let i = 0; i < NOTE_CHOOSER_MAX_ITEMS + 3; i++) {
+      addServerNote(asServerNoteId(String(100 + i)), {
+        x: 2 * (232 + i),
+        y: 2 * (280 + i * 4),
+        w: 4,
+        h: 4,
+        text: `n${i}`,
+      });
+    }
+    tapImage(221, 300);
+    expect(rows().length).toBe(NOTE_CHOOSER_MAX_ITEMS);
+  });
+});
+
+describe('noteSnippet', () => {
+  it('drops markup and folds whitespace', () => {
+    expect(
+      noteSnippet('<b>Hi</b>\n\n<span style="color: red">there</span>'),
+    ).toBe('Hi there');
+  });
+
+  it('labels a note with no text', () => {
+    expect(noteSnippet('  ')).toBe('(empty)');
+    expect(noteSnippet('<br>')).toBe('(empty)');
   });
 });
 

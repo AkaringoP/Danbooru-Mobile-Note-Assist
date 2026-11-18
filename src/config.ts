@@ -80,6 +80,18 @@ export const DRAG_THRESHOLD_PX = 5;
 export const NEAR_BOX_TAP_RADIUS = 24;
 
 /**
+ * When the two nearest boxes in that radius are within this many
+ * on-screen px of each other in distance from the tap, the tap is
+ * ambiguous: `ui/note-chooser` lists the nearby notes instead of the
+ * nearest one being selected. A fingertip can't be trusted to tell
+ * 9 px from 11 px.
+ */
+export const NEAR_BOX_AMBIGUITY_PX = 8;
+
+/** Most notes the chooser lists (the nearest ones). */
+export const NOTE_CHOOSER_MAX_ITEMS = 6;
+
+/**
  * Absolute minimum box width/height in original-image
  * pixels. The display-space floor (`MIN_BOX_SIZE_DISPLAY`) is the
  * binding constraint at most zoom levels; this is just a safety

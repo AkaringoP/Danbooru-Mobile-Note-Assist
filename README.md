@@ -113,7 +113,7 @@ src/
 ├── ui/                Layer 3 — DOM modules (note-box, popover, style-popover,
 │                      color-picker, stroke-picker, link-popover, ruby-popover,
 │                      tag-popover, floating-button, arc-menu, toast,
-│                      create-hint).
+│                      create-hint, note-chooser).
 └── interactions/      Layer 4 — touch / pointer / keyboard / lifecycle handlers
                        (image-pointer, drag-resize, keyboard, native-block,
                        lifecycle, pending-indicator).

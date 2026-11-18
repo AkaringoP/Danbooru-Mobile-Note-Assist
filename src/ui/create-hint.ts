@@ -89,10 +89,14 @@ export function updateCreateHintPosition(): void {
 }
 
 function createFromHint(): void {
-  if (!hintRect) {
-    return;
+  if (hintRect) {
+    createNoteAt(hintRect);
   }
-  const id = createTempNote({...hintRect, text: ''});
+}
+
+/** Creates a new box over `rect` (image px) and opens its popover. */
+export function createNoteAt(rect: Rect): void {
+  const id = createTempNote({...rect, text: ''});
   // Leaves the selected note the way tapping another box does (a fresh
   // box is settled, edits stay). The switch is refused while that note
   // is over the length limit; then the new box is taken back.

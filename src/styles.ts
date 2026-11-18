@@ -280,6 +280,105 @@ export const STYLES = `
       display: none;
     }
 
+    /* Note chooser: lists the notes near an ambiguous tap. Docked and
+       counter-scaled by JS (transform), like the toast. */
+    #dmna-note-chooser {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 11001;
+      transform-origin: 0 0;
+      will-change: transform;
+      box-sizing: border-box;
+      width: 320px;
+      max-width: calc(100vw - 24px);
+      padding: 8px;
+      border-radius: 12px;
+      /* Opaque: it can sit over the toast and the floating button. */
+      background: #1e1e1e;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.35;
+      text-align: left;
+      user-select: none;
+    }
+    #dmna-note-chooser[hidden],
+    body:not(.dmna-mode-active) #dmna-note-chooser {
+      display: none;
+    }
+    #dmna-note-chooser .dmna-chooser-title {
+      padding: 4px 8px 8px;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 12px;
+    }
+    #dmna-note-chooser .dmna-chooser-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #dmna-note-chooser .dmna-chooser-item + .dmna-chooser-item {
+      margin-top: 2px;
+    }
+    #dmna-note-chooser .dmna-chooser-item:active {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    #dmna-note-chooser .dmna-chooser-item.is-picked {
+      background: rgba(255, 200, 0, 0.16);
+      border-color: rgba(255, 200, 0, 0.9);
+    }
+    /* Same colors as the boxes: blue on the server, green new, red deleted. */
+    #dmna-note-chooser .dmna-chooser-dot {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #0073ff;
+    }
+    #dmna-note-chooser .dmna-chooser-dot.is-new { background: #43a047; }
+    #dmna-note-chooser .dmna-chooser-dot.is-deleted { background: #e53935; }
+    #dmna-note-chooser .dmna-chooser-text {
+      flex: 1;
+      min-width: 0;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+    #dmna-note-chooser .dmna-chooser-again {
+      display: none;
+      flex: none;
+      color: rgba(255, 200, 0, 0.95);
+      font-size: 12px;
+    }
+    #dmna-note-chooser .dmna-chooser-item.is-picked .dmna-chooser-again {
+      display: block;
+    }
+    #dmna-note-chooser .dmna-chooser-new {
+      margin-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 0 0 8px 8px;
+      color: rgba(255, 200, 0, 0.95);
+      font-weight: bold;
+    }
+    /* The box whose row is picked in the chooser. Above the other
+       boxes so a covering neighbour can't hide it. */
+    body.dmna-mode-active .dmna-note-box.is-chooser-pick {
+      z-index: 10494;
+      outline: 3px solid rgba(255, 200, 0, 0.95);
+      outline-offset: 2px;
+      box-shadow: 0 0 10px 4px rgba(255, 200, 0, 0.75);
+    }
+
     /* Hide Danbooru's native note overlay while our active mode is on.
        The script renders its own boxes on top of the same notes (loaded
        via fetchServerNotes) and clicking through to native popups would

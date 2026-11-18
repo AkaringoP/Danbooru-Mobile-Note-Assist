@@ -62,6 +62,7 @@ import {
   updateFloatingButtonPosition,
 } from './ui/floating-button';
 import {hideCreateHint, updateCreateHintPosition} from './ui/create-hint';
+import {hideNoteChooser, updateNoteChooserPosition} from './ui/note-chooser';
 import {
   initNoteBox,
   removeNoteBoxDOM,
@@ -109,8 +110,10 @@ import {scheduleVisualViewportUpdate} from './utils/visual-viewport';
 
 const notesStoreHooks: NotesStoreHooks = {
   onActiveChanged: (prev, next) => {
-    // The hint belongs to the selection a near-miss tap just made.
+    // The hint belongs to the selection a near-miss tap just made; the
+    // chooser was asking which note to select.
     hideCreateHint();
+    hideNoteChooser();
     // Toggle the orange `is-active` ring off the previous box and onto
     // the next one (whichever sides are non-null).
     if (prev !== null) {
@@ -135,6 +138,7 @@ const notesStoreHooks: NotesStoreHooks = {
     schedulePendingRefresh();
   },
   onModeChanged: mode => {
+    hideNoteChooser();
     setFloatingButtonIconForMode();
     schedulePendingRefresh();
     // Entering idle is the user's explicit "I'm done with this
@@ -158,6 +162,7 @@ const notesStoreHooks: NotesStoreHooks = {
 const confirmFlowHooks: ConfirmFlowHooks = {
   onSendStart: () => {
     closeMenu();
+    hideNoteChooser();
     // Hourglass icon is the documented contract from
     // floating-button.ts's setFloatingButtonIcon doc — main.ts owns
     // the literal so the in-flight visual is configurable from the
@@ -215,6 +220,7 @@ function runViewportUpdate(): void {
   updateActiveHandleScales();
   updateTagPopoverPosition();
   updateCreateHintPosition();
+  updateNoteChooserPosition();
 }
 
 function scheduleViewportUpdate(): void {

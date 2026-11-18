@@ -37,7 +37,9 @@ import {
   MAX_INITIAL_SIZE,
   MIN_DRAG_CREATE_SIZE_DISPLAY,
   MIN_INITIAL_SIZE,
+  NEAR_BOX_AMBIGUITY_PX,
   NEAR_BOX_TAP_RADIUS,
+  NOTE_CHOOSER_MAX_ITEMS,
 } from '../config';
 import {NoteId} from '../types';
 import {
@@ -63,6 +65,7 @@ import {
   setActiveNote,
 } from '../state/notes-store';
 import {showCreateHint} from '../ui/create-hint';
+import {isNoteChooserShown, showNoteChooser} from '../ui/note-chooser';
 import {updateAllNoteBoxPositions} from '../ui/note-box';
 import {dismissActivePopover, focusActiveNoteInput} from '../ui/popover';
 import {showToast} from '../ui/toast';
@@ -185,10 +188,16 @@ function handleImageClick(e: MouseEvent): void {
 }
 
 /**
- * A tap within `NEAR_BOX_TAP_RADIUS` (on-screen px) of a box selects
- * the nearest such box and leaves the create hint where the new box
- * would have gone. Returns false when no box is that close. Touch
- * only by construction: mouse presses on the image go through
+ * A tap within `NEAR_BOX_TAP_RADIUS` (on-screen px) of a box doesn't
+ * create one. Returns false when no box is that close.
+ *
+ *   - One box is clearly nearest: it is selected, and the create hint
+ *     is left where the new box would have gone.
+ *   - The two nearest are about equally close (their distances differ
+ *     by `NEAR_BOX_AMBIGUITY_PX` or less): the chooser lists the notes
+ *     in range and nothing is selected yet.
+ *
+ * Touch only by construction: mouse presses on the image go through
  * pointerdown / pointerup and never reach the click handler.
  */
 function selectBoxNearTap(clientX: number, clientY: number): boolean {
@@ -200,30 +209,41 @@ function selectBoxNearTap(clientX: number, clientY: number): boolean {
   }
   const x = clientX + window.pageXOffset;
   const y = clientY + window.pageYOffset;
-  let nearest: NoteId | null = null;
-  let nearestDistance = NEAR_BOX_TAP_RADIUS * getInvScale();
-  for (const [id, note] of notes) {
-    const d = distanceToRect(
-      x,
-      y,
-      imageToScreenRect(note.current, rect, originalWidth),
-    );
-    if (d <= nearestDistance) {
-      nearest = id;
-      nearestDistance = d;
-    }
-  }
-  if (nearest === null) {
+  const inv = getInvScale();
+  const inRange = [...notes]
+    .map(([id, note]) => ({
+      id,
+      distance: distanceToRect(
+        x,
+        y,
+        imageToScreenRect(note.current, rect, originalWidth),
+      ),
+    }))
+    .filter(c => c.distance <= NEAR_BOX_TAP_RADIUS * inv)
+    .sort((a, b) => a.distance - b.distance);
+  if (inRange.length === 0) {
     return false;
   }
-  setActiveNote(nearest);
-  const hintRect = screenToImageRect(
+  const newBoxRect = screenToImageRect(
     defaultBoxRectAt(clientX, clientY, rect),
     rect,
     originalWidth,
   );
-  if (hintRect) {
-    showCreateHint(hintRect);
+  if (!newBoxRect) {
+    return false;
+  }
+  const ambiguous =
+    inRange.length > 1 &&
+    inRange[1].distance - inRange[0].distance <= NEAR_BOX_AMBIGUITY_PX * inv;
+  if (ambiguous) {
+    showNoteChooser(
+      inRange.slice(0, NOTE_CHOOSER_MAX_ITEMS).map(c => c.id),
+      newBoxRect,
+      clientY,
+    );
+  } else {
+    setActiveNote(inRange[0].id);
+    showCreateHint(newBoxRect);
   }
   return true;
 }
@@ -383,6 +403,10 @@ function onImageDragPointerDown(e: PointerEvent): void {
     return;
   }
   if (getMode() !== 'active' || getActiveNoteId() !== null) {
+    return;
+  }
+  // Leave the press to the click that closes the chooser.
+  if (isNoteChooserShown()) {
     return;
   }
   if (!getOriginalWidth() || !getOriginalHeight()) {
