@@ -157,3 +157,36 @@ describe('Create hint never blocks a box', () => {
     );
   });
 });
+
+describe('Note chooser animation', () => {
+  it('the card fades and slides; open puts it in place', () => {
+    const card = ruleBody('#dmna-note-chooser .dmna-chooser-card');
+    expect(card).toMatch(/opacity:\s*0/);
+    expect(card).toMatch(
+      /transform:\s*translateY\(var\(--dmna-chooser-from, 24px\)\)/,
+    );
+    expect(card).toMatch(/transition:[^;]*opacity[^;]*transform/);
+    const open = ruleBody('#dmna-note-chooser.is-open .dmna-chooser-card');
+    expect(open).toMatch(/opacity:\s*1/);
+    expect(open).toMatch(/transform:\s*none/);
+  });
+
+  it('docked at the top it comes down from above', () => {
+    expect(ruleBody('#dmna-note-chooser.is-dock-top')).toMatch(
+      /--dmna-chooser-from:\s*-24px/,
+    );
+  });
+
+  it('only the open list takes taps', () => {
+    expect(ruleBody('#dmna-note-chooser')).toMatch(/pointer-events:\s*none/);
+    expect(ruleBody('#dmna-note-chooser.is-open')).toMatch(
+      /pointer-events:\s*auto/,
+    );
+  });
+
+  it('prefers-reduced-motion keeps only a short fade', () => {
+    expect(STYLES).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*#dmna-note-chooser \.dmna-chooser-card\s*\{[^}]*transform:\s*none/,
+    );
+  });
+});

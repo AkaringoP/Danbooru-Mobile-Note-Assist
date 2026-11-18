@@ -15,7 +15,10 @@
  *
  * The panel docks to the far edge of the screen from the tap so it
  * never covers the boxes it lists, and is counter-scaled like the
- * toast. `main.ts` hides it on any selection or mode change.
+ * toast. It slides in from that edge and back out (`.is-open` drives
+ * the CSS transition). Closing is immediate for every caller (taps go
+ * through, `isNoteChooserShown()` is false); only `[hidden]` waits for
+ * the slide-out. `main.ts` hides it on any selection or mode change.
  */
 
 import {NoteId, Rect} from '../types';
@@ -23,8 +26,11 @@ import {notes, setActiveNote} from '../state/notes-store';
 import {createNoteAt, hideCreateHint, showCreateHint} from './create-hint';
 
 const MARGIN = 16;
+/** Longest chooser transition (styles.ts) plus a frame. */
+const SLIDE_OUT_MS = 260;
 
 let panel: HTMLElement | null = null;
+let hideTimer: ReturnType<typeof setTimeout> | null = null;
 let listElement: HTMLElement | null = null;
 let shown = false;
 let dockTop = false;
@@ -61,9 +67,20 @@ export function showNoteChooser(
     ? tapClientY - vv.offsetTop > vv.height / 2
     : tapClientY > window.innerHeight / 2;
   listElement!.replaceChildren(...candidates.map(buildNoteRow), buildNewRow());
+  if (hideTimer !== null) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+  const wasOnScreen = !panel!.hidden;
   panel!.hidden = false;
+  panel!.classList.toggle('is-dock-top', dockTop);
   shown = true;
   updateNoteChooserPosition();
+  if (!wasOnScreen) {
+    // Commit the closed state first so the slide-in has a start point.
+    void panel!.offsetWidth;
+  }
+  panel!.classList.add('is-open');
   showCreateHint(rect);
 }
 
@@ -74,8 +91,12 @@ export function hideNoteChooser(): void {
   setPicked(null);
   createRect = null;
   shown = false;
-  panel!.hidden = true;
+  panel!.classList.remove('is-open');
   hideCreateHint();
+  hideTimer = setTimeout(() => {
+    hideTimer = null;
+    panel!.hidden = true;
+  }, SLIDE_OUT_MS);
 }
 
 /** Keeps the panel docked and at a constant on-screen size. */
@@ -103,12 +124,15 @@ function ensurePanel(): void {
   panel = document.createElement('div');
   panel.id = 'dmna-note-chooser';
   panel.hidden = true;
+  const card = document.createElement('div');
+  card.className = 'dmna-chooser-card';
   const title = document.createElement('div');
   title.className = 'dmna-chooser-title';
   title.textContent = 'Which note? Tap one to see it, again to edit';
   listElement = document.createElement('div');
   listElement.className = 'dmna-chooser-list';
-  panel.append(title, listElement);
+  card.append(title, listElement);
+  panel.appendChild(card);
   document.body.appendChild(panel);
   // Capture phase, so an outside tap closes the list before the image
   // handler could read it as a new near-miss. A tap on a box goes

@@ -164,6 +164,10 @@ export const STYLES = `
       .dmna-menu-item::before {
         animation: none !important;
       }
+      #dmna-note-chooser .dmna-chooser-card {
+        transform: none;
+        transition: opacity 0.12s linear;
+      }
     }
     #dmna-menu.open .dmna-menu-item:active {
       transform: translate(var(--tx), var(--ty)) scale(0.88);
@@ -289,6 +293,23 @@ export const STYLES = `
       z-index: 11001;
       transform-origin: 0 0;
       will-change: transform;
+      /* Taps go through while it slides out. */
+      pointer-events: none;
+    }
+    #dmna-note-chooser.is-open {
+      pointer-events: auto;
+    }
+    #dmna-note-chooser.is-dock-top {
+      --dmna-chooser-from: -24px;
+    }
+    /* Slides in from the screen edge it docks to. The card moves inside
+       the counter-scaled panel, so the slide is 24 px on screen at any
+       zoom. Closing reverses it (image-pointer waits for it before
+       setting [hidden]). */
+    #dmna-note-chooser .dmna-chooser-card {
+      opacity: 0;
+      transform: translateY(var(--dmna-chooser-from, 24px));
+      transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
       box-sizing: border-box;
       width: 320px;
       max-width: calc(100vw - 24px);
@@ -303,6 +324,10 @@ export const STYLES = `
       line-height: 1.35;
       text-align: left;
       user-select: none;
+    }
+    #dmna-note-chooser.is-open .dmna-chooser-card {
+      opacity: 1;
+      transform: none;
     }
     #dmna-note-chooser[hidden],
     body:not(.dmna-mode-active) #dmna-note-chooser {

@@ -95,7 +95,8 @@ const hintTarget = () =>
   hint()!.querySelector<HTMLElement>('.dmna-create-hint-target')!;
 const hintShown = () => !!hint() && !hint()!.hidden;
 const chooser = () => document.getElementById('dmna-note-chooser');
-const chooserShown = () => !!chooser() && !chooser()!.hidden;
+const chooserShown = () =>
+  !!chooser() && chooser()!.classList.contains('is-open');
 const rows = () => [
   ...chooser()!.querySelectorAll<HTMLElement>(
     '.dmna-chooser-item:not(.dmna-chooser-new)',
@@ -289,6 +290,47 @@ describe('a tap about as close to two boxes', () => {
     }
     tapImage(221, 300);
     expect(rows().length).toBe(NOTE_CHOOSER_MAX_ITEMS);
+  });
+});
+
+describe('chooser slide in / out', () => {
+  beforeEach(() => {
+    addServerNote(asServerNoteId('8'), {
+      x: 460,
+      y: 400,
+      w: 200,
+      h: 600,
+      text: 'other',
+    });
+  });
+
+  it('opens with the slide-in class and closes with the slide-out', async () => {
+    tapImage(221, 300);
+    const el = chooser()!;
+    expect(el.hidden).toBe(false);
+    expect(el.classList.contains('is-open')).toBe(true);
+
+    hideNoteChooser();
+    // Closed at once for every caller; still on screen while it slides out.
+    expect(el.classList.contains('is-open')).toBe(false);
+    expect(el.hidden).toBe(false);
+    await vi.waitFor(() => expect(el.hidden).toBe(true), {timeout: 1000});
+  });
+
+  it('reopening during the slide-out keeps it on screen', async () => {
+    tapImage(221, 300);
+    const el = chooser()!;
+    hideNoteChooser();
+    tapImage(221, 300);
+    expect(el.classList.contains('is-open')).toBe(true);
+    await new Promise(r => setTimeout(r, 400));
+    expect(el.hidden).toBe(false);
+  });
+
+  it('slides from the edge it docks to', () => {
+    // A tap in the upper half docks the list at the bottom of the screen.
+    tapImage(221, 300);
+    expect(chooser()!.classList.contains('is-dock-top')).toBe(false);
   });
 });
 

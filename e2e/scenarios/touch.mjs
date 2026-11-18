@@ -362,7 +362,7 @@ export default [
           const chooserShown = () =>
             page.evaluate(() => {
               const el = document.getElementById('dmna-note-chooser');
-              return !!el && getComputedStyle(el).display !== 'none';
+              return !!el && el.classList.contains('is-open');
             });
           const popoverShown = () =>
             page.locator('#dmna-popover.show').count().then(n => n === 1);
@@ -375,9 +375,26 @@ export default [
           await page.touchscreen.tap(midX, midY);
           await page.waitForFunction(() => {
             const el = document.getElementById('dmna-note-chooser');
-            return !!el && getComputedStyle(el).display !== 'none';
+            return !!el && el.classList.contains('is-open');
           });
           assert.equal(await popoverShown(), false, 'no popover yet');
+          // It slides in: still moving right after opening, settled after.
+          const cardState = () =>
+            page.evaluate(() => {
+              const card = document.querySelector(
+                '#dmna-note-chooser .dmna-chooser-card',
+              );
+              const cs = getComputedStyle(card);
+              return {opacity: Number(cs.opacity), transform: cs.transform};
+            });
+          await page.waitForTimeout(400);
+          const settled = await cardState();
+          assert.equal(settled.opacity, 1, 'fully shown once settled');
+          assert.ok(
+            settled.transform === 'none' ||
+              /matrix\(1, 0, 0, 1, 0, 0\)/.test(settled.transform),
+            `in place once settled (${settled.transform})`,
+          );
           const hintShown = () =>
             page.evaluate(() => {
               const el = document.getElementById('dmna-create-hint');
@@ -428,7 +445,7 @@ export default [
           await page.touchscreen.tap(midX, midY);
           await page.waitForFunction(() => {
             const el = document.getElementById('dmna-note-chooser');
-            return !!el && getComputedStyle(el).display !== 'none';
+            return !!el && el.classList.contains('is-open');
           });
           await page.touchscreen.tap(60, left.y - 80);
           await page.waitForTimeout(300);
@@ -441,18 +458,23 @@ export default [
           await page.touchscreen.tap(midX, midY);
           await page.waitForFunction(() => {
             const el = document.getElementById('dmna-note-chooser');
-            return !!el && getComputedStyle(el).display !== 'none';
+            return !!el && el.classList.contains('is-open');
           });
           await page.keyboard.press('Escape');
-          await page.waitForTimeout(200);
           assert.equal(await chooserShown(), false, 'closed by Esc');
+          // Slides out, then leaves the page.
+          await page.waitForFunction(
+            () => document.getElementById('dmna-note-chooser').hidden,
+            null,
+            {timeout: 2000},
+          );
           assert.equal(await boxes(), 2);
 
           // The last row creates the new box.
           await page.touchscreen.tap(midX, midY);
           await page.waitForFunction(() => {
             const el = document.getElementById('dmna-note-chooser');
-            return !!el && getComputedStyle(el).display !== 'none';
+            return !!el && el.classList.contains('is-open');
           });
           await page.locator('#dmna-note-chooser .dmna-chooser-new').tap();
           await page.waitForFunction(
