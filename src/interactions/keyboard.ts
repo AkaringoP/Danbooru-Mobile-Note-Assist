@@ -47,6 +47,7 @@ import {isTextInputElement} from '../utils/dom';
 import {getIsSending, runConfirmFlow} from '../confirm/batch';
 import {getIsNativeActive} from '../state/native-conflict';
 import {getActiveNoteId, getMode, toggleEditMode} from '../state/notes-store';
+import {hideNoteChooser, isNoteChooserShown} from '../ui/note-chooser';
 import {dismissActivePopover, isPopoverInput} from '../ui/popover';
 import {showToast} from '../ui/toast';
 
@@ -76,6 +77,11 @@ function handleGlobalHotkeys(e: KeyboardEvent): void {
     document.body.classList.contains('dmna-tag-popover-open') ||
     document.body.classList.contains('dmna-error-modal-open')
   ) {
+    return;
+  }
+  if (e.key === 'Escape' && isNoteChooserShown()) {
+    e.preventDefault();
+    hideNoteChooser();
     return;
   }
   if (e.key === 'Escape' && getActiveNoteId() !== null) {

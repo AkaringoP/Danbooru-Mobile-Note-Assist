@@ -41,7 +41,7 @@ That's the full loop. The [wiki](https://github.com/AkaringoP/Danbooru-Mobile-No
 
 - **Batch, then send.** Boxes you create, edit, move or delete stay on your device (green) until ✓ Confirm, which first shows a summary of what will be sent.
 - **Clear send state.** The floating button glows orange with a count while changes are unsent, and turns green once they are saved.
-- **Built for thumbs.** Tap to create, large invisible corner zones for moving and resizing, and controls that keep their size under pinch zoom.
+- **Built for thumbs.** Tap to create, large invisible corner zones for moving and resizing, a slightly missed tap still selects the box you aimed at, and controls that keep their size under pinch zoom.
 - **Markup tools.** Bold, color, size, font, links and ruby from a style panel, with a server-rendered Preview and a length counter against Danbooru's 5000-character limit.
 - **Safe sending.** Requests time out instead of hanging, a retry checks the server first so a note isn't created twice, and a batch stops at Danbooru's rate limit.
 - **Recovery.** If the browser closes the tab, unsent work on the post is offered back the next time you open it (kept 24 hours).
@@ -89,7 +89,7 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v5.1.3** (2026-11-17), a maintenance release with no change in behavior. The 5.1 series came from a mobile-focused audit: safer sending, clearer send state, a length counter, and a Preview fix after a change on Danbooru's side. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
+The current release is **v5.1.4** (2026-11-18): a tap that just misses a small box selects it, a tap between packed notes asks which one you meant, and new boxes keep their on-screen size when you zoom in. The 5.1 series came from a mobile-focused audit: safer sending, clearer send state, a length counter, and a Preview fix after a change on Danbooru's side. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 
 ---
 
@@ -112,7 +112,8 @@ src/
 ├── confirm/           Layer 3 — Confirm orchestration (classify, batch, reconcile).
 ├── ui/                Layer 3 — DOM modules (note-box, popover, style-popover,
 │                      color-picker, stroke-picker, link-popover, ruby-popover,
-│                      tag-popover, floating-button, arc-menu, toast).
+│                      tag-popover, floating-button, arc-menu, toast,
+│                      create-hint, note-chooser).
 └── interactions/      Layer 4 — touch / pointer / keyboard / lifecycle handlers
                        (image-pointer, drag-resize, keyboard, native-block,
                        lifecycle, pending-indicator).

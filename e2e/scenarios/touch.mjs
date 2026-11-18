@@ -137,6 +137,424 @@ export default [
     },
   },
   {
+    name: 'near-box-tap',
+    task: '5.1.4',
+    title: 'A tap that just misses a box selects it; the hint creates a new box',
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            // About 10 px wide on screen: too narrow for a fingertip.
+            {id: 77, x: 1000, y: 1000, width: 50, height: 800, body: 'narrow'},
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.waitForSelector('.dmna-note-box');
+          const b = await page.locator('.dmna-note-box').boundingBox();
+          const boxes = () => page.locator('.dmna-note-box').count();
+          const hintShown = () =>
+            page.evaluate(() => {
+              const el = document.getElementById('dmna-create-hint');
+              return !!el && getComputedStyle(el).display !== 'none';
+            });
+          const text = () => page.locator('#dmna-popover-input').inputValue();
+          const midY = b.y + b.height / 2;
+
+          // 8 px to the right of the box: selects it, shows the hint.
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForSelector('#dmna-popover.show');
+          assert.equal(await boxes(), 1, 'no new box on a near miss');
+          assert.equal(await text(), 'narrow');
+          assert.equal(await hintShown(), true, 'hint shown');
+
+          // Cancel drops the hint with the selection.
+          await page.locator('.dmna-popover-btn[data-action="cancel"]').tap();
+          await page.waitForFunction(
+            () => !document.querySelector('#dmna-popover.show'),
+          );
+          assert.equal(await hintShown(), false, 'hint gone after Cancel');
+
+          // So does Commit, after editing the selected note.
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForSelector('#dmna-popover.show');
+          assert.equal(await hintShown(), true, 'hint shown again');
+          await page.locator('#dmna-popover-input').fill('narrow, edited');
+          await page.locator('.dmna-popover-btn[data-action="confirm"]').tap();
+          await page.waitForFunction(
+            () => !document.querySelector('#dmna-popover.show'),
+          );
+          assert.equal(await hintShown(), false, 'hint gone after Commit');
+          assert.equal(await boxes(), 1, 'Commit creates no extra box');
+
+          // Same near miss, then a second tap on the same spot.
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForSelector('#dmna-popover.show');
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 2,
+          );
+          assert.equal(await text(), '', 'popover is on the new box');
+          assert.equal(await hintShown(), false, 'hint gone after creating');
+          // Focus lands on the next animation frame.
+          await page.waitForFunction(
+            () => document.activeElement?.id === 'dmna-popover-input',
+            null,
+            {timeout: 3000},
+          );
+        },
+      ),
+  },
+  {
+    name: 'dense-notes-zoomed',
+    task: '5.1.4',
+    title: 'Packed tiny notes under 5x zoom: the hint never blocks a neighbour',
+    run: () => {
+      // Like post #9901204 on a phone: boxes ~4 px wide, ~10 px apart.
+      const serverNotes = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          serverNotes.push({
+            id: 100 + r * 8 + c,
+            x: 700 + c * 68,
+            y: 900 + r * 68,
+            width: 19,
+            height: 19,
+            body: `r${r}c${c}`,
+          });
+        }
+      }
+      return withPage({serverNotes}, async ({page}) => {
+        await gotoPost(page);
+        await enterActive(page);
+        await page.waitForSelector('.dmna-note-box');
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send('Emulation.setPageScaleFactor', {pageScaleFactor: 5});
+        await page.evaluate(() =>
+          [...document.querySelectorAll('.dmna-note-box')][27].scrollIntoView({
+            block: 'center',
+            inline: 'center',
+          }),
+        );
+        await page.waitForTimeout(400);
+        // Tap coords are CSS px from the visual viewport's corner; `px`
+        // is one on-screen px in those units.
+        const at = i =>
+          page.evaluate(i => {
+            const vv = window.visualViewport;
+            const r = [
+              ...document.querySelectorAll('.dmna-note-box'),
+            ][i].getBoundingClientRect();
+            return {
+              x: r.left - vv.offsetLeft,
+              y: r.top - vv.offsetTop,
+              w: r.width,
+              h: r.height,
+              px: 1 / vv.scale,
+              onScreen:
+                r.left >= vv.offsetLeft &&
+                r.right <= vv.offsetLeft + vv.width &&
+                r.top >= vv.offsetTop &&
+                r.bottom <= vv.offsetTop + vv.height,
+            };
+          }, i);
+        const state = () =>
+          page.evaluate(() => {
+            const vv = window.visualViewport;
+            const hint = document.getElementById('dmna-create-hint');
+            const shown = !!hint && getComputedStyle(hint).display !== 'none';
+            const target = hint?.querySelector('.dmna-create-hint-target');
+            return {
+              boxes: document.querySelectorAll('.dmna-note-box').length,
+              text: document.querySelector('#dmna-popover.show')
+                ? document.getElementById('dmna-popover-input').value
+                : null,
+              hint: shown
+                ? hint.getBoundingClientRect().width * vv.scale
+                : null,
+              target: shown
+                ? target.getBoundingClientRect().width * vv.scale
+                : null,
+            };
+          });
+
+        // A direct tap on a 19 px box selects it.
+        let a = await at(27);
+        await page.touchscreen.tap(a.x + a.w / 2, a.y + a.h / 2);
+        await page.waitForSelector('#dmna-popover.show');
+        const picked = (await state()).text;
+        assert.match(picked, /^r\dc\d$/);
+        await page.evaluate(() =>
+          document
+            .querySelector('.dmna-popover-btn[data-action="cancel"]')
+            .click(),
+        );
+        await page.waitForTimeout(200);
+
+        // Missing it by 12 on-screen px selects the same box.
+        a = await at(27);
+        await page.touchscreen.tap(a.x + a.w + 12 * a.px, a.y + a.h / 2);
+        await page.waitForSelector('#dmna-popover.show');
+        let s = await state();
+        assert.equal(s.boxes, 64, 'no new box');
+        assert.equal(s.text, picked, 'the box that was aimed at');
+        // The outline is the default box, which keeps its on-screen
+        // size under zoom (about 41 px here, not 5x that); the "+" fills
+        // it up to 44 px.
+        assert.ok(s.hint > 35 && s.hint < 50, `outline ${s.hint}px on screen`);
+        assert.ok(
+          s.target > 30 && s.target <= 44.5,
+          `target ${s.target}px on screen`,
+        );
+
+        // A neighbour inside the outline is still selected by tapping it.
+        const neighbours = [];
+        for (const i of [28, 26, 19, 35, 20, 36]) {
+          neighbours.push(await at(i));
+        }
+        const n = neighbours.find(q => q.onScreen);
+        assert.ok(n, 'a neighbour is on screen');
+        await page.touchscreen.tap(n.x + n.w / 2, n.y + n.h / 2);
+        await page.waitForTimeout(300);
+        s = await state();
+        assert.equal(s.boxes, 64, 'tapping a neighbour creates nothing');
+        assert.notEqual(s.text, picked, 'the neighbour is selected');
+        assert.match(s.text, /^r\dc\d$/);
+      });
+    },
+  },
+  {
+    name: 'ambiguous-tap-chooser',
+    task: '5.1.4',
+    title: 'A tap between two boxes asks which note; a row takes two taps',
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            // Two narrow bubbles about 14 px apart on screen.
+            {id: 77, x: 1000, y: 1000, width: 50, height: 800, body: 'left one'},
+            {
+              id: 78,
+              x: 1120,
+              y: 1000,
+              width: 50,
+              height: 800,
+              body: '<b>right</b> one',
+            },
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 2,
+          );
+          const rects = await page.evaluate(() =>
+            [...document.querySelectorAll('.dmna-note-box')]
+              .map(el => el.getBoundingClientRect())
+              .map(r => ({x: r.left, y: r.top, w: r.width, h: r.height}))
+              .sort((a, b) => a.x - b.x),
+          );
+          const [left, right] = rects;
+          const midX = (left.x + left.w + right.x) / 2;
+          const midY = left.y + left.h / 2;
+          const chooserShown = () =>
+            page.evaluate(() => {
+              const el = document.getElementById('dmna-note-chooser');
+              return !!el && el.classList.contains('is-open');
+            });
+          const popoverShown = () =>
+            page.locator('#dmna-popover.show').count().then(n => n === 1);
+          const rows = page.locator(
+            '#dmna-note-chooser .dmna-chooser-item:not(.dmna-chooser-new)',
+          );
+          const boxes = () => page.locator('.dmna-note-box').count();
+
+          // Between the two: nothing is selected, the chooser lists both.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && el.classList.contains('is-open');
+          });
+          assert.equal(await popoverShown(), false, 'no popover yet');
+          // It slides in: still moving right after opening, settled after.
+          const cardState = () =>
+            page.evaluate(() => {
+              const card = document.querySelector(
+                '#dmna-note-chooser .dmna-chooser-card',
+              );
+              const cs = getComputedStyle(card);
+              return {opacity: Number(cs.opacity), transform: cs.transform};
+            });
+          await page.waitForTimeout(400);
+          const settled = await cardState();
+          assert.equal(settled.opacity, 1, 'fully shown once settled');
+          assert.ok(
+            settled.transform === 'none' ||
+              /matrix\(1, 0, 0, 1, 0, 0\)/.test(settled.transform),
+            `in place once settled (${settled.transform})`,
+          );
+          const hintShown = () =>
+            page.evaluate(() => {
+              const el = document.getElementById('dmna-create-hint');
+              return !!el && getComputedStyle(el).display !== 'none';
+            });
+          assert.equal(
+            await hintShown(),
+            true,
+            'the outline shows where a new note would go',
+          );
+          assert.deepEqual(
+            (await rows.locator('.dmna-chooser-text').allTextContents()).sort(),
+            ['left one', 'right one'],
+          );
+
+          // First tap on a row marks its box; the popover stays closed.
+          const rightRow = rows.filter({hasText: 'right one'});
+          await rightRow.tap();
+          assert.equal(await popoverShown(), false, 'still no popover');
+          const marked = await page.evaluate(() => {
+            const el = document.querySelector('.dmna-note-box.is-chooser-pick');
+            return el ? el.getBoundingClientRect().left : null;
+          });
+          assert.ok(
+            marked !== null && Math.abs(marked - right.x) < 1,
+            'the right box is marked',
+          );
+
+          // Second tap on the same row opens that note.
+          await rightRow.tap();
+          await page.waitForSelector('#dmna-popover.show');
+          assert.equal(
+            await page.locator('#dmna-popover-input').inputValue(),
+            '<b>right</b> one',
+          );
+          assert.equal(await chooserShown(), false, 'chooser closed');
+          assert.equal(
+            await page.locator('.dmna-note-box.is-chooser-pick').count(),
+            0,
+            'mark removed',
+          );
+          await page.locator('.dmna-popover-btn[data-action="cancel"]').tap();
+          await page.waitForFunction(
+            () => !document.querySelector('#dmna-popover.show'),
+          );
+
+          // A tap elsewhere closes the chooser and does nothing else.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && el.classList.contains('is-open');
+          });
+          await page.touchscreen.tap(60, left.y - 80);
+          await page.waitForTimeout(300);
+          assert.equal(await chooserShown(), false, 'closed by outside tap');
+          assert.equal(await hintShown(), false, 'outline gone with the list');
+          assert.equal(await boxes(), 2, 'outside tap creates nothing');
+          assert.equal(await popoverShown(), false);
+
+          // Esc closes it too.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && el.classList.contains('is-open');
+          });
+          await page.keyboard.press('Escape');
+          assert.equal(await chooserShown(), false, 'closed by Esc');
+          // Slides out, then leaves the page.
+          await page.waitForFunction(
+            () => document.getElementById('dmna-note-chooser').hidden,
+            null,
+            {timeout: 2000},
+          );
+          assert.equal(await boxes(), 2);
+
+          // The last row creates the new box.
+          await page.touchscreen.tap(midX, midY);
+          await page.waitForFunction(() => {
+            const el = document.getElementById('dmna-note-chooser');
+            return !!el && el.classList.contains('is-open');
+          });
+          await page.locator('#dmna-note-chooser .dmna-chooser-new').tap();
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 3,
+          );
+          assert.equal(
+            await page.locator('#dmna-popover-input').inputValue(),
+            '',
+          );
+        },
+      ),
+  },
+  {
+    name: 'zoomed-default-size',
+    task: '5.1.4',
+    title: 'A new box is the same size on screen at 1x and 6x zoom',
+    run: async () => {
+      const sizeOnScreen = zoom =>
+        withPage({}, async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          if (zoom !== 1) {
+            const cdp = await page.context().newCDPSession(page);
+            await cdp.send('Emulation.setPageScaleFactor', {
+              pageScaleFactor: zoom,
+            });
+            await page.evaluate(() => window.scrollTo(0, 200));
+            await page.waitForTimeout(300);
+          }
+          // Tap coords are CSS px from the visual viewport's corner.
+          const vv = await page.evaluate(() => ({
+            w: window.visualViewport.width,
+            h: window.visualViewport.height,
+          }));
+          await page.touchscreen.tap(vv.w / 2, vv.h / 3);
+          await page.waitForSelector('.dmna-note-box');
+          return page.evaluate(() => {
+            const r = document
+              .querySelector('.dmna-note-box')
+              .getBoundingClientRect();
+            return r.width * window.visualViewport.scale;
+          });
+        });
+      const plain = await sizeOnScreen(1);
+      const zoomed = await sizeOnScreen(6);
+      assert.ok(plain > 30 && plain < 60, `1x: ${plain}px`);
+      assert.ok(
+        Math.abs(zoomed - plain) < 2,
+        `6x: ${zoomed}px on screen vs ${plain}px at 1x`,
+      );
+    },
+  },
+  {
+    name: 'far-tap-creates',
+    task: '5.1.4',
+    title: 'A tap away from every box still creates a box at once',
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            {id: 77, x: 1000, y: 1000, width: 50, height: 800, body: 'narrow'},
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.waitForSelector('.dmna-note-box');
+          const b = await page.locator('.dmna-note-box').boundingBox();
+          await page.touchscreen.tap(b.x + b.width + 60, b.y + b.height / 2);
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 2,
+          );
+          assert.equal(
+            await page.locator('#dmna-popover-input').inputValue(),
+            '',
+          );
+        },
+      ),
+  },
+  {
     name: 'drag-layout-reads',
     task: '3.2',
     title: 'Dragging a selected box reads the image rect a constant number of times',

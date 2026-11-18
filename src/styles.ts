@@ -164,6 +164,10 @@ export const STYLES = `
       .dmna-menu-item::before {
         animation: none !important;
       }
+      #dmna-note-chooser .dmna-chooser-card {
+        transform: none;
+        transition: opacity 0.12s linear;
+      }
     }
     #dmna-menu.open .dmna-menu-item:active {
       transform: translate(var(--tx), var(--ty)) scale(0.88);
@@ -239,6 +243,165 @@ export const STYLES = `
       pointer-events: none;
       z-index: 10500;
       box-sizing: border-box;
+    }
+
+    /* "Create here" hint, left where a tap just missed a box. The
+       outline takes no taps and sits below every box (9990 and up), so
+       a box it overlaps is still selected by tapping it. Only the "+"
+       is a target; --dmna-hint-scale (1 / pinch scale) keeps it and the
+       dashes a constant size on screen. */
+    #dmna-create-hint {
+      position: absolute;
+      z-index: 9985;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border: calc(2px * var(--dmna-hint-scale, 1)) dashed rgba(255, 200, 0, 0.9);
+      background: rgba(255, 200, 0, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    #dmna-create-hint .dmna-create-hint-target {
+      width: min(100%, calc(44px * var(--dmna-hint-scale, 1)));
+      height: min(100%, calc(44px * var(--dmna-hint-scale, 1)));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 200, 0, 0.95);
+      font-size: calc(24px * var(--dmna-hint-scale, 1));
+      font-weight: bold;
+      line-height: 1;
+      text-shadow: 0 0 calc(2px * var(--dmna-hint-scale, 1)) rgba(0, 0, 0, 0.9);
+      pointer-events: auto;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    #dmna-create-hint[hidden],
+    body:not(.dmna-mode-active) #dmna-create-hint {
+      display: none;
+    }
+
+    /* Note chooser: lists the notes near an ambiguous tap. Docked and
+       counter-scaled by JS (transform), like the toast. */
+    #dmna-note-chooser {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 11001;
+      transform-origin: 0 0;
+      will-change: transform;
+      /* Taps go through while it slides out. */
+      pointer-events: none;
+    }
+    #dmna-note-chooser.is-open {
+      pointer-events: auto;
+    }
+    #dmna-note-chooser.is-dock-top {
+      --dmna-chooser-from: -24px;
+    }
+    /* Slides in from the screen edge it docks to. The card moves inside
+       the counter-scaled panel, so the slide is 24 px on screen at any
+       zoom. Closing reverses it (image-pointer waits for it before
+       setting [hidden]). */
+    #dmna-note-chooser .dmna-chooser-card {
+      opacity: 0;
+      transform: translateY(var(--dmna-chooser-from, 24px));
+      transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-sizing: border-box;
+      width: 320px;
+      max-width: calc(100vw - 24px);
+      padding: 8px;
+      border-radius: 12px;
+      /* Opaque: it can sit over the toast and the floating button. */
+      background: #1e1e1e;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.35;
+      text-align: left;
+      user-select: none;
+    }
+    #dmna-note-chooser.is-open .dmna-chooser-card {
+      opacity: 1;
+      transform: none;
+    }
+    #dmna-note-chooser[hidden],
+    body:not(.dmna-mode-active) #dmna-note-chooser {
+      display: none;
+    }
+    #dmna-note-chooser .dmna-chooser-title {
+      padding: 4px 8px 8px;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 12px;
+    }
+    #dmna-note-chooser .dmna-chooser-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #dmna-note-chooser .dmna-chooser-item + .dmna-chooser-item {
+      margin-top: 2px;
+    }
+    #dmna-note-chooser .dmna-chooser-item:active {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    #dmna-note-chooser .dmna-chooser-item.is-picked {
+      background: rgba(255, 200, 0, 0.16);
+      border-color: rgba(255, 200, 0, 0.9);
+    }
+    /* Same colors as the boxes: blue on the server, green new, red deleted. */
+    #dmna-note-chooser .dmna-chooser-dot {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #0073ff;
+    }
+    #dmna-note-chooser .dmna-chooser-dot.is-new { background: #43a047; }
+    #dmna-note-chooser .dmna-chooser-dot.is-deleted { background: #e53935; }
+    #dmna-note-chooser .dmna-chooser-text {
+      flex: 1;
+      min-width: 0;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+    #dmna-note-chooser .dmna-chooser-again {
+      display: none;
+      flex: none;
+      color: rgba(255, 200, 0, 0.95);
+      font-size: 12px;
+    }
+    #dmna-note-chooser .dmna-chooser-item.is-picked .dmna-chooser-again {
+      display: block;
+    }
+    #dmna-note-chooser .dmna-chooser-new {
+      margin-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 0 0 8px 8px;
+      color: rgba(255, 200, 0, 0.95);
+      font-weight: bold;
+    }
+    /* The box whose row is picked in the chooser. Above the other
+       boxes so a covering neighbour can't hide it. */
+    body.dmna-mode-active .dmna-note-box.is-chooser-pick {
+      z-index: 10494;
+      outline: 3px solid rgba(255, 200, 0, 0.95);
+      outline-offset: 2px;
+      box-shadow: 0 0 10px 4px rgba(255, 200, 0, 0.75);
     }
 
     /* Hide Danbooru's native note overlay while our active mode is on.
