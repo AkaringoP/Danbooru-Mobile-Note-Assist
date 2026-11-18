@@ -21,6 +21,17 @@ export interface DisplayRect {
   height: number;
 }
 
+/** Distance from a point to the nearest edge of `rect`; 0 inside it. */
+export function distanceToRect(
+  x: number,
+  y: number,
+  rect: DisplayRect,
+): number {
+  const dx = Math.max(rect.left - x, 0, x - (rect.left + rect.width));
+  const dy = Math.max(rect.top - y, 0, y - (rect.top + rect.height));
+  return Math.hypot(dx, dy);
+}
+
 /** Math.max(lo, Math.min(hi, v)). */
 export function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));

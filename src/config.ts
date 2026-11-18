@@ -57,9 +57,6 @@ export const TOAST_MARGIN_BOTTOM = 20;
  */
 export const INITIAL_SIZE_RATIO = 0.1;
 
-/** Lower clamp for the default new-box display size (px). */
-export const MIN_INITIAL_SIZE = 30;
-
 /** Upper clamp for the default new-box display size (px). */
 export const MAX_INITIAL_SIZE = 150;
 
@@ -69,6 +66,27 @@ export const MAX_INITIAL_SIZE = 150;
  * click. Phase 3 Wave 3 (drag/resize) wires PC-only drag-to-create.
  */
 export const DRAG_THRESHOLD_PX = 5;
+
+/**
+ * A touch tap on the image this close to a box (on-screen px, so it
+ * shrinks in image terms as the user zooms in) selects that box
+ * instead of creating a new one. Boxes can be ~10 px wide, far below
+ * what a fingertip can hit. The create hint left at the tap point
+ * keeps "I did mean a new box" one more tap away.
+ */
+export const NEAR_BOX_TAP_RADIUS = 24;
+
+/**
+ * When the two nearest boxes in that radius are within this many
+ * on-screen px of each other in distance from the tap, the tap is
+ * ambiguous: `ui/note-chooser` lists the nearby notes instead of the
+ * nearest one being selected. A fingertip can't be trusted to tell
+ * 9 px from 11 px.
+ */
+export const NEAR_BOX_AMBIGUITY_PX = 8;
+
+/** Most notes the chooser lists (the nearest ones). */
+export const NOTE_CHOOSER_MAX_ITEMS = 6;
 
 /**
  * Absolute minimum box width/height in original-image
@@ -113,6 +131,16 @@ export const MIN_BOX_SIZE_IMG = 8;
  * `MIN_BOX_SIZE_IMG` is the absolute safety floor in image space.
  */
 export const MIN_BOX_SIZE_DISPLAY = 48;
+
+/**
+ * Lower clamp for the default new-box size, in on-screen px like the
+ * upper clamp (`defaultBoxRectAt` divides the result by the pinch
+ * scale). It is the resize floor: a new box smaller than that jumped
+ * to it on the first touch of a resize handle (38 → 48 px on a phone),
+ * and the create hint showed a box that wasn't the one you'd end up
+ * with.
+ */
+export const MIN_INITIAL_SIZE = MIN_BOX_SIZE_DISPLAY;
 
 /**
  * PC-only drag-to-create threshold in CSS pixels.

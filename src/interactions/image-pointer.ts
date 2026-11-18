@@ -35,17 +35,24 @@ import {
   DRAG_THRESHOLD_PX,
   INITIAL_SIZE_RATIO,
   MAX_INITIAL_SIZE,
+  MIN_BOX_SIZE_IMG,
   MIN_DRAG_CREATE_SIZE_DISPLAY,
   MIN_INITIAL_SIZE,
+  NEAR_BOX_AMBIGUITY_PX,
+  NEAR_BOX_TAP_RADIUS,
+  NOTE_CHOOSER_MAX_ITEMS,
 } from '../config';
 import {NoteId} from '../types';
 import {
   DisplayRect,
   clamp,
+  distanceToRect,
   getImageDisplayRect,
+  imageToScreenRect,
   screenToImageRect,
 } from '../utils/coords';
 import {getImageElement} from '../utils/dom';
+import {getInvScale} from '../utils/visual-viewport';
 import {
   getOriginalHeight,
   getOriginalWidth,
@@ -55,8 +62,11 @@ import {
   createTempNote,
   getActiveNoteId,
   getMode,
+  notes,
   setActiveNote,
 } from '../state/notes-store';
+import {showCreateHint} from '../ui/create-hint';
+import {isNoteChooserShown, showNoteChooser} from '../ui/note-chooser';
 import {updateAllNoteBoxPositions} from '../ui/note-box';
 import {dismissActivePopover, focusActiveNoteInput} from '../ui/popover';
 import {showToast} from '../ui/toast';
@@ -172,7 +182,110 @@ function handleImageClick(e: MouseEvent): void {
     dismissActivePopover();
     return;
   }
+  if (selectBoxNearTap(e.clientX, e.clientY)) {
+    return;
+  }
   void spawnDefaultBoxAtClient(e.clientX, e.clientY);
+}
+
+/**
+ * A tap within `NEAR_BOX_TAP_RADIUS` (on-screen px) of a box doesn't
+ * create one. Returns false when no box is that close.
+ *
+ *   - One box is clearly nearest: it is selected, and the create hint
+ *     is left where the new box would have gone.
+ *   - The two nearest are about equally close (their distances differ
+ *     by `NEAR_BOX_AMBIGUITY_PX` or less): the chooser lists the notes
+ *     in range and nothing is selected yet.
+ *
+ * Touch only by construction: mouse presses on the image go through
+ * pointerdown / pointerup and never reach the click handler.
+ */
+function selectBoxNearTap(clientX: number, clientY: number): boolean {
+  const img = getImageElement();
+  const rect = img ? getImageDisplayRect(img) : null;
+  const originalWidth = getOriginalWidth();
+  if (!rect || !originalWidth) {
+    return false;
+  }
+  const x = clientX + window.pageXOffset;
+  const y = clientY + window.pageYOffset;
+  const inv = getInvScale();
+  const inRange = [...notes]
+    .map(([id, note]) => ({
+      id,
+      distance: distanceToRect(
+        x,
+        y,
+        imageToScreenRect(note.current, rect, originalWidth),
+      ),
+    }))
+    .filter(c => c.distance <= NEAR_BOX_TAP_RADIUS * inv)
+    .sort((a, b) => a.distance - b.distance);
+  if (inRange.length === 0) {
+    return false;
+  }
+  const newBoxRect = screenToImageRect(
+    defaultBoxRectAt(clientX, clientY, rect),
+    rect,
+    originalWidth,
+  );
+  if (!newBoxRect) {
+    return false;
+  }
+  const ambiguous =
+    inRange.length > 1 &&
+    inRange[1].distance - inRange[0].distance <= NEAR_BOX_AMBIGUITY_PX * inv;
+  if (ambiguous) {
+    showNoteChooser(
+      inRange.slice(0, NOTE_CHOOSER_MAX_ITEMS).map(c => c.id),
+      newBoxRect,
+      clientY,
+    );
+  } else {
+    setActiveNote(inRange[0].id);
+    showCreateHint(newBoxRect);
+  }
+  return true;
+}
+
+/**
+ * The default-sized box centered on a tap, kept inside the image.
+ *
+ * The size is constant on screen: the unzoomed default divided by the
+ * pinch scale. Sized in page px alone, a box made at 8x zoom filled
+ * the screen and buried the small notes the user had zoomed in to
+ * reach. `MIN_BOX_SIZE_IMG` is the floor, as for a resize.
+ */
+function defaultBoxRectAt(
+  clientX: number,
+  clientY: number,
+  rect: DisplayRect,
+): DisplayRect {
+  const unzoomed = clamp(
+    Math.min(rect.width, rect.height) * INITIAL_SIZE_RATIO,
+    MIN_INITIAL_SIZE,
+    MAX_INITIAL_SIZE,
+  );
+  const originalWidth = getOriginalWidth();
+  const floor = originalWidth
+    ? MIN_BOX_SIZE_IMG * (rect.width / originalWidth)
+    : 0;
+  const size = Math.max(unzoomed * getInvScale(), floor);
+  return {
+    left: clamp(
+      clientX + window.pageXOffset - size / 2,
+      rect.left,
+      rect.left + rect.width - size,
+    ),
+    top: clamp(
+      clientY + window.pageYOffset - size / 2,
+      rect.top,
+      rect.top + rect.height - size,
+    ),
+    width: size,
+    height: size,
+  };
 }
 
 /**
@@ -233,29 +346,8 @@ async function spawnDefaultBoxAtClient(
     showToast('⚠️ Image not on screen', 'warning');
     return null;
   }
-  const shortSide = Math.min(rect.width, rect.height);
-  const sizeDisplay = Math.max(
-    MIN_INITIAL_SIZE,
-    Math.min(MAX_INITIAL_SIZE, shortSide * INITIAL_SIZE_RATIO),
-  );
-
-  const pageX = clientX + window.pageXOffset;
-  const pageY = clientY + window.pageYOffset;
-  let leftDisplay = pageX - sizeDisplay / 2;
-  let topDisplay = pageY - sizeDisplay / 2;
-
-  const maxLeft = rect.left + rect.width - sizeDisplay;
-  const maxTop = rect.top + rect.height - sizeDisplay;
-  leftDisplay = Math.max(rect.left, Math.min(maxLeft, leftDisplay));
-  topDisplay = Math.max(rect.top, Math.min(maxTop, topDisplay));
-
   const imgState = screenToImageRect(
-    {
-      left: leftDisplay,
-      top: topDisplay,
-      width: sizeDisplay,
-      height: sizeDisplay,
-    },
+    defaultBoxRectAt(clientX, clientY, rect),
     rect,
     getOriginalWidth(),
   );
@@ -322,6 +414,10 @@ function onImageDragPointerDown(e: PointerEvent): void {
     return;
   }
   if (getMode() !== 'active' || getActiveNoteId() !== null) {
+    return;
+  }
+  // Leave the press to the click that closes the chooser.
+  if (isNoteChooserShown()) {
     return;
   }
   if (!getOriginalWidth() || !getOriginalHeight()) {

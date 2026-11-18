@@ -139,3 +139,54 @@ describe('iOS focus zoom: text inputs are at least 16px (Task 4.5)', () => {
     expect(Number(m![1])).toBeGreaterThanOrEqual(16);
   });
 });
+
+describe('Create hint never blocks a box', () => {
+  it('the outline sits below every box and lets taps through', () => {
+    const body = ruleBody('#dmna-create-hint');
+    expect(body).toMatch(/pointer-events:\s*none/);
+    const z = Number(body.match(/z-index:\s*(\d+)/)![1]);
+    // Boxes take 9990 and up (see .dmna-note-box).
+    expect(z).toBeLessThan(9990);
+  });
+
+  it('the "+" target keeps a fixed on-screen size under pinch zoom', () => {
+    const body = ruleBody('#dmna-create-hint .dmna-create-hint-target');
+    expect(body).toMatch(/pointer-events:\s*auto/);
+    expect(body).toMatch(
+      /width:\s*min\(100%, calc\(44px \* var\(--dmna-hint-scale, 1\)\)\)/,
+    );
+  });
+});
+
+describe('Note chooser animation', () => {
+  it('the card fades and slides; open puts it in place', () => {
+    const card = ruleBody('#dmna-note-chooser .dmna-chooser-card');
+    expect(card).toMatch(/opacity:\s*0/);
+    expect(card).toMatch(
+      /transform:\s*translateY\(var\(--dmna-chooser-from, 24px\)\)/,
+    );
+    expect(card).toMatch(/transition:[^;]*opacity[^;]*transform/);
+    const open = ruleBody('#dmna-note-chooser.is-open .dmna-chooser-card');
+    expect(open).toMatch(/opacity:\s*1/);
+    expect(open).toMatch(/transform:\s*none/);
+  });
+
+  it('docked at the top it comes down from above', () => {
+    expect(ruleBody('#dmna-note-chooser.is-dock-top')).toMatch(
+      /--dmna-chooser-from:\s*-24px/,
+    );
+  });
+
+  it('only the open list takes taps', () => {
+    expect(ruleBody('#dmna-note-chooser')).toMatch(/pointer-events:\s*none/);
+    expect(ruleBody('#dmna-note-chooser.is-open')).toMatch(
+      /pointer-events:\s*auto/,
+    );
+  });
+
+  it('prefers-reduced-motion keeps only a short fade', () => {
+    expect(STYLES).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*#dmna-note-chooser \.dmna-chooser-card\s*\{[^}]*transform:\s*none/,
+    );
+  });
+});

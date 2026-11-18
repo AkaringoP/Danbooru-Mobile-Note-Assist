@@ -5,7 +5,14 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.1.4] - 2026-11-18
+
+Touch precision: taps that just miss a small box, taps between packed notes, and new boxes made while zoomed in.
+
+### Changed
+- **A tap that just misses a box selects it.** A box's touch area was exactly its outline, so on a narrow box (a vertical speech bubble can be about 10 px wide) a tap one pixel off dropped a new box on top of it. A touch tap within 24 px of a box (on screen, so less of the image as you zoom in) now selects the nearest one. In case you did mean a new box, a dashed outline with a **+** marks where it would have gone: tap the **+** and the new box is created there. The outline never gets in the way of other boxes, so on a post packed with small notes you can still tap any neighbour to select it.
+- **New boxes keep their on-screen size when you zoom in.** The default box was sized against the page, so after pinch-zooming far in, a new box could fill the screen and bury the small notes you had zoomed in to reach. Its size is now divided by the zoom level: it looks the same size at any zoom, and covers less of the image the further you zoom in. It is also never smaller than the smallest size a resize allows (48 px on screen), so the first touch of a resize handle no longer makes a new box jump from 38 to 48 px on a phone, and the dashed outline is exactly the box you get.
+- **A tap between boxes asks which note you meant.** When the two nearest boxes are about equally close to the tap (their distances differ by 8 px or less on screen), the script doesn't guess. A list of the nearby notes opens, nearest first, each with its text. Tap a row to see which box it is (the box is outlined in yellow), tap the same row again to open it for editing. The last row, **+ New note here**, creates the box the tap would otherwise have made; the dashed outline shows where that is while the list is open. A tap outside the list, or Esc, closes it. The list slides in from the edge of the screen it docks to and slides back out when it closes (just a short fade with reduced motion on). A tap farther from every box creates a box at once, as before; mouse clicks are unchanged.
 
 ### Security
 - **Development dependencies updated** to clear the open advisories: happy-dom 21, vitest 4.1.12, and newer `tmp`, `postcss`, `js-yaml`, `brace-expansion`, `ws`, `nanoid`, `source-map-js` (the last ones through `overrides` and the lockfile). All of them are test, lint and build tools; none of their code is in the published script, and the bundle is byte-for-byte the same as 5.1.3. If `npm install` fails with `Cannot read properties of null (reading 'edgesOut')` while changing dependencies, use `npx npm@11 install`; `npm ci` is unaffected.
@@ -348,6 +355,7 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.1.4]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.2]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.1]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main

@@ -6,6 +6,7 @@
 import type {NoteState, Rect} from '../src/types';
 import {
   clamp,
+  distanceToRect,
   getPostId,
   getImageDisplayRect,
   imageToScreenRect,
@@ -284,5 +285,25 @@ describe('screenToImageRect', () => {
     const r = makeDisplayRect(10, 20, 5, 5);
     const displayRect = makeDisplayRect(0, 0, 100, 100);
     expect(screenToImageRect(r, displayRect, 0)).toBeNull();
+  });
+});
+
+describe('distanceToRect', () => {
+  const rect: DisplayRect = {left: 100, top: 200, width: 50, height: 300};
+
+  it('is 0 inside and on the edge', () => {
+    expect(distanceToRect(120, 350, rect)).toBe(0);
+    expect(distanceToRect(150, 500, rect)).toBe(0);
+  });
+
+  it('is the straight gap beside an edge', () => {
+    expect(distanceToRect(158, 350, rect)).toBe(8);
+    expect(distanceToRect(90, 350, rect)).toBe(10);
+    expect(distanceToRect(120, 190, rect)).toBe(10);
+    expect(distanceToRect(120, 512, rect)).toBe(12);
+  });
+
+  it('is the diagonal to the corner outside a corner', () => {
+    expect(distanceToRect(153, 196, rect)).toBe(5);
   });
 });
