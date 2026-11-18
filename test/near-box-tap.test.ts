@@ -187,8 +187,13 @@ describe('a tap about as close to two boxes', () => {
 
     expect(getActiveNoteId()).toBeNull();
     expect(notes.size).toBe(2);
-    expect(hintShown()).toBe(false);
     expect(chooserShown()).toBe(true);
+    // The dashed outline shows where "New note here" would put the box.
+    expect(hintShown()).toBe(true);
+    const el = hint()!;
+    expect(
+      parseFloat(el.style.left) + parseFloat(el.style.width) / 2,
+    ).toBeCloseTo(221, 0);
     // Nearest first, then the row that creates a new note.
     expect(rowTexts()).toEqual(['Other line two', 'narrow']);
     expect(newRow().textContent).toContain('New note here');
@@ -239,10 +244,31 @@ describe('a tap about as close to two boxes', () => {
     expect(chooserShown()).toBe(false);
   });
 
+  it('the "+" on the outline creates too, like "New note here"', () => {
+    tapImage(221, 300);
+    hintTarget().click();
+
+    expect(notes.size).toBe(3);
+    expect(getActiveNoteId()).not.toBeNull();
+    expect(chooserShown()).toBe(false);
+    expect(hintShown()).toBe(false);
+  });
+
+  it('picking a note from the list leaves no outline behind', () => {
+    tapImage(221, 300);
+    const row = rows()[0];
+    row.click();
+    expect(hintShown()).toBe(true);
+    row.click();
+    expect(getActiveNoteId()).toBe(OTHER);
+    expect(hintShown()).toBe(false);
+  });
+
   it('a tap outside closes it without selecting or creating', () => {
     tapImage(221, 300);
     tapImage(700, 900);
 
+    expect(hintShown()).toBe(false);
     expect(chooserShown()).toBe(false);
     expect(getActiveNoteId()).toBeNull();
     expect(notes.size).toBe(2);

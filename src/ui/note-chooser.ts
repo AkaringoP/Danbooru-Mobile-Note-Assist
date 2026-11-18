@@ -9,7 +9,9 @@
  * A row takes two taps. The first marks the row and its box
  * (`.is-chooser-pick`) so the user can see which note the text
  * belongs to; the second opens that note's popover. The last row
- * creates the new box the tap would otherwise have made.
+ * creates the new box the tap would otherwise have made; the create
+ * hint is shown with the list so the user can see where that is, and
+ * its "+" works as well.
  *
  * The panel docks to the far edge of the screen from the tap so it
  * never covers the boxes it lists, and is counter-scaled like the
@@ -18,7 +20,7 @@
 
 import {NoteId, Rect} from '../types';
 import {notes, setActiveNote} from '../state/notes-store';
-import {createNoteAt} from './create-hint';
+import {createNoteAt, hideCreateHint, showCreateHint} from './create-hint';
 
 const MARGIN = 16;
 
@@ -62,6 +64,7 @@ export function showNoteChooser(
   panel!.hidden = false;
   shown = true;
   updateNoteChooserPosition();
+  showCreateHint(rect);
 }
 
 export function hideNoteChooser(): void {
@@ -72,6 +75,7 @@ export function hideNoteChooser(): void {
   createRect = null;
   shown = false;
   panel!.hidden = true;
+  hideCreateHint();
 }
 
 /** Keeps the panel docked and at a constant on-screen size. */
@@ -108,12 +112,16 @@ function ensurePanel(): void {
   document.body.appendChild(panel);
   // Capture phase, so an outside tap closes the list before the image
   // handler could read it as a new near-miss. A tap on a box goes
-  // through: the box selects itself.
+  // through (the box selects itself), and so does one on the create
+  // hint's "+".
   document.addEventListener('click', onDocumentClick, true);
 }
 
 function onDocumentClick(e: MouseEvent): void {
   if (!shown || !(e.target instanceof Node) || panel!.contains(e.target)) {
+    return;
+  }
+  if (e.target instanceof Element && e.target.closest('#dmna-create-hint')) {
     return;
   }
   const onBox =

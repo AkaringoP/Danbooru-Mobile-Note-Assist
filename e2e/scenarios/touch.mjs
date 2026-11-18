@@ -374,6 +374,16 @@ export default [
             return !!el && getComputedStyle(el).display !== 'none';
           });
           assert.equal(await popoverShown(), false, 'no popover yet');
+          const hintShown = () =>
+            page.evaluate(() => {
+              const el = document.getElementById('dmna-create-hint');
+              return !!el && getComputedStyle(el).display !== 'none';
+            });
+          assert.equal(
+            await hintShown(),
+            true,
+            'the outline shows where a new note would go',
+          );
           assert.deepEqual(
             (await rows.locator('.dmna-chooser-text').allTextContents()).sort(),
             ['left one', 'right one'],
@@ -419,6 +429,7 @@ export default [
           await page.touchscreen.tap(60, left.y - 80);
           await page.waitForTimeout(300);
           assert.equal(await chooserShown(), false, 'closed by outside tap');
+          assert.equal(await hintShown(), false, 'outline gone with the list');
           assert.equal(await boxes(), 2, 'outside tap creates nothing');
           assert.equal(await popoverShown(), false);
 
