@@ -61,6 +61,7 @@ import {
   setNativeActiveHide,
   updateFloatingButtonPosition,
 } from './ui/floating-button';
+import {hideCreateHint, updateCreateHintPosition} from './ui/create-hint';
 import {
   initNoteBox,
   removeNoteBoxDOM,
@@ -108,6 +109,8 @@ import {scheduleVisualViewportUpdate} from './utils/visual-viewport';
 
 const notesStoreHooks: NotesStoreHooks = {
   onActiveChanged: (prev, next) => {
+    // The hint belongs to the selection a near-miss tap just made.
+    hideCreateHint();
     // Toggle the orange `is-active` ring off the previous box and onto
     // the next one (whichever sides are non-null).
     if (prev !== null) {
@@ -340,6 +343,8 @@ function init(): void {
   //    this pair — see `runViewportUpdate` doc.
   window.addEventListener('resize', updateAllNoteBoxPositions);
   window.addEventListener('orientationchange', updateAllNoteBoxPositions);
+  window.addEventListener('resize', updateCreateHintPosition);
+  window.addEventListener('orientationchange', updateCreateHintPosition);
 
   // 9. Reload / navigate-away guard + draft persist on the page
   //    lifecycle events (see interactions/lifecycle).

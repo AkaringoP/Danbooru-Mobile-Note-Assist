@@ -71,6 +71,15 @@ export const MAX_INITIAL_SIZE = 150;
 export const DRAG_THRESHOLD_PX = 5;
 
 /**
+ * A touch tap on the image this close to a box (on-screen px, so it
+ * shrinks in image terms as the user zooms in) selects that box
+ * instead of creating a new one. Boxes can be ~10 px wide, far below
+ * what a fingertip can hit. The create hint left at the tap point
+ * keeps "I did mean a new box" one more tap away.
+ */
+export const NEAR_BOX_TAP_RADIUS = 24;
+
+/**
  * Absolute minimum box width/height in original-image
  * pixels. The display-space floor (`MIN_BOX_SIZE_DISPLAY`) is the
  * binding constraint at most zoom levels; this is just a safety

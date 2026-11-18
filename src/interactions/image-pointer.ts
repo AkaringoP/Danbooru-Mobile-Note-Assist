@@ -37,15 +37,19 @@ import {
   MAX_INITIAL_SIZE,
   MIN_DRAG_CREATE_SIZE_DISPLAY,
   MIN_INITIAL_SIZE,
+  NEAR_BOX_TAP_RADIUS,
 } from '../config';
 import {NoteId} from '../types';
 import {
   DisplayRect,
   clamp,
+  distanceToRect,
   getImageDisplayRect,
+  imageToScreenRect,
   screenToImageRect,
 } from '../utils/coords';
 import {getImageElement} from '../utils/dom';
+import {getInvScale} from '../utils/visual-viewport';
 import {
   getOriginalHeight,
   getOriginalWidth,
@@ -55,8 +59,10 @@ import {
   createTempNote,
   getActiveNoteId,
   getMode,
+  notes,
   setActiveNote,
 } from '../state/notes-store';
+import {showCreateHint} from '../ui/create-hint';
 import {updateAllNoteBoxPositions} from '../ui/note-box';
 import {dismissActivePopover, focusActiveNoteInput} from '../ui/popover';
 import {showToast} from '../ui/toast';
@@ -172,7 +178,83 @@ function handleImageClick(e: MouseEvent): void {
     dismissActivePopover();
     return;
   }
+  if (selectBoxNearTap(e.clientX, e.clientY)) {
+    return;
+  }
   void spawnDefaultBoxAtClient(e.clientX, e.clientY);
+}
+
+/**
+ * A tap within `NEAR_BOX_TAP_RADIUS` (on-screen px) of a box selects
+ * the nearest such box and leaves the create hint where the new box
+ * would have gone. Returns false when no box is that close. Touch
+ * only by construction: mouse presses on the image go through
+ * pointerdown / pointerup and never reach the click handler.
+ */
+function selectBoxNearTap(clientX: number, clientY: number): boolean {
+  const img = getImageElement();
+  const rect = img ? getImageDisplayRect(img) : null;
+  const originalWidth = getOriginalWidth();
+  if (!rect || !originalWidth) {
+    return false;
+  }
+  const x = clientX + window.pageXOffset;
+  const y = clientY + window.pageYOffset;
+  let nearest: NoteId | null = null;
+  let nearestDistance = NEAR_BOX_TAP_RADIUS * getInvScale();
+  for (const [id, note] of notes) {
+    const d = distanceToRect(
+      x,
+      y,
+      imageToScreenRect(note.current, rect, originalWidth),
+    );
+    if (d <= nearestDistance) {
+      nearest = id;
+      nearestDistance = d;
+    }
+  }
+  if (nearest === null) {
+    return false;
+  }
+  setActiveNote(nearest);
+  const hintRect = screenToImageRect(
+    defaultBoxRectAt(clientX, clientY, rect),
+    rect,
+    originalWidth,
+  );
+  if (hintRect) {
+    showCreateHint(hintRect);
+  }
+  return true;
+}
+
+/** The default-sized box centered on a tap, kept inside the image. */
+function defaultBoxRectAt(
+  clientX: number,
+  clientY: number,
+  rect: DisplayRect,
+): DisplayRect {
+  const size = Math.max(
+    MIN_INITIAL_SIZE,
+    Math.min(
+      MAX_INITIAL_SIZE,
+      Math.min(rect.width, rect.height) * INITIAL_SIZE_RATIO,
+    ),
+  );
+  return {
+    left: clamp(
+      clientX + window.pageXOffset - size / 2,
+      rect.left,
+      rect.left + rect.width - size,
+    ),
+    top: clamp(
+      clientY + window.pageYOffset - size / 2,
+      rect.top,
+      rect.top + rect.height - size,
+    ),
+    width: size,
+    height: size,
+  };
 }
 
 /**
@@ -233,29 +315,8 @@ async function spawnDefaultBoxAtClient(
     showToast('⚠️ Image not on screen', 'warning');
     return null;
   }
-  const shortSide = Math.min(rect.width, rect.height);
-  const sizeDisplay = Math.max(
-    MIN_INITIAL_SIZE,
-    Math.min(MAX_INITIAL_SIZE, shortSide * INITIAL_SIZE_RATIO),
-  );
-
-  const pageX = clientX + window.pageXOffset;
-  const pageY = clientY + window.pageYOffset;
-  let leftDisplay = pageX - sizeDisplay / 2;
-  let topDisplay = pageY - sizeDisplay / 2;
-
-  const maxLeft = rect.left + rect.width - sizeDisplay;
-  const maxTop = rect.top + rect.height - sizeDisplay;
-  leftDisplay = Math.max(rect.left, Math.min(maxLeft, leftDisplay));
-  topDisplay = Math.max(rect.top, Math.min(maxTop, topDisplay));
-
   const imgState = screenToImageRect(
-    {
-      left: leftDisplay,
-      top: topDisplay,
-      width: sizeDisplay,
-      height: sizeDisplay,
-    },
+    defaultBoxRectAt(clientX, clientY, rect),
     rect,
     getOriginalWidth(),
   );

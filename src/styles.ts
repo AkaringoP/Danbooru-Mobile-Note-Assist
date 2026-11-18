@@ -241,6 +241,34 @@ export const STYLES = `
       box-sizing: border-box;
     }
 
+    /* "Create here" hint, left where a tap just missed a box. Below the
+       selected box (10495) so that box's drags and handles win where
+       they overlap; above every other box (up to 10490). */
+    #dmna-create-hint {
+      position: absolute;
+      z-index: 10493;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border: 2px dashed rgba(255, 200, 0, 0.9);
+      background: rgba(255, 200, 0, 0.12);
+      color: rgba(255, 200, 0, 0.95);
+      font-size: 22px;
+      font-weight: bold;
+      line-height: 1;
+      text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 0 1px rgba(0, 0, 0, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    #dmna-create-hint[hidden],
+    body:not(.dmna-mode-active) #dmna-create-hint {
+      display: none;
+    }
+
     /* Hide Danbooru's native note overlay while our active mode is on.
        The script renders its own boxes on top of the same notes (loaded
        via fetchServerNotes) and clicking through to native popups would

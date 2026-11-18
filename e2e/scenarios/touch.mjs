@@ -137,6 +137,91 @@ export default [
     },
   },
   {
+    name: 'near-box-tap',
+    task: '5.1.4',
+    title: 'A tap that just misses a box selects it; the hint creates a new box',
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            // About 10 px wide on screen: too narrow for a fingertip.
+            {id: 77, x: 1000, y: 1000, width: 50, height: 800, body: 'narrow'},
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.waitForSelector('.dmna-note-box');
+          const b = await page.locator('.dmna-note-box').boundingBox();
+          const boxes = () => page.locator('.dmna-note-box').count();
+          const hintShown = () =>
+            page.evaluate(() => {
+              const el = document.getElementById('dmna-create-hint');
+              return !!el && getComputedStyle(el).display !== 'none';
+            });
+          const text = () => page.locator('#dmna-popover-input').inputValue();
+          const midY = b.y + b.height / 2;
+
+          // 8 px to the right of the box: selects it, shows the hint.
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForSelector('#dmna-popover.show');
+          assert.equal(await boxes(), 1, 'no new box on a near miss');
+          assert.equal(await text(), 'narrow');
+          assert.equal(await hintShown(), true, 'hint shown');
+
+          // Cancel drops the hint with the selection.
+          await page.locator('.dmna-popover-btn[data-action="cancel"]').tap();
+          await page.waitForFunction(
+            () => !document.querySelector('#dmna-popover.show'),
+          );
+          assert.equal(await hintShown(), false, 'hint gone after Cancel');
+
+          // Same near miss, then a second tap on the same spot.
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForSelector('#dmna-popover.show');
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 2,
+          );
+          assert.equal(await text(), '', 'popover is on the new box');
+          assert.equal(await hintShown(), false, 'hint gone after creating');
+          // Focus lands on the next animation frame.
+          await page.waitForFunction(
+            () => document.activeElement?.id === 'dmna-popover-input',
+            null,
+            {timeout: 3000},
+          );
+        },
+      ),
+  },
+  {
+    name: 'far-tap-creates',
+    task: '5.1.4',
+    title: 'A tap away from every box still creates a box at once',
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            {id: 77, x: 1000, y: 1000, width: 50, height: 800, body: 'narrow'},
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.waitForSelector('.dmna-note-box');
+          const b = await page.locator('.dmna-note-box').boundingBox();
+          await page.touchscreen.tap(b.x + b.width + 60, b.y + b.height / 2);
+          await page.waitForFunction(
+            () => document.querySelectorAll('.dmna-note-box').length === 2,
+          );
+          assert.equal(
+            await page.locator('#dmna-popover-input').inputValue(),
+            '',
+          );
+        },
+      ),
+  },
+  {
     name: 'drag-layout-reads',
     task: '3.2',
     title: 'Dragging a selected box reads the image rect a constant number of times',
