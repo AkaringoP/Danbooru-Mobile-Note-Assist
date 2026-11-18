@@ -214,6 +214,7 @@ function runViewportUpdate(): void {
   updateStylePopoverPosition();
   updateActiveHandleScales();
   updateTagPopoverPosition();
+  updateCreateHintPosition();
 }
 
 function scheduleViewportUpdate(): void {

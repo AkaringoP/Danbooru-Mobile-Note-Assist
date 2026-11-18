@@ -4,8 +4,14 @@
  * A touch tap that lands just outside a box selects that box (boxes
  * can be ~10 px wide, see `NEAR_BOX_TAP_RADIUS`). The tap may still
  * have meant "new box here", so `interactions/image-pointer` leaves
- * this dashed outline where the new box would have gone; tapping it
- * creates that box after all.
+ * this dashed outline where the new box would have gone; tapping the
+ * "+" at its center creates that box after all.
+ *
+ * The outline never takes a tap and sits below every box. On a post
+ * packed with small notes it overlaps several neighbors (5 on average
+ * on post #9901204), and the default box is sized in layout px, so
+ * under pinch zoom the outline covers much of the screen. Only the
+ * "+" is a target, capped at 44 on-screen px.
  *
  * The rect is kept in image px like every note, so the outline stays
  * put under resize. `main.ts` hides it on any selection change.
@@ -14,6 +20,7 @@
 import {Rect} from '../types';
 import {getImageDisplayRect, imageToScreenRect} from '../utils/coords';
 import {getImageElement} from '../utils/dom';
+import {getInvScale} from '../utils/visual-viewport';
 import {getOriginalWidth} from '../state/image-state';
 import {
   createTempNote,
@@ -32,15 +39,18 @@ export function showCreateHint(rect: Rect): void {
   if (!hintElement) {
     const el = document.createElement('div');
     el.id = 'dmna-create-hint';
-    el.setAttribute('role', 'button');
-    el.setAttribute('aria-label', 'Create a new note here');
-    el.title = 'Create a new note here';
-    el.textContent = '+';
-    el.addEventListener('click', e => {
+    const target = document.createElement('div');
+    target.className = 'dmna-create-hint-target';
+    target.setAttribute('role', 'button');
+    target.setAttribute('aria-label', 'Create a new note here');
+    target.title = 'Create a new note here';
+    target.textContent = '+';
+    target.addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
       createFromHint();
     });
+    el.appendChild(target);
     document.body.appendChild(el);
     hintElement = el;
   }
@@ -55,7 +65,7 @@ export function hideCreateHint(): void {
   }
 }
 
-/** Re-projects the hint after the image moved or resized. */
+/** Re-projects the hint after the image moved, resized or was zoomed. */
 export function updateCreateHintPosition(): void {
   if (!hintElement || !hintRect) {
     return;
@@ -75,6 +85,7 @@ export function updateCreateHintPosition(): void {
   hintElement.style.top = `${r.top}px`;
   hintElement.style.width = `${r.width}px`;
   hintElement.style.height = `${r.height}px`;
+  hintElement.style.setProperty('--dmna-hint-scale', String(getInvScale()));
 }
 
 function createFromHint(): void {

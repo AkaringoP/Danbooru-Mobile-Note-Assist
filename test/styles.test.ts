@@ -139,3 +139,21 @@ describe('iOS focus zoom: text inputs are at least 16px (Task 4.5)', () => {
     expect(Number(m![1])).toBeGreaterThanOrEqual(16);
   });
 });
+
+describe('Create hint never blocks a box', () => {
+  it('the outline sits below every box and lets taps through', () => {
+    const body = ruleBody('#dmna-create-hint');
+    expect(body).toMatch(/pointer-events:\s*none/);
+    const z = Number(body.match(/z-index:\s*(\d+)/)![1]);
+    // Boxes take 9990 and up (see .dmna-note-box).
+    expect(z).toBeLessThan(9990);
+  });
+
+  it('the "+" target keeps a fixed on-screen size under pinch zoom', () => {
+    const body = ruleBody('#dmna-create-hint .dmna-create-hint-target');
+    expect(body).toMatch(/pointer-events:\s*auto/);
+    expect(body).toMatch(
+      /width:\s*min\(100%, calc\(44px \* var\(--dmna-hint-scale, 1\)\)\)/,
+    );
+  });
+});

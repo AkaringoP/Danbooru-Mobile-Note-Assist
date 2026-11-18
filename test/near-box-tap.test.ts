@@ -81,6 +81,8 @@ function tapImage(x: number, y: number): void {
 }
 
 const hint = () => document.getElementById('dmna-create-hint');
+const hintTarget = () =>
+  hint()!.querySelector<HTMLElement>('.dmna-create-hint-target')!;
 const hintShown = () => !!hint() && !hint()!.hidden;
 
 let storeHooks: NotesStoreHooks;
@@ -155,7 +157,7 @@ describe('a tap away from every box', () => {
 describe('tapping the hint', () => {
   it('creates the new box where the first tap landed', () => {
     tapImage(218, 300);
-    hint()!.click();
+    hintTarget().click();
 
     expect(notes.size).toBe(2);
     const id = getActiveNoteId()!;
@@ -172,11 +174,22 @@ describe('tapping the hint', () => {
     tapImage(218, 300);
     notes.get(NARROW_ID)!.current.text = 'x'.repeat(5001);
 
-    hint()!.click();
+    hintTarget().click();
 
     expect(notes.size).toBe(1);
     expect(getActiveNoteId()).toBe(NARROW_ID);
     expect(hintShown()).toBe(true);
+  });
+});
+
+describe('the hint outline itself', () => {
+  it('is not a tap target: only the "+" inside it creates', () => {
+    tapImage(218, 300);
+    hint()!.click();
+    expect(notes.size).toBe(1);
+    expect(getActiveNoteId()).toBe(NARROW_ID);
+    expect(hintTarget().getAttribute('role')).toBe('button');
+    expect(hintTarget().textContent).toBe('+');
   });
 });
 
