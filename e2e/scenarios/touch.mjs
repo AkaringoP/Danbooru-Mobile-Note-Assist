@@ -176,6 +176,18 @@ export default [
           );
           assert.equal(await hintShown(), false, 'hint gone after Cancel');
 
+          // So does Commit, after editing the selected note.
+          await page.touchscreen.tap(b.x + b.width + 8, midY);
+          await page.waitForSelector('#dmna-popover.show');
+          assert.equal(await hintShown(), true, 'hint shown again');
+          await page.locator('#dmna-popover-input').fill('narrow, edited');
+          await page.locator('.dmna-popover-btn[data-action="confirm"]').tap();
+          await page.waitForFunction(
+            () => !document.querySelector('#dmna-popover.show'),
+          );
+          assert.equal(await hintShown(), false, 'hint gone after Commit');
+          assert.equal(await boxes(), 1, 'Commit creates no extra box');
+
           // Same near miss, then a second tap on the same spot.
           await page.touchscreen.tap(b.x + b.width + 8, midY);
           await page.waitForSelector('#dmna-popover.show');
