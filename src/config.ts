@@ -57,7 +57,11 @@ export const TOAST_MARGIN_BOTTOM = 20;
  */
 export const INITIAL_SIZE_RATIO = 0.1;
 
-/** Lower clamp for the default new-box display size (px). */
+/**
+ * Lower clamp for the default new-box display size (px). This and the
+ * upper clamp are on-screen sizes: `defaultBoxRectAt` divides the
+ * result by the pinch scale.
+ */
 export const MIN_INITIAL_SIZE = 30;
 
 /** Upper clamp for the default new-box display size (px). */

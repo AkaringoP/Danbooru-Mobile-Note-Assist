@@ -7,11 +7,10 @@
  * this dashed outline where the new box would have gone; tapping the
  * "+" at its center creates that box after all.
  *
- * The outline never takes a tap and sits below every box. On a post
+ * The outline never takes a tap and sits below every box: on a post
  * packed with small notes it overlaps several neighbors (5 on average
- * on post #9901204), and the default box is sized in layout px, so
- * under pinch zoom the outline covers much of the screen. Only the
- * "+" is a target, capped at 44 on-screen px.
+ * on post #9901204 before zooming in). Only the "+" is a target,
+ * capped at 44 on-screen px.
  *
  * The rect is kept in image px like every note, so the outline stays
  * put under resize. `main.ts` hides it on any selection change.

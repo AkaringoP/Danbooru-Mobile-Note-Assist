@@ -35,6 +35,7 @@ import {
   DRAG_THRESHOLD_PX,
   INITIAL_SIZE_RATIO,
   MAX_INITIAL_SIZE,
+  MIN_BOX_SIZE_IMG,
   MIN_DRAG_CREATE_SIZE_DISPLAY,
   MIN_INITIAL_SIZE,
   NEAR_BOX_AMBIGUITY_PX,
@@ -248,19 +249,29 @@ function selectBoxNearTap(clientX: number, clientY: number): boolean {
   return true;
 }
 
-/** The default-sized box centered on a tap, kept inside the image. */
+/**
+ * The default-sized box centered on a tap, kept inside the image.
+ *
+ * The size is constant on screen: the unzoomed default divided by the
+ * pinch scale. Sized in page px alone, a box made at 8x zoom filled
+ * the screen and buried the small notes the user had zoomed in to
+ * reach. `MIN_BOX_SIZE_IMG` is the floor, as for a resize.
+ */
 function defaultBoxRectAt(
   clientX: number,
   clientY: number,
   rect: DisplayRect,
 ): DisplayRect {
-  const size = Math.max(
+  const unzoomed = clamp(
+    Math.min(rect.width, rect.height) * INITIAL_SIZE_RATIO,
     MIN_INITIAL_SIZE,
-    Math.min(
-      MAX_INITIAL_SIZE,
-      Math.min(rect.width, rect.height) * INITIAL_SIZE_RATIO,
-    ),
+    MAX_INITIAL_SIZE,
   );
+  const originalWidth = getOriginalWidth();
+  const floor = originalWidth
+    ? MIN_BOX_SIZE_IMG * (rect.width / originalWidth)
+    : 0;
+  const size = Math.max(unzoomed * getInvScale(), floor);
   return {
     left: clamp(
       clientX + window.pageXOffset - size / 2,

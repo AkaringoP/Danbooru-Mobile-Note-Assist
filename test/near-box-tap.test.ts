@@ -29,6 +29,7 @@ vi.mock('../src/api/notes', () => ({
 }));
 
 import {
+  MIN_BOX_SIZE_IMG,
   NEAR_BOX_AMBIGUITY_PX,
   NEAR_BOX_TAP_RADIUS,
   NOTE_CHOOSER_MAX_ITEMS,
@@ -358,5 +359,67 @@ describe('the hint goes away', () => {
     expect(hintShown()).toBe(true);
     setActiveNote(null);
     expect(hintShown()).toBe(false);
+  });
+});
+
+describe('the default new box keeps its on-screen size under pinch zoom', () => {
+  function setZoom(scale: number | null): void {
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value:
+        scale === null
+          ? undefined
+          : {
+              scale,
+              width: 400 / scale,
+              height: 800 / scale,
+              offsetLeft: 0,
+              offsetTop: 0,
+              pageLeft: 0,
+              pageTop: 0,
+            },
+    });
+  }
+
+  function createdAt(x: number, y: number): NoteState {
+    tapImage(x, y);
+    const id = getActiveNoteId()!;
+    expect(id).not.toBe(NARROW_ID);
+    return notes.get(id)!.current;
+  }
+
+  afterEach(() => {
+    setZoom(null);
+  });
+
+  // The image is 1000 px wide on the page: the default box is 100 page
+  // px, which is 200 image px.
+  it('is 10% of the shorter side with no zoom', () => {
+    const s = createdAt(700, 900);
+    expect(s.w).toBeCloseTo(200, 5);
+    expect(s.h).toBeCloseTo(200, 5);
+  });
+
+  it('is a fifth of that at 5x, still centered on the tap', () => {
+    setZoom(5);
+    const s = createdAt(700, 900);
+    expect(s.w).toBeCloseTo(40, 5);
+    expect(s.h).toBeCloseTo(40, 5);
+    expect(s.x + s.w / 2).toBeCloseTo(1400, 5);
+    expect(s.y + s.h / 2).toBeCloseTo(1800, 5);
+  });
+
+  it('never goes below the smallest box the image allows', () => {
+    setZoom(100);
+    const s = createdAt(700, 900);
+    expect(s.w).toBeCloseTo(MIN_BOX_SIZE_IMG, 5);
+    expect(s.h).toBeCloseTo(MIN_BOX_SIZE_IMG, 5);
+  });
+
+  it('sizes the create hint the same way', () => {
+    setZoom(5);
+    tapImage(210 + 2, 300);
+    expect(getActiveNoteId()).toBe(NARROW_ID);
+    expect(parseFloat(hint()!.style.width)).toBeCloseTo(20, 5);
   });
 });

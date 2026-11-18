@@ -299,10 +299,14 @@ export default [
         let s = await state();
         assert.equal(s.boxes, 64, 'no new box');
         assert.equal(s.text, picked, 'the box that was aimed at');
-        // The outline is the default box (large under zoom); the "+"
-        // stays a fingertip-sized target.
-        assert.ok(s.hint > 150, `outline ${s.hint}px on screen`);
-        assert.ok(Math.abs(s.target - 44) <= 1, `target ${s.target}px on screen`);
+        // The outline is the default box, which keeps its on-screen
+        // size under zoom (about 41 px here, not 5x that); the "+" fills
+        // it up to 44 px.
+        assert.ok(s.hint > 35 && s.hint < 50, `outline ${s.hint}px on screen`);
+        assert.ok(
+          s.target > 30 && s.target <= 44.5,
+          `target ${s.target}px on screen`,
+        );
 
         // A neighbour inside the outline is still selected by tapping it.
         const neighbours = [];
@@ -460,6 +464,46 @@ export default [
           );
         },
       ),
+  },
+  {
+    name: 'zoomed-default-size',
+    task: '5.1.4',
+    title: 'A new box is the same size on screen at 1x and 6x zoom',
+    run: async () => {
+      const sizeOnScreen = zoom =>
+        withPage({}, async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          if (zoom !== 1) {
+            const cdp = await page.context().newCDPSession(page);
+            await cdp.send('Emulation.setPageScaleFactor', {
+              pageScaleFactor: zoom,
+            });
+            await page.evaluate(() => window.scrollTo(0, 200));
+            await page.waitForTimeout(300);
+          }
+          // Tap coords are CSS px from the visual viewport's corner.
+          const vv = await page.evaluate(() => ({
+            w: window.visualViewport.width,
+            h: window.visualViewport.height,
+          }));
+          await page.touchscreen.tap(vv.w / 2, vv.h / 3);
+          await page.waitForSelector('.dmna-note-box');
+          return page.evaluate(() => {
+            const r = document
+              .querySelector('.dmna-note-box')
+              .getBoundingClientRect();
+            return r.width * window.visualViewport.scale;
+          });
+        });
+      const plain = await sizeOnScreen(1);
+      const zoomed = await sizeOnScreen(6);
+      assert.ok(plain > 30 && plain < 60, `1x: ${plain}px`);
+      assert.ok(
+        Math.abs(zoomed - plain) < 2,
+        `6x: ${zoomed}px on screen vs ${plain}px at 1x`,
+      );
+    },
   },
   {
     name: 'far-tap-creates',
