@@ -511,21 +511,68 @@ export default [
           }));
           await page.touchscreen.tap(vv.w / 2, vv.h / 3);
           await page.waitForSelector('.dmna-note-box');
+          // The border grows with zoom, so compare the rectangle inside
+          // it (clientWidth would round to whole px).
           return page.evaluate(() => {
-            const r = document
-              .querySelector('.dmna-note-box')
-              .getBoundingClientRect();
-            return r.width * window.visualViewport.scale;
+            const el = document.querySelector('.dmna-note-box');
+            const cs = getComputedStyle(el);
+            const inner =
+              el.getBoundingClientRect().width -
+              parseFloat(cs.borderLeftWidth) -
+              parseFloat(cs.borderRightWidth);
+            return inner * window.visualViewport.scale;
           });
         });
       const plain = await sizeOnScreen(1);
       const zoomed = await sizeOnScreen(6);
-      assert.ok(plain > 30 && plain < 60, `1x: ${plain}px`);
+      assert.ok(Math.abs(plain - 48) < 1.5, `1x: ${plain}px`);
       assert.ok(
         Math.abs(zoomed - plain) < 2,
         `6x: ${zoomed}px on screen vs ${plain}px at 1x`,
       );
     },
+  },
+  {
+    name: 'native-box-model',
+    task: '5.1.5',
+    title: "A box is drawn like Danbooru's: 1 px border outside the rectangle",
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            {id: 77, x: 500, y: 500, width: 400, height: 300, body: 'n'},
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          await enterActive(page);
+          await page.waitForSelector('.dmna-note-box');
+          const m = await page.evaluate(() => {
+            const img = document.getElementById('image').getBoundingClientRect();
+            const el = document.querySelector('.dmna-note-box');
+            const r = el.getBoundingClientRect();
+            const cs = getComputedStyle(el);
+            return {
+              scale: img.width / 2000,
+              left: r.left - img.left,
+              top: r.top - img.top,
+              width: r.width,
+              height: r.height,
+              border: cs.borderTopWidth,
+              sizing: cs.boxSizing,
+            };
+          });
+          // Danbooru: left/top at x/y, content w × h, 1 px border around.
+          const near = (a, b, what) =>
+            assert.ok(Math.abs(a - b) < 0.6, `${what}: ${a} vs ${b}`);
+          assert.equal(m.sizing, 'content-box');
+          assert.equal(m.border, '1px');
+          near(m.left, 500 * m.scale, 'left edge');
+          near(m.top, 500 * m.scale, 'top edge');
+          near(m.width, 400 * m.scale + 2, 'outer width');
+          near(m.height, 300 * m.scale + 2, 'outer height');
+        },
+      ),
   },
   {
     name: 'far-tap-creates',

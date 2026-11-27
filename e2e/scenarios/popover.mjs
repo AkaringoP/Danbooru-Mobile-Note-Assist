@@ -34,9 +34,15 @@ async function overflowCase(width, zoom, side) {
         const arrow = document
           .getElementById('dmna-popover-arrow')
           .getBoundingClientRect();
-        const box = document
-          .querySelector('.dmna-note-box.is-active')
-          .getBoundingClientRect();
+        // The note's rectangle; its 1 px border is drawn outside it
+        // (like Danbooru's), so at the image edge the border may leave
+        // the screen.
+        const boxEl = document.querySelector('.dmna-note-box.is-active');
+        const outer = boxEl.getBoundingClientRect();
+        const box = {
+          left: outer.left + boxEl.clientLeft,
+          right: outer.left + boxEl.clientLeft + boxEl.clientWidth,
+        };
         const vw = vv.width * vv.scale;
         const arrowX = toVis(arrow.left + arrow.width / 2);
         return {

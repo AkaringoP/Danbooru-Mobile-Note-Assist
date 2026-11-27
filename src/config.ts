@@ -89,6 +89,13 @@ export const NEAR_BOX_AMBIGUITY_PX = 8;
 export const NOTE_CHOOSER_MAX_ITEMS = 6;
 
 /**
+ * Note box border in page px, drawn outside the note's rectangle like
+ * Danbooru's own `div.note-box` (content-box, 1px). Shared by the CSS
+ * and by hit-testing, which measures from the visible box.
+ */
+export const NOTE_BOX_BORDER_PX = 1;
+
+/**
  * Absolute minimum box width/height in original-image
  * pixels. The display-space floor (`MIN_BOX_SIZE_DISPLAY`) is the
  * binding constraint at most zoom levels; this is just a safety

@@ -1,4 +1,5 @@
 import {
+  NOTE_BOX_BORDER_PX,
   POPOVER_ARROW_HALF,
   POPOVER_CORNER_RADIUS,
   POPOVER_WIDTH,
@@ -180,11 +181,16 @@ export const STYLES = `
        earlier ones. */
     .dmna-note-box {
       position: absolute;
-      border: 1.2px solid #0073ff;
+      /* Same box model as Danbooru's own div.note-box (content-box,
+         1px border): the border sits outside the note's rectangle. As a
+         border-box, a box looked 2 px narrower and shorter here than the
+         saved note does on the page, which read as the note having
+         moved after Confirm. */
+      border: ${NOTE_BOX_BORDER_PX}px solid #0073ff;
       background-color: rgba(0, 115, 255, 0.15);
       /* Per-box, set by renderNoteBox: smaller boxes stack higher. */
       z-index: var(--dmna-box-z, 9990);
-      box-sizing: border-box;
+      box-sizing: content-box;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
       pointer-events: none;
       transition: border-color 0.15s, background-color 0.15s,
