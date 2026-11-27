@@ -40,6 +40,7 @@ import {
   MIN_INITIAL_SIZE,
   NEAR_BOX_AMBIGUITY_PX,
   NEAR_BOX_TAP_RADIUS,
+  NOTE_BOX_BORDER_PX,
   NOTE_CHOOSER_MAX_ITEMS,
 } from '../config';
 import {NoteId} from '../types';
@@ -217,7 +218,7 @@ function selectBoxNearTap(clientX: number, clientY: number): boolean {
       distance: distanceToRect(
         x,
         y,
-        imageToScreenRect(note.current, rect, originalWidth),
+        visibleBoxRect(imageToScreenRect(note.current, rect, originalWidth)),
       ),
     }))
     .filter(c => c.distance <= NEAR_BOX_TAP_RADIUS * inv)
@@ -247,6 +248,15 @@ function selectBoxNearTap(clientX: number, clientY: number): boolean {
     showCreateHint(newBoxRect);
   }
   return true;
+}
+
+/** A note's rectangle plus the border drawn outside it (right, bottom). */
+function visibleBoxRect(r: DisplayRect): DisplayRect {
+  return {
+    ...r,
+    width: r.width + 2 * NOTE_BOX_BORDER_PX,
+    height: r.height + 2 * NOTE_BOX_BORDER_PX,
+  };
 }
 
 /**

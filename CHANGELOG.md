@@ -5,6 +5,14 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **A saved note looked slightly bigger than the box you drew.** Danbooru draws its note boxes with the 1 px border outside the note's rectangle; the script drew its border inside. The saved note was the same, but on the page it reached 2 px further right and down than the box had, which read as the note having moved. Boxes now use Danbooru's box model, so a box and the saved note line up edge for edge. Taps "near a box" are measured from that visible edge.
+
+### Changed
+- **Thinner box outline.** The border is 1 px like Danbooru's (was 1.2 px). Like Danbooru's, it still grows with pinch zoom.
+
 ## [5.1.4] - 2026-11-18
 
 Touch precision: taps that just miss a small box, taps between packed notes, and new boxes made while zoomed in.
