@@ -67,6 +67,7 @@ import {
   initNoteBox,
   removeNoteBoxDOM,
   renderNoteBox,
+  syncNoteBoxesToImage,
   updateActiveHandleScales,
   updateAllNoteBoxPositions,
   updateNoteVisuals,
@@ -97,6 +98,7 @@ import {
   consumeBoxClickSuppression,
 } from './interactions/drag-resize';
 import {bindImageHandlers} from './interactions/image-pointer';
+import {bindLayoutWatch} from './interactions/layout-watch';
 import {bindLifecycleSave} from './interactions/lifecycle';
 import {schedulePendingRefresh} from './interactions/pending-indicator';
 import {bindGlobalHotkeys} from './interactions/keyboard';
@@ -205,13 +207,15 @@ const arcMenuHooks: ArcMenuHooks = {
  * guard — toast/popover/tag-popover return early when their element
  * hasn't been built yet, popover/handle-scale also gate on activeNoteId.
  *
- * `updateAllNoteBoxPositions` is intentionally absent. Pinch-zoom does
- * NOT change document layout (note boxes are in page coords anchored
- * to the image's page-coord rect, which only moves under window resize
- * / orientation change). Those two events have their own dedicated
- * listeners in `init`.
+ * Note boxes are in page coords anchored to the image's page-coord
+ * rect, which pinch-zoom and scrolling don't change, so
+ * `syncNoteBoxesToImage` re-projects them only when that rect has
+ * moved. It runs first: it is the one read-then-write-everything step.
+ * The page can shift without a window event (Danbooru's mobile nav),
+ * which `bindLayoutWatch` reports by calling this same function.
  */
 function runViewportUpdate(): void {
+  syncNoteBoxesToImage();
   updateFloatingButtonPosition();
   updateArcMenuPosition();
   updateToastPosition();
@@ -346,8 +350,10 @@ function init(): void {
   }
 
   // 8. Re-project note boxes whenever document layout could shift (the
-  //    rendered image's page-coord rect changes). Pinch-zoom is NOT in
-  //    this pair — see `runViewportUpdate` doc.
+  //    rendered image's page-coord rect changes). The layout watch
+  //    covers shifts that fire no window event; it runs the update
+  //    synchronously so boxes move in the same frame as the image.
+  bindLayoutWatch(runViewportUpdate);
   window.addEventListener('resize', updateAllNoteBoxPositions);
   window.addEventListener('orientationchange', updateAllNoteBoxPositions);
   window.addEventListener('resize', updateCreateHintPosition);
