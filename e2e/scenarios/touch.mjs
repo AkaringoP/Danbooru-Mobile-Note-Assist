@@ -575,6 +575,75 @@ export default [
       ),
   },
   {
+    name: 'layout-shift',
+    task: '5.1.6',
+    title: 'Boxes follow the image when the page above it grows or shrinks',
+    run: () =>
+      withPage(
+        {
+          serverNotes: [
+            {id: 77, x: 500, y: 500, width: 400, height: 300, body: 'n'},
+          ],
+        },
+        async ({page}) => {
+          await gotoPost(page);
+          // Danbooru pins html and body to the viewport height, so the
+          // body box does not grow with its content.
+          await page.addStyleTag({content: 'html, body { height: 100%; }'});
+          await enterActive(page);
+          await page.waitForSelector('.dmna-note-box');
+          const b = await page.locator('.dmna-note-box').boundingBox();
+          await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+          await page.waitForSelector('#dmna-popover.show');
+          const offsets = () =>
+            page.evaluate(
+              () =>
+                new Promise(resolve =>
+                  requestAnimationFrame(() =>
+                    requestAnimationFrame(() => {
+                      const top = sel =>
+                        document.querySelector(sel).getBoundingClientRect().top;
+                      const img = top('#image');
+                      resolve({
+                        box: top('.dmna-note-box') - img,
+                        popover: top('#dmna-popover') - img,
+                      });
+                    }),
+                  ),
+                ),
+            );
+          const near = (a, b, what) =>
+            assert.ok(Math.abs(a - b) < 0.6, `${what}: ${a} vs ${b}`);
+          const before = await offsets();
+
+          // The mobile nav opening: an element above the image grows.
+          await page.evaluate(() => {
+            document.querySelector('header').style.height = '300px';
+          });
+          const opened = await offsets();
+          near(opened.box, before.box, 'box after the header grew');
+          near(opened.popover, before.popover, 'popover after the header grew');
+
+          await page.evaluate(() => {
+            document.querySelector('header').style.height = '60px';
+          });
+          const closed = await offsets();
+          near(closed.box, before.box, 'box after the header shrank');
+
+          // A new element nothing was watching: caught at the next scroll.
+          await page.evaluate(() => {
+            const el = document.createElement('div');
+            el.style.height = '120px';
+            document.getElementById('image-container').before(el);
+            window.scrollBy(0, 10);
+          });
+          await page.waitForTimeout(100);
+          const inserted = await offsets();
+          near(inserted.box, before.box, 'box after an element was inserted');
+        },
+      ),
+  },
+  {
     name: 'far-tap-creates',
     task: '5.1.4',
     title: 'A tap away from every box still creates a box at once',

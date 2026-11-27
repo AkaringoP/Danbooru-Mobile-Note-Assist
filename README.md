@@ -89,7 +89,7 @@ Nothing else is persisted. The script makes no remote calls beyond Danbooru's ow
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full version history.
 
-The current release is **v5.1.5** (2026-11-27): boxes are drawn like Danbooru's own notes (1 px border outside the rectangle), so a box lines up with the saved note edge for edge. v5.1.4: a tap that just misses a small box selects it, a tap between packed notes asks which one you meant, and new boxes keep their on-screen size when you zoom in. The 5.1 series came from a mobile-focused audit: safer sending, clearer send state, a length counter, and a Preview fix after a change on Danbooru's side. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
+The current release is **v5.1.6** (2026-11-27): boxes stay on the image when the page shifts under them, such as when Danbooru's mobile navigation menu opens or closes. v5.1.5: boxes are drawn like Danbooru's own notes (1 px border outside the rectangle), so a box lines up with the saved note edge for edge. v5.1.4: a tap that just misses a small box selects it, a tap between packed notes asks which one you meant, and new boxes keep their on-screen size when you zoom in. The 5.1 series came from a mobile-focused audit: safer sending, clearer send state, a length counter, and a Preview fix after a change on Danbooru's side. The script ships from the `build` branch as a single bundled UserScript; `main` carries source only.
 
 ---
 
@@ -116,7 +116,7 @@ src/
 │                      create-hint, note-chooser).
 └── interactions/      Layer 4 — touch / pointer / keyboard / lifecycle handlers
                        (image-pointer, drag-resize, keyboard, native-block,
-                       lifecycle, pending-indicator).
+                       lifecycle, pending-indicator, layout-watch).
 test/                  Vitest unit tests + architecture fitness tests.
 e2e/                   Opt-in Playwright scenarios on a mock post page.
 ```
