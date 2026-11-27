@@ -5,7 +5,9 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.1.5] - 2026-11-27
+
+Boxes are drawn the way Danbooru draws its notes, so what you place is what you see after saving.
 
 ### Fixed
 - **A saved note looked slightly bigger than the box you drew.** Danbooru draws its note boxes with the 1 px border outside the note's rectangle; the script drew its border inside. The saved note was the same, but on the page it reached 2 px further right and down than the box had, which read as the note having moved. Boxes now use Danbooru's box model, so a box and the saved note line up edge for edge. Taps "near a box" are measured from that visible edge.
@@ -363,6 +365,7 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.1.5]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.4]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.2]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
