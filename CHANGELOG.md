@@ -5,7 +5,9 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.1.6] - 2026-11-27
+
+Boxes follow the image when the page around it moves.
 
 ### Fixed
 
@@ -371,6 +373,7 @@ Major findings (release-window fixes):
 
 The last release before PC drag support. Touch tap-to-create was the sole creation gesture; the click-to-toggle invariant was simple and unbroken. v2.5 restores this invariant on top of v2.4's structural cleanups.
 
+[5.1.6]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.5]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.4]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
 [5.1.3]: https://github.com/AkaringoP/Danbooru-Mobile-Note-Assist/commits/main
