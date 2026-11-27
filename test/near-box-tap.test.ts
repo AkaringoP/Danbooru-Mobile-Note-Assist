@@ -136,6 +136,26 @@ afterEach(() => {
   setMode('idle');
 });
 
+describe('nearness is measured from the visible box, border included', () => {
+  // NARROW's rectangle is x 200–210 on screen; its border, drawn
+  // outside like Danbooru's, makes the visible box x 200–212.
+  it('reaches the full radius past the right border', () => {
+    tapImage(212 + NEAR_BOX_TAP_RADIUS - 1, 300);
+    expect(getActiveNoteId()).toBe(NARROW_ID);
+  });
+
+  it('and no further', () => {
+    tapImage(212 + NEAR_BOX_TAP_RADIUS + 1, 300);
+    expect(getActiveNoteId()).not.toBe(NARROW_ID);
+    expect(notes.size).toBe(2);
+  });
+
+  it('the left side has no border beyond the rectangle', () => {
+    tapImage(200 - NEAR_BOX_TAP_RADIUS - 1, 300);
+    expect(getActiveNoteId()).not.toBe(NARROW_ID);
+  });
+});
+
 describe('a tap just outside a box', () => {
   it('selects that box instead of creating one, and shows the hint at the tap', () => {
     tapImage(210 + 8, 300);
@@ -162,7 +182,7 @@ describe('a tap just outside a box', () => {
     // On screen: x 230–330, y 200–500. The gap to NARROW is 20 px.
     addServerNote(other, {x: 460, y: 400, w: 200, h: 600, text: 'other'});
 
-    // 16 px from NARROW, 4 px from the other: 12 px apart, not close.
+    // 14 px from NARROW's border, 4 px from the other: clearly nearer.
     tapImage(210 + 16, 300);
 
     expect(getActiveNoteId()).toBe(other);
@@ -174,9 +194,9 @@ describe('a tap about as close to two boxes', () => {
   const OTHER = asServerNoteId('8');
 
   beforeEach(() => {
-    // On screen: x 230–330, y 200–500. The gap to NARROW is 20 px.
+    // On screen: x 228–328, y 200–500, 16 px from NARROW's border (212).
     addServerNote(OTHER, {
-      x: 460,
+      x: 456,
       y: 400,
       w: 200,
       h: 600,
@@ -185,8 +205,8 @@ describe('a tap about as close to two boxes', () => {
   });
 
   it('asks instead of guessing: nothing is selected, the chooser lists both', () => {
-    // 11 px from NARROW, 9 px from the other.
-    tapImage(210 + 11, 300);
+    // 9 px from NARROW's border, 7 px from the other.
+    tapImage(221, 300);
 
     expect(getActiveNoteId()).toBeNull();
     expect(notes.size).toBe(2);
@@ -203,7 +223,8 @@ describe('a tap about as close to two boxes', () => {
   });
 
   it('is ambiguous up to the configured gap and not past it', () => {
-    // Distances 10 + g/2 and 10 - g/2 from the two boxes.
+    // 220 is midway between the visible boxes: distances 8 + g/2 and
+    // 8 - g/2.
     const half = NEAR_BOX_AMBIGUITY_PX / 2;
     tapImage(220 + half, 300);
     expect(chooserShown()).toBe(true);
@@ -349,7 +370,7 @@ describe('noteSnippet', () => {
 
 describe('a tap away from every box', () => {
   it('creates a new box right away, with no hint', () => {
-    tapImage(210 + NEAR_BOX_TAP_RADIUS + 5, 300);
+    tapImage(212 + NEAR_BOX_TAP_RADIUS + 5, 300);
 
     expect(notes.size).toBe(2);
     expect(getActiveNoteId()).not.toBe(NARROW_ID);

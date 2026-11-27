@@ -190,3 +190,14 @@ describe('Note chooser animation', () => {
     );
   });
 });
+
+describe("Box outline matches Danbooru's own note box", () => {
+  // Danbooru: div.note-box { box-sizing: content-box; border: 1px solid }.
+  // The border sits outside the note's rectangle, so a saved note is
+  // 2 px wider and taller on screen than a border-box of the same size.
+  it('draws a 1 px border outside the note rectangle', () => {
+    const body = ruleBody('.dmna-note-box');
+    expect(body).toMatch(/box-sizing:\s*content-box/);
+    expect(body).toMatch(/border:\s*1px solid/);
+  });
+});
