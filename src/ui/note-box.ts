@@ -195,6 +195,47 @@ export function renderNoteBox(
 export function updateAllNoteBoxPositions(): void {
   const img = getImageElement();
   const rect = img ? getImageDisplayRect(img) : null;
+  lastBatchRect = rect;
+  for (const id of notes.keys()) {
+    renderNoteBox(id, rect);
+  }
+}
+
+let lastBatchRect: DisplayRect | null = null;
+
+// Scroll offsets and client rects are fractional and don't always
+// cancel exactly; a real layout shift is whole pixels.
+const RECT_EPSILON = 0.5;
+
+function sameRect(a: DisplayRect | null, b: DisplayRect | null): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
+  return (
+    Math.abs(a.left - b.left) < RECT_EPSILON &&
+    Math.abs(a.top - b.top) < RECT_EPSILON &&
+    Math.abs(a.width - b.width) < RECT_EPSILON &&
+    Math.abs(a.height - b.height) < RECT_EPSILON
+  );
+}
+
+/**
+ * Re-projects the boxes only if the image has moved or resized in the
+ * page since the last batch render. The page can shift under the
+ * boxes without any window event (Danbooru's nav opening, a notice
+ * closing), so this runs on every layout and scroll update; when
+ * nothing moved it costs one rect read.
+ */
+export function syncNoteBoxesToImage(): void {
+  if (notes.size === 0) {
+    return;
+  }
+  const img = getImageElement();
+  const rect = img ? getImageDisplayRect(img) : null;
+  if (sameRect(rect, lastBatchRect)) {
+    return;
+  }
+  lastBatchRect = rect;
   for (const id of notes.keys()) {
     renderNoteBox(id, rect);
   }

@@ -45,6 +45,7 @@ import {
   initNoteBox,
   removeNoteBoxDOM,
   renderNoteBox,
+  syncNoteBoxesToImage,
   updateActiveHandleScales,
   updateAllNoteBoxPositions,
   updateAllNoteVisuals,
@@ -345,6 +346,74 @@ describe('updateAllNoteBoxPositions', () => {
       const el = notes.get(id)!.domElement!;
       expect(el.style.display).toBe('none');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// syncNoteBoxesToImage — re-project only when the image moved in the page
+// ---------------------------------------------------------------------------
+
+describe('syncNoteBoxesToImage', () => {
+  const id = asTempNoteId('temp-sync-1');
+  const boxTop = (): string => notes.get(id)!.domElement!.style.top;
+
+  beforeEach(() => {
+    notes.set(id, makeNote({current: {...BASE, y: 100}}));
+    vi.mocked(getImageElement).mockReturnValue(
+      makeFakeImg({left: 0, top: 200, width: 1000, height: 750}),
+    );
+    updateAllNoteBoxPositions();
+  });
+
+  it('moves the boxes when the image has moved since the last batch render', () => {
+    expect(boxTop()).toBe('300px');
+    vi.mocked(getImageElement).mockReturnValue(
+      makeFakeImg({left: 0, top: 440, width: 1000, height: 750}),
+    );
+
+    syncNoteBoxesToImage();
+
+    expect(boxTop()).toBe('540px');
+  });
+
+  it('re-projects when the image was resized in place', () => {
+    vi.mocked(getImageElement).mockReturnValue(
+      makeFakeImg({left: 0, top: 200, width: 500, height: 375}),
+    );
+
+    syncNoteBoxesToImage();
+
+    expect(boxTop()).toBe('250px');
+  });
+
+  it('writes nothing while the image stays where it was', () => {
+    const el = notes.get(id)!.domElement!;
+    el.style.top = '1px';
+
+    syncNoteBoxesToImage();
+
+    expect(el.style.top).toBe('1px');
+  });
+
+  it('ignores sub-pixel jitter in the measured rect', () => {
+    const el = notes.get(id)!.domElement!;
+    el.style.top = '1px';
+    vi.mocked(getImageElement).mockReturnValue(
+      makeFakeImg({left: 0, top: 200.2, width: 1000, height: 750}),
+    );
+
+    syncNoteBoxesToImage();
+
+    expect(el.style.top).toBe('1px');
+  });
+
+  it('does not read the image when there are no notes', () => {
+    notes.clear();
+    vi.mocked(getImageElement).mockClear();
+
+    syncNoteBoxesToImage();
+
+    expect(getImageElement).not.toHaveBeenCalled();
   });
 });
 

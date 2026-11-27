@@ -5,6 +5,12 @@ All notable changes to **Danbooru Mobile Note Assist** will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Boxes stayed behind when the page shifted.** Opening or closing Danbooru's mobile navigation menu in Edit mode moved the image but left the script's boxes (and an open note popover) where they were, so they sat over the menu or below the image. Boxes now follow the image whenever the page around it is laid out again.
+
 ## [5.1.5] - 2026-11-27
 
 Boxes are drawn the way Danbooru draws its notes, so what you place is what you see after saving.

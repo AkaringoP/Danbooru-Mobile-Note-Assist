@@ -116,7 +116,7 @@ src/
 │                      create-hint, note-chooser).
 └── interactions/      Layer 4 — touch / pointer / keyboard / lifecycle handlers
                        (image-pointer, drag-resize, keyboard, native-block,
-                       lifecycle, pending-indicator).
+                       lifecycle, pending-indicator, layout-watch).
 test/                  Vitest unit tests + architecture fitness tests.
 e2e/                   Opt-in Playwright scenarios on a mock post page.
 ```
